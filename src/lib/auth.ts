@@ -1,18 +1,20 @@
-import { getAuth, onAuthStateChanged, signInAnonymously, User } from 'firebase/auth';
+import {
+  createUserWithEmailAndPassword,
+  EmailAuthProvider,
+  linkWithCredential,
+  onAuthStateChanged,
+  signInAnonymously,
+  signInWithEmailAndPassword,
+  signOut,
+  User
+} from 'firebase/auth';
 import { app } from './firebase';
 
 export const auth = getAuth(app);
 
-/**
- * Creates a stable Firebase identity for each browser session.
- * This is intentionally anonymous for the first security phase; it gives
- * Firestore rules a real UID without exposing credentials in the client.
- * The anonymous account can later be linked to email/password or another
- * provider without changing listing ownership.
- */
+/** Creates a temporary Firebase identity for first-time visitors. */
 export async function ensureAnonymousAuth(): Promise<User | null> {
   if (auth.currentUser) return auth.currentUser;
-
   try {
     const credential = await signInAnonymously(auth);
     return credential.user;
@@ -20,6 +22,25 @@ export async function ensureAnonymousAuth(): Promise<User | null> {
     console.error('Firebase anonymous authentication failed:', error);
     return null;
   }
+}
+
+/** Registers the current anonymous user as an email/password account. */
+export async function registerWithEmail(email: string, password: string) {
+  const currentUser = auth.currentUser;
+  if (currentUser?.isAnonymous) {
+    const credential = EmailAuthProvider.credential(email, password);
+    return linkWithCredential(currentUser, credential);
+  }
+  return createUserWithEmailAndPassword(auth, email, password);
+}
+
+/** Signs an existing user in with email and password. */
+export function loginWithEmail(email: string, password: string) {
+  return signInWithEmailAndPassword(auth, email, password);
+}
+
+export function logout() {
+  return signOut(auth);
 }
 
 export function subscribeToAuthState(callback: (user: User | null) => void) {
