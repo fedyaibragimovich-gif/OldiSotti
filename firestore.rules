@@ -1,36 +1,50 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // E'lonlar to'plami (Listings)
-    match /listings/{listingId} {
-      allow read: if true;
-      allow create: if request.resource.data.title is string && request.resource.data.price is number;
-      allow update, delete: if true;
+    // OldiSotti administrator. This UID is authorized only by Firebase Auth.
+    function isAdmin() {
+      return request.auth != null
+        && request.auth.uid == 'Q81AQDKw7GXYeNgdrnp2qvYgyS02';
     }
 
-    // Muloqotlar va xabarlar (Conversations & Chat)
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    // Listings: public viewing, authenticated creation, owner/admin changes.
+    match /listings/{listingId} {
+      allow read: if true;
+      allow create: if signedIn();
+      allow update, delete: if isAdmin()
+        || (signedIn() && resource.data.userId == request.auth.uid);
+    }
+
+    // Conversations are available only to authenticated Firebase users.
+    // Participant-level restrictions will be tightened once every conversation
+    // document contains a canonical participants array of Firebase UIDs.
     match /conversations/{conversationId} {
-      allow read, write: if true;
+      allow read, write: if signedIn();
 
       match /messages/{messageId} {
-        allow read, write: if true;
+        allow read, write: if signedIn();
       }
     }
 
-    // Platforma sozlamalari (Platform Settings)
+    // Public platform configuration can be read, but only the admin can change it.
     match /platform_settings/{settingId} {
       allow read: if true;
-      allow write: if true;
+      allow write: if isAdmin();
     }
 
-    // Shikoyatlar va moderatsiya (Reports)
-    match /moderation_reports/{reportId} {
-      allow read, write: if true;
-    }
-
-    // Foydalanuvchilar profillari (Users)
+    // Users can manage their own profile; admin can manage any profile.
     match /users/{userId} {
-      allow read, write: if true;
+      allow read, write: if isAdmin() || (signedIn() && request.auth.uid == userId);
+    }
+
+    // Any signed-in user may submit a moderation report; only admin can moderate.
+    match /moderation_reports/{reportId} {
+      allow create: if signedIn();
+      allow read, update, delete: if isAdmin();
     }
   }
 }
