@@ -42,7 +42,6 @@ export const RecentlyViewed: React.FC<RecentlyViewedProps> = ({
       id="recently-viewed-section"
       className="mt-10 sm:mt-12 bg-white dark:bg-slate-900 rounded-2xl p-4 sm:p-6 border border-slate-200/90 dark:border-slate-800 shadow-2xs w-full max-w-full overflow-hidden transition-colors duration-200"
     >
-      {/* Header bar */}
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <div className="flex items-center gap-2.5">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-800 shadow-2xs">
@@ -63,7 +62,6 @@ export const RecentlyViewed: React.FC<RecentlyViewedProps> = ({
           </div>
         </div>
 
-        {/* Action Controls */}
         <div className="flex items-center gap-2 ml-auto">
           <button
             id="clear-recently-viewed-btn"
@@ -99,16 +97,15 @@ export const RecentlyViewed: React.FC<RecentlyViewedProps> = ({
         </div>
       </div>
 
-      {/* Horizontal Scrollable Strip */}
       <div
         ref={scrollRef}
-        className="flex gap-3.5 sm:gap-4 overflow-x-auto pb-2 scrollbar-none snap-x snap-mandatory w-full max-w-full overscroll-x-contain touch-pan-x"
-        style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+        className="flex gap-3.5 sm:gap-4 overflow-x-auto pb-2 scrollbar-none w-full max-w-full overscroll-x-contain touch-pan-x"
+        style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch' }}
       >
         {listings.map((item) => (
           <div
             key={item.id}
-            className="min-w-[220px] sm:min-w-[260px] max-w-[260px] sm:max-w-[280px] snap-start shrink-0"
+            className="min-w-[220px] sm:min-w-[260px] max-w-[260px] sm:max-w-[280px] shrink-0"
           >
             <ListingCard
               listing={item}
@@ -118,6 +115,7 @@ export const RecentlyViewed: React.FC<RecentlyViewedProps> = ({
               onToggleFavorite={onToggleFavorite}
               onSelectListing={onSelectListing}
               viewMode="grid"
+              inCarousel={true}
             />
           </div>
         ))}
