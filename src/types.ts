@@ -24,6 +24,8 @@ export interface SellerInfo {
 
 export interface Listing {
   id: string;
+  /** Firebase Auth UID of the user who owns this listing. */
+  ownerId?: string;
   title: string;
   description: string;
   categoryId: string;
@@ -52,22 +54,14 @@ export interface Listing {
 
 export interface SubCategory {
   id: string;
-  name: {
-    uz: string;
-    ru: string;
-    oz: string;
-  };
+  name: { uz: string; ru: string; oz: string };
   iconName?: string;
 }
 
 export interface Category {
   id: string;
   slug: string;
-  name: {
-    uz: string;
-    ru: string;
-    oz: string;
-  };
+  name: { uz: string; ru: string; oz: string };
   iconName: string;
   iconBg: string;
   subcategories: SubCategory[];
@@ -91,6 +85,8 @@ export interface Conversation {
   sellerName: string;
   sellerAvatar: string;
   sellerPhone: string;
+  /** Firebase Auth UIDs allowed to read/write this conversation. */
+  participantIds?: string[];
   messages: ChatMessage[];
   lastUpdated: string;
   unreadCount: number;
@@ -118,7 +114,6 @@ export interface PlatformSettings {
   vipPricePerDay: number;
   announcementText: string;
   isAnnouncementActive: boolean;
-  // Telegram Integration
   telegramBotToken?: string;
   telegramChannelId?: string;
   telegramBotUsername?: string;
