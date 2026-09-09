@@ -1,6 +1,7 @@
 import {
   createUserWithEmailAndPassword,
   EmailAuthProvider,
+  getAuth,
   linkWithCredential,
   onAuthStateChanged,
   signInAnonymously,
