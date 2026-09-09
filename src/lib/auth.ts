@@ -4,10 +4,13 @@ import {
   getAuth,
   linkWithCredential,
   onAuthStateChanged,
+  PhoneAuthProvider,
+  RecaptchaVerifier,
   signInAnonymously,
   signInWithEmailAndPassword,
   signOut,
-  User
+  User,
+  ConfirmationResult
 } from 'firebase/auth';
 import { app } from './firebase';
 
@@ -38,6 +41,28 @@ export async function registerWithEmail(email: string, password: string) {
 /** Signs an existing user in with email and password. */
 export function loginWithEmail(email: string, password: string) {
   return signInWithEmailAndPassword(auth, email, password);
+}
+
+export function createPhoneRecaptcha(containerId: string) {
+  return new RecaptchaVerifier(auth, containerId, {
+    size: 'invisible'
+  });
+}
+
+/** Sends an SMS verification code to the supplied phone number. */
+export async function sendPhoneCode(phoneNumber: string, verifier: RecaptchaVerifier): Promise<ConfirmationResult> {
+  const provider = new PhoneAuthProvider(auth);
+  return provider.verifyPhoneNumber(phoneNumber, verifier);
+}
+
+/** Confirms an SMS code and signs the user in, or links it to the anonymous user. */
+export async function confirmPhoneCode(
+  confirmation: ConfirmationResult,
+  code: string,
+  linkToAnonymous = false,
+) {
+  const credential = await confirmation.confirm(code);
+  return credential;
 }
 
 export function logout() {
