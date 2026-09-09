@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { signOut } from 'firebase/auth';
 import App from '../App';
-import { auth, ensureAnonymousAuth } from '../lib/auth';
+import { ensureAnonymousAuth } from '../lib/auth';
 
 export const AuthGate: React.FC = () => {
   const [ready, setReady] = useState(false);
@@ -15,33 +14,8 @@ export const AuthGate: React.FC = () => {
       setReady(true);
     });
 
-    // The profile menu's Chiqish button previously only closed the menu.
-    // Handle the existing button without changing the public component API.
-    const handleLogoutClick = (event: MouseEvent) => {
-      const target = event.target as HTMLElement | null;
-      const button = target?.closest('button');
-      if (!button) return;
-
-      const label = button.textContent?.trim().toLowerCase();
-      if (label !== 'chiqish' && label !== 'выйти' && label !== 'чиқиш') return;
-
-      event.preventDefault();
-      event.stopPropagation();
-
-      signOut(auth)
-        .then(() => {
-          window.location.reload();
-        })
-        .catch((error) => {
-          console.error('Firebase logout failed:', error);
-        });
-    };
-
-    document.addEventListener('click', handleLogoutClick, true);
-
     return () => {
       mounted = false;
-      document.removeEventListener('click', handleLogoutClick, true);
     };
   }, []);
 
