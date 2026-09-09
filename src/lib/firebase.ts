@@ -1,16 +1,20 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import { getAuth, onAuthStateChanged } from 'firebase/auth';
 import {
   getFirestore,
   collection,
   doc,
+  getDoc,
   getDocs,
   setDoc,
   updateDoc,
   deleteDoc,
   onSnapshot,
   writeBatch,
-  increment
+  increment,
+  query,
+  where,
+  or
 } from 'firebase/firestore';
 import {
   Listing,
@@ -64,7 +68,19 @@ export async function seedInitialListingsIfEmpty(fallbackListings: Listing[]): P
 }
 
 export async function saveListingToDb(listing: Listing): Promise<void> {
-  await setDoc(doc(db, LISTINGS_COLLECTION, listing.id), listing);
+  const listingRef = doc(db, LISTINGS_COLLECTION, listing.id);
+  const existing = await getDoc(listingRef);
+  const currentUid = auth.currentUser?.uid;
+  const data: Listing = {
+    ...listing,
+    ...(listing.userId ? {} : currentUid ? { userId: currentUid } : {}),
+    ...(listing.seller?.id === 'user-self' || listing.seller?.name === 'Fedya Ibragimovich'
+      ? {}
+      : currentUid && !existing.exists()
+        ? { seller: { ...listing.seller, id: 'user-self' } }
+        : {})
+  };
+  await setDoc(listingRef, data);
 }
 
 export async function updateListingInDb(listingId: string, updates: Partial<Listing>): Promise<void> {
@@ -84,15 +100,41 @@ export async function incrementListingViewsInDb(listingId: string): Promise<void
 }
 
 export function subscribeToConversations(onSuccess: (conversations: Conversation[]) => void, onError?: (err: Error) => void) {
+  let unsubscribeSnapshot: (() => void) | null = null;
+  let unsubscribeAuth: (() => void) | null = null;
+
   try {
-    return onSnapshot(collection(db, CONVERSATIONS_COLLECTION), (snapshot) => {
-      const items: Conversation[] = [];
-      snapshot.forEach((docSnap) => items.push({ ...(docSnap.data() as Conversation), id: docSnap.id }));
-      onSuccess(items);
-    }, (error) => {
-      console.warn('Firestore conversations subscription error:', error);
-      onError?.(error);
+    unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+      unsubscribeSnapshot?.();
+      unsubscribeSnapshot = null;
+
+      if (!user) {
+        onSuccess([]);
+        return;
+      }
+
+      const participantQuery = query(
+        collection(db, CONVERSATIONS_COLLECTION),
+        or(
+          where('buyerId', '==', user.uid),
+          where('sellerUserId', '==', user.uid)
+        )
+      );
+
+      unsubscribeSnapshot = onSnapshot(participantQuery, (snapshot) => {
+        const items: Conversation[] = [];
+        snapshot.forEach((docSnap) => items.push({ ...(docSnap.data() as Conversation), id: docSnap.id }));
+        onSuccess(items);
+      }, (error) => {
+        console.warn('Firestore conversations subscription error:', error);
+        onError?.(error);
+      });
     });
+
+    return () => {
+      unsubscribeSnapshot?.();
+      unsubscribeAuth?.();
+    };
   } catch (err: any) {
     onError?.(err);
     return () => {};
@@ -101,10 +143,19 @@ export function subscribeToConversations(onSuccess: (conversations: Conversation
 
 export async function seedConversationsIfEmpty(initialConversations: Conversation[]): Promise<void> {
   try {
-    const existingSnap = await getDocs(collection(db, CONVERSATIONS_COLLECTION));
+    const currentUid = auth.currentUser?.uid;
+    if (!currentUid) return;
+    const existingSnap = await getDocs(
+      query(collection(db, CONVERSATIONS_COLLECTION), where('buyerId', '==', currentUid))
+    );
     if (!existingSnap.empty) return;
     const batch = writeBatch(db);
-    initialConversations.forEach((conv) => batch.set(doc(db, CONVERSATIONS_COLLECTION, conv.id), conv));
+    initialConversations.forEach((conv) => {
+      batch.set(doc(db, CONVERSATIONS_COLLECTION, conv.id), {
+        ...conv,
+        buyerId: conv.buyerId || currentUid
+      });
+    });
     await batch.commit();
   } catch (err) {
     console.warn('Failed to seed conversations:', err);
@@ -112,7 +163,28 @@ export async function seedConversationsIfEmpty(initialConversations: Conversatio
 }
 
 export async function saveConversationToDb(conv: Conversation): Promise<void> {
-  await setDoc(doc(db, CONVERSATIONS_COLLECTION, conv.id), conv);
+  const currentUid = auth.currentUser?.uid;
+  if (!currentUid) throw new Error('Authentication required to create a conversation.');
+
+  let sellerUserId = conv.sellerUserId;
+  if (!sellerUserId && conv.listingId) {
+    try {
+      const listingSnap = await getDoc(doc(db, LISTINGS_COLLECTION, conv.listingId));
+      if (listingSnap.exists()) {
+        sellerUserId = (listingSnap.data() as Listing).userId;
+      }
+    } catch (err) {
+      console.warn('Could not resolve seller UID for conversation:', err);
+    }
+  }
+
+  const data: Conversation = {
+    ...conv,
+    buyerId: conv.buyerId || currentUid,
+    ...(sellerUserId ? { sellerUserId } : {})
+  };
+
+  await setDoc(doc(db, CONVERSATIONS_COLLECTION, conv.id), data);
 }
 
 export async function appendMessageInDb(chatId: string, newMessage: ChatMessage, allMessages: ChatMessage[]): Promise<void> {
