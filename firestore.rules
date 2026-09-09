@@ -1,36 +1,62 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // E'lonlar to'plami (Listings)
-    match /listings/{listingId} {
-      allow read: if true;
-      allow create: if request.resource.data.title is string && request.resource.data.price is number;
-      allow update, delete: if true;
+    function signedIn() {
+      return request.auth != null;
     }
 
-    // Muloqotlar va xabarlar (Conversations & Chat)
+    function isAdmin() {
+      return signedIn() && request.auth.token.admin == true;
+    }
+
+    // Public marketplace feed. Only the authenticated owner (or admin) can mutate an ad.
+    match /listings/{listingId} {
+      allow read: if true;
+      allow create: if signedIn()
+        && request.resource.data.ownerId == request.auth.uid;
+      allow update: if signedIn()
+        && (
+          isAdmin()
+          || (
+            resource.data.ownerId == request.auth.uid
+            && request.resource.data.ownerId == resource.data.ownerId
+          )
+        );
+      allow delete: if signedIn()
+        && (isAdmin() || resource.data.ownerId == request.auth.uid);
+    }
+
+    // Conversations are private to their Firebase Auth participants.
     match /conversations/{conversationId} {
-      allow read, write: if true;
+      allow read, create: if signedIn()
+        && request.resource.data.participantIds is list
+        && request.resource.data.participantIds.hasAny([request.auth.uid]);
+      allow update, delete: if signedIn()
+        && resource.data.participantIds is list
+        && resource.data.participantIds.hasAny([request.auth.uid]);
 
       match /messages/{messageId} {
-        allow read, write: if true;
+        allow read, write: if signedIn()
+          && get(/databases/$(database)/documents/conversations/$(conversationId)).data.participantIds.hasAny([request.auth.uid]);
       }
     }
 
-    // Platforma sozlamalari (Platform Settings)
+    // Never expose platform secrets such as a Telegram bot token to clients.
+    // Public client reads are disabled; only an admin may manage this document.
     match /platform_settings/{settingId} {
-      allow read: if true;
-      allow write: if true;
+      allow read, write: if isAdmin();
     }
 
-    // Shikoyatlar va moderatsiya (Reports)
+    // Reports may be submitted by signed-in users; only admins can review/change them.
     match /moderation_reports/{reportId} {
-      allow read, write: if true;
+      allow create: if signedIn();
+      allow read, update, delete: if isAdmin();
     }
 
-    // Foydalanuvchilar profillari (Users)
+    // User profiles are private to the owner, with admin access for moderation.
     match /users/{userId} {
-      allow read, write: if true;
+      allow read, write: if signedIn()
+        && (request.auth.uid == userId || isAdmin());
     }
   }
 }
