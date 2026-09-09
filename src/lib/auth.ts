@@ -29,4 +29,9 @@ export const registerWithEmail = (email: string, password: string) =>
 export const loginWithGoogle = () =>
   signInWithPopup(auth, new GoogleAuthProvider());
 
-export const logoutUser = () => signOut(auth);
+export const logoutUser = async () => {
+  const confirmed = window.confirm('Haqiqatan ham akkauntdan chiqmoqchimisiz?');
+  if (!confirmed) return false;
+  await signOut(auth);
+  return true;
+};
