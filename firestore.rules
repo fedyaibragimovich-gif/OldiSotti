@@ -1,7 +1,6 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // OldiSotti administrator. This UID is authorized only by Firebase Auth.
     function isAdmin() {
       return request.auth != null
         && request.auth.uid == 'Q81AQDKw7GXYeNgdrnp2qvYgyS02';
@@ -11,37 +10,48 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Listings: public viewing, authenticated creation, owner/admin changes.
+    function isConversationParticipant() {
+      return signedIn()
+        && (resource.data.buyerId == request.auth.uid
+          || resource.data.sellerUserId == request.auth.uid);
+    }
+
+    function isNewConversationParticipant() {
+      return signedIn()
+        && (request.resource.data.buyerId == request.auth.uid
+          || request.resource.data.sellerUserId == request.auth.uid);
+    }
+
     match /listings/{listingId} {
       allow read: if true;
-      allow create: if signedIn();
+      allow create: if signedIn()
+        && request.resource.data.userId == request.auth.uid;
       allow update, delete: if isAdmin()
         || (signedIn() && resource.data.userId == request.auth.uid);
     }
 
-    // Conversations are available only to authenticated Firebase users.
-    // Participant-level restrictions will be tightened once every conversation
-    // document contains a canonical participants array of Firebase UIDs.
     match /conversations/{conversationId} {
-      allow read, write: if signedIn();
+      allow read: if isAdmin() || isConversationParticipant();
+      allow create: if isAdmin() || isNewConversationParticipant();
+      allow update: if isAdmin() || (isConversationParticipant()
+        && request.resource.data.buyerId == resource.data.buyerId
+        && request.resource.data.sellerUserId == resource.data.sellerUserId);
+      allow delete: if isAdmin() || isConversationParticipant();
 
       match /messages/{messageId} {
-        allow read, write: if signedIn();
+        allow read, write: if isAdmin() || isConversationParticipant();
       }
     }
 
-    // Public platform configuration can be read, but only the admin can change it.
     match /platform_settings/{settingId} {
       allow read: if true;
       allow write: if isAdmin();
     }
 
-    // Users can manage their own profile; admin can manage any profile.
     match /users/{userId} {
       allow read, write: if isAdmin() || (signedIn() && request.auth.uid == userId);
     }
 
-    // Any signed-in user may submit a moderation report; only admin can moderate.
     match /moderation_reports/{reportId} {
       allow create: if signedIn();
       allow read, update, delete: if isAdmin();
