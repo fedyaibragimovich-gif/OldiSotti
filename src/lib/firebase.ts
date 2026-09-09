@@ -1,4 +1,5 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
+import { getAuth } from 'firebase/auth';
 import {
   getFirestore,
   collection,
@@ -9,7 +10,7 @@ import {
   deleteDoc,
   onSnapshot,
   query,
-  orderBy,
+  where,
   writeBatch,
   increment
 } from 'firebase/firestore';
@@ -22,10 +23,9 @@ import {
 } from '../types';
 import firebaseConfig from '../../firebase-applet-config.json';
 
-// Initialize Firebase app singleton
 export const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+export const auth = getAuth(app);
 
-// Initialize Firestore with specific database ID if configured
 export const db = firebaseConfig.firestoreDatabaseId
   ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
   : getFirestore(app);
@@ -35,9 +35,13 @@ export const CONVERSATIONS_COLLECTION = 'conversations';
 export const SETTINGS_COLLECTION = 'platform_settings';
 export const REPORTS_COLLECTION = 'moderation_reports';
 
-/**
- * Real-time listener for listings from Firestore
- */
+function requireAuthenticatedUid(): string {
+  const uid = auth.currentUser?.uid;
+  if (!uid) throw new Error('Foydalanuvchi autentifikatsiya qilinmagan.');
+  return uid;
+}
+
+/** Real-time public listings feed. */
 export function subscribeToListings(
   onSuccess: (listings: Listing[]) => void,
   onError?: (err: Error) => void
@@ -55,92 +59,77 @@ export function subscribeToListings(
       },
       (error) => {
         console.warn('Firestore listings subscription error:', error);
-        if (onError) onError(error);
+        onError?.(error);
       }
     );
   } catch (err: any) {
-    console.error('Failed to attach listings listener:', err);
-    if (onError) onError(err);
+    onError?.(err);
     return () => {};
   }
 }
 
-/**
- * Seed initial mock listings to Firestore if collection is empty
- */
+/** Seed only once, assigning ownership to the authenticated migration user. */
 export async function seedInitialListingsIfEmpty(fallbackListings: Listing[]): Promise<boolean> {
   try {
+    const uid = requireAuthenticatedUid();
     const listingsRef = collection(db, LISTINGS_COLLECTION);
     const existingSnap = await getDocs(listingsRef);
-    if (!existingSnap.empty) {
-      return false; // Already populated
-    }
+    if (!existingSnap.empty) return false;
 
-    // Populate using batch
     const batch = writeBatch(db);
     fallbackListings.forEach((listing) => {
       const docRef = doc(db, LISTINGS_COLLECTION, listing.id);
-      batch.set(docRef, listing);
+      batch.set(docRef, { ...listing, ownerId: listing.ownerId || uid });
     });
-
     await batch.commit();
     return true;
   } catch (error) {
-    console.warn('Could not seed listings to Firestore (fallback to local state):', error);
+    console.warn('Could not seed listings to Firestore:', error);
     return false;
   }
 }
 
-/**
- * Add or overwrite listing in Firestore
- */
+/** Create/replace a listing while binding it to the current Firebase UID. */
 export async function saveListingToDb(listing: Listing): Promise<void> {
+  const uid = requireAuthenticatedUid();
   const docRef = doc(db, LISTINGS_COLLECTION, listing.id);
-  await setDoc(docRef, listing);
+  await setDoc(docRef, { ...listing, ownerId: uid });
 }
 
-/**
- * Update partial listing fields in Firestore
- */
+/** Update listing fields without allowing the client to change ownership. */
 export async function updateListingInDb(listingId: string, updates: Partial<Listing>): Promise<void> {
+  requireAuthenticatedUid();
+  const { ownerId: _ignoredOwnerId, ...safeUpdates } = updates as Partial<Listing>;
   const docRef = doc(db, LISTINGS_COLLECTION, listingId);
-  await updateDoc(docRef, updates);
+  await updateDoc(docRef, safeUpdates);
 }
 
-/**
- * Delete listing from Firestore
- */
 export async function deleteListingFromDb(listingId: string): Promise<void> {
-  const docRef = doc(db, LISTINGS_COLLECTION, listingId);
-  await deleteDoc(docRef);
+  requireAuthenticatedUid();
+  await deleteDoc(doc(db, LISTINGS_COLLECTION, listingId));
 }
 
-/**
- * Increment listing view counter
- */
 export async function incrementListingViewsInDb(listingId: string): Promise<void> {
   try {
-    const docRef = doc(db, LISTINGS_COLLECTION, listingId);
-    await updateDoc(docRef, {
-      viewsCount: increment(1)
-    });
+    await updateDoc(doc(db, LISTINGS_COLLECTION, listingId), { viewsCount: increment(1) });
   } catch (err) {
-    // Non-blocking error
     console.warn('Failed to increment views in DB:', err);
   }
 }
 
-/**
- * Real-time listener for chat conversations
- */
+/** Subscribe only to conversations where the current user is a participant. */
 export function subscribeToConversations(
   onSuccess: (conversations: Conversation[]) => void,
   onError?: (err: Error) => void
 ) {
   try {
-    const convRef = collection(db, CONVERSATIONS_COLLECTION);
+    const uid = requireAuthenticatedUid();
+    const convQuery = query(
+      collection(db, CONVERSATIONS_COLLECTION),
+      where('participantIds', 'array-contains', uid)
+    );
     return onSnapshot(
-      convRef,
+      convQuery,
       (snapshot) => {
         const items: Conversation[] = [];
         snapshot.forEach((docSnap) => {
@@ -150,28 +139,29 @@ export function subscribeToConversations(
       },
       (error) => {
         console.warn('Firestore conversations subscription error:', error);
-        if (onError) onError(error);
+        onError?.(error);
       }
     );
   } catch (err: any) {
-    if (onError) onError(err);
+    onError?.(err);
     return () => {};
   }
 }
 
-/**
- * Seed initial conversations if empty
- */
 export async function seedConversationsIfEmpty(initialConversations: Conversation[]): Promise<void> {
   try {
+    const uid = requireAuthenticatedUid();
     const convRef = collection(db, CONVERSATIONS_COLLECTION);
-    const existingSnap = await getDocs(convRef);
+    const existingSnap = await getDocs(query(convRef, where('participantIds', 'array-contains', uid)));
     if (!existingSnap.empty) return;
 
     const batch = writeBatch(db);
     initialConversations.forEach((conv) => {
       const docRef = doc(db, CONVERSATIONS_COLLECTION, conv.id);
-      batch.set(docRef, conv);
+      batch.set(docRef, {
+        ...conv,
+        participantIds: Array.from(new Set([...(conv.participantIds || []), uid]))
+      });
     });
     await batch.commit();
   } catch (err) {
@@ -179,29 +169,25 @@ export async function seedConversationsIfEmpty(initialConversations: Conversatio
   }
 }
 
-/**
- * Save or update conversation
- */
 export async function saveConversationToDb(conv: Conversation): Promise<void> {
+  const uid = requireAuthenticatedUid();
   const docRef = doc(db, CONVERSATIONS_COLLECTION, conv.id);
-  await setDoc(docRef, conv);
+  await setDoc(docRef, {
+    ...conv,
+    participantIds: Array.from(new Set([...(conv.participantIds || []), uid]))
+  });
 }
 
-/**
- * Append message to conversation in Firestore
- */
 export async function appendMessageInDb(chatId: string, newMessage: ChatMessage, allMessages: ChatMessage[]): Promise<void> {
-  const docRef = doc(db, CONVERSATIONS_COLLECTION, chatId);
-  await updateDoc(docRef, {
+  requireAuthenticatedUid();
+  await updateDoc(doc(db, CONVERSATIONS_COLLECTION, chatId), {
     messages: allMessages,
     lastUpdated: newMessage.timestamp,
     unreadCount: 0
   });
 }
 
-/**
- * Platform settings real-time listener
- */
+/** Platform settings are admin-only. */
 export function subscribeToPlatformSettings(
   onSuccess: (settings: PlatformSettings) => void,
   onError?: (err: Error) => void
@@ -211,32 +197,26 @@ export function subscribeToPlatformSettings(
     return onSnapshot(
       docRef,
       (docSnap) => {
-        if (docSnap.exists()) {
-          onSuccess(docSnap.data() as PlatformSettings);
-        }
+        if (docSnap.exists()) onSuccess(docSnap.data() as PlatformSettings);
       },
       (err) => {
         console.warn('Platform settings subscription error:', err);
-        if (onError) onError(err);
+        onError?.(err);
       }
     );
   } catch (err: any) {
-    if (onError) onError(err);
+    onError?.(err);
     return () => {};
   }
 }
 
-/**
- * Update platform settings
- */
 export async function savePlatformSettingsToDb(settings: PlatformSettings): Promise<void> {
+  requireAuthenticatedUid();
   const docRef = doc(db, SETTINGS_COLLECTION, 'global_config');
   await setDoc(docRef, settings, { merge: true });
 }
 
-/**
- * Moderation reports real-time listener
- */
+/** Moderation reports are readable/writable only by authorized users under Firestore rules. */
 export function subscribeToModerationReports(
   onSuccess: (reports: ModerationReport[]) => void,
   onError?: (err: Error) => void
@@ -254,27 +234,21 @@ export function subscribeToModerationReports(
       },
       (err) => {
         console.warn('Reports subscription error:', err);
-        if (onError) onError(err);
+        onError?.(err);
       }
     );
   } catch (err: any) {
-    if (onError) onError(err);
+    onError?.(err);
     return () => {};
   }
 }
 
-/**
- * Create a new moderation report
- */
 export async function saveReportToDb(report: ModerationReport): Promise<void> {
-  const docRef = doc(db, REPORTS_COLLECTION, report.id);
-  await setDoc(docRef, report);
+  requireAuthenticatedUid();
+  await setDoc(doc(db, REPORTS_COLLECTION, report.id), report);
 }
 
-/**
- * Update report status
- */
 export async function updateReportStatusInDb(reportId: string, status: 'resolved' | 'dismissed'): Promise<void> {
-  const docRef = doc(db, REPORTS_COLLECTION, reportId);
-  await updateDoc(docRef, { status });
+  requireAuthenticatedUid();
+  await updateDoc(doc(db, REPORTS_COLLECTION, reportId), { status });
 }
