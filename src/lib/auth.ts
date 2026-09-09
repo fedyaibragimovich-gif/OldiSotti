@@ -1,5 +1,6 @@
 import {
   onAuthStateChanged,
+  createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   signInWithPopup,
   GoogleAuthProvider,
@@ -21,6 +22,9 @@ export const subscribeToAuth = (callback: (user: User | null) => void) => {
 
 export const loginWithEmail = (email: string, password: string) =>
   signInWithEmailAndPassword(auth, email, password);
+
+export const registerWithEmail = (email: string, password: string) =>
+  createUserWithEmailAndPassword(auth, email, password);
 
 export const loginWithGoogle = () =>
   signInWithPopup(auth, new GoogleAuthProvider());
