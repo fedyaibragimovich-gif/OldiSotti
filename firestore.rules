@@ -1,0 +1,36 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // E'lonlar to'plami (Listings)
+    match /listings/{listingId} {
+      allow read: if true;
+      allow create: if request.resource.data.title is string && request.resource.data.price is number;
+      allow update, delete: if true;
+    }
+
+    // Muloqotlar va xabarlar (Conversations & Chat)
+    match /conversations/{conversationId} {
+      allow read, write: if true;
+
+      match /messages/{messageId} {
+        allow read, write: if true;
+      }
+    }
+
+    // Platforma sozlamalari (Platform Settings)
+    match /platform_settings/{settingId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Shikoyatlar va moderatsiya (Reports)
+    match /moderation_reports/{reportId} {
+      allow read, write: if true;
+    }
+
+    // Foydalanuvchilar profillari (Users)
+    match /users/{userId} {
+      allow read, write: if true;
+    }
+  }
+}
