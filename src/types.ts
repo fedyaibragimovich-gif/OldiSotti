@@ -39,6 +39,8 @@ export interface Listing {
   isTop: boolean;
   isVip: boolean;
   seller: SellerInfo;
+  /** Firebase Auth UID of the listing owner. */
+  userId?: string;
   attributes?: Record<string, string>;
   status: 'active' | 'sold' | 'pending' | 'rejected';
   rejectionReason?: string;
@@ -91,6 +93,10 @@ export interface Conversation {
   sellerName: string;
   sellerAvatar: string;
   sellerPhone: string;
+  /** Firebase Auth UID of the buyer. */
+  buyerId?: string;
+  /** Firebase Auth UID of the seller when known. */
+  sellerUserId?: string;
   messages: ChatMessage[];
   lastUpdated: string;
   unreadCount: number;
@@ -118,7 +124,6 @@ export interface PlatformSettings {
   vipPricePerDay: number;
   announcementText: string;
   isAnnouncementActive: boolean;
-  // Telegram Integration
   telegramBotToken?: string;
   telegramChannelId?: string;
   telegramBotUsername?: string;
