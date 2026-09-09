@@ -1,19 +1,22 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Home,
   MessageSquare,
   Plus,
   Heart,
-  User,
   Layers,
+  LogIn,
   LogOut,
   X,
   ChevronRight,
   ShieldCheck
 } from 'lucide-react';
+import { User } from 'firebase/auth';
 import { Language } from '../types';
 import { getTranslation } from '../data/translations';
 import { useVirtualKeyboard } from '../hooks/useVirtualKeyboard';
+import { AuthModal } from './AuthModal';
+import { auth, ensureAnonymousAuth, logout, subscribeToAuthState } from '../lib/auth';
 
 interface BottomNavProps {
   lang: Language;
@@ -41,324 +44,178 @@ export const BottomNav: React.FC<BottomNavProps> = React.memo(({
   const t = getTranslation(lang);
   const isKeyboardOpen = useVirtualKeyboard();
   const [profileModalOpen, setProfileModalOpen] = useState(false);
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [currentUser, setCurrentUser] = useState<User | null>(auth.currentUser);
   const profileRef = useRef<HTMLDivElement>(null);
 
-  // Close profile modal on click outside
+  useEffect(() => subscribeToAuthState(setCurrentUser), []);
+
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (profileRef.current && !profileRef.current.contains(e.target as Node)) {
         setProfileModalOpen(false);
       }
     };
-    if (profileModalOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
+    if (profileModalOpen) document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [profileModalOpen]);
 
   const navLabels = {
     uz: {
-      home: 'Asosiy',
-      messages: 'Xabarlar',
-      postAd: "E'lon",
-      favorites: 'Saralangan',
-      profile: 'Profil',
-      myAds: "Mening e'lonlarim",
-      theme: 'Rejim',
-      logout: 'Chiqish'
+      home: 'Asosiy', messages: 'Xabarlar', postAd: "E'lon", favorites: 'Saralangan',
+      profile: 'Profil', myAds: "Mening e'lonlarim", login: 'Kirish', logout: 'Chiqish'
     },
     ru: {
-      home: 'Главная',
-      messages: 'Сообщения',
-      postAd: 'Подать',
-      favorites: 'Избранное',
-      profile: 'Профиль',
-      myAds: 'Мои объявления',
-      theme: 'Тема',
-      logout: 'Выйти'
+      home: 'Главная', messages: 'Сообщения', postAd: 'Подать', favorites: 'Избранное',
+      profile: 'Профиль', myAds: 'Мои объявления', login: 'Войти', logout: 'Выйти'
     },
     oz: {
-      home: 'Асосий',
-      messages: 'Хабарлар',
-      postAd: 'Эълон',
-      favorites: 'Сараланган',
-      profile: 'Профил',
-      myAds: 'Менинг эълонларим',
-      theme: 'Режим',
-      logout: 'Чиқиш'
+      home: 'Асосий', messages: 'Хабарлар', postAd: 'Эълон', favorites: 'Сараланган',
+      profile: 'Профил', myAds: 'Менинг эълонларим', login: 'Кириш', logout: 'Чиқиш'
     }
   }[lang] || {
-    home: 'Asosiy',
-    messages: 'Xabarlar',
-    postAd: "E'lon",
-    favorites: 'Saralangan',
-    profile: 'Profil',
-    myAds: "Mening e'lonlarim",
-    theme: 'Rejim',
-    logout: 'Chiqish'
+    home: 'Asosiy', messages: 'Xabarlar', postAd: "E'lon", favorites: 'Saralangan',
+    profile: 'Profil', myAds: "Mening e'lonlarim", login: 'Kirish', logout: 'Chiqish'
+  };
+
+  const isRegistered = !!currentUser && !currentUser.isAnonymous;
+  const initials = isRegistered
+    ? (currentUser?.email?.slice(0, 2).toUpperCase() || 'U')
+    : 'G';
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      await ensureAnonymousAuth();
+      setProfileModalOpen(false);
+    } catch (error) {
+      console.error('Firebase logout failed:', error);
+    }
+  };
+
+  const openAuth = () => {
+    setProfileModalOpen(false);
+    setAuthModalOpen(true);
   };
 
   return (
     <>
-      {/* Profile popover menu when clicking Profile on bottom bar */}
       {profileModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/60 transition-opacity">
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/60 p-0 transition-opacity sm:items-center sm:p-4">
           <div
             ref={profileRef}
-            className="w-full max-w-md bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-3xl border border-slate-200 dark:border-slate-800 p-5 shadow-2xl animate-in slide-in-from-bottom duration-200 text-slate-900 dark:text-white"
+            className="w-full max-w-md rounded-t-3xl border border-slate-200 bg-white p-5 text-slate-900 shadow-2xl dark:border-slate-800 dark:bg-slate-900 dark:text-white sm:rounded-3xl"
           >
-            {/* Header */}
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-              <div className="flex items-center gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-tr from-indigo-600 to-blue-600 text-white font-black text-sm shadow-md">
-                  FI
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3 dark:border-slate-800">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-tr from-indigo-600 to-blue-600 text-sm font-black text-white shadow-md">
+                  {initials}
                 </div>
-                <div>
-                  <h4 className="font-bold text-base text-slate-900 dark:text-white leading-tight">
-                    Fedya Ibragimovich
+                <div className="min-w-0">
+                  <h4 className="truncate text-base font-bold leading-tight">
+                    {isRegistered ? 'OldiSotti foydalanuvchisi' : 'Mehmon foydalanuvchi'}
                   </h4>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Fedya.ibragimovich@gmail.com
+                  <p className="truncate text-xs text-slate-500 dark:text-slate-400">
+                    {isRegistered ? currentUser?.email : 'Akkauntga kirmagansiz'}
                   </p>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => setProfileModalOpen(false)}
-                className="p-1.5 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer"
-              >
+              <button type="button" onClick={() => setProfileModalOpen(false)} className="rounded-full p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">
                 <X size={18} />
               </button>
             </div>
 
-            {/* Profile Action Menu */}
-            <div className="py-2.5 space-y-1">
-              {/* My Ads */}
-              <button
-                type="button"
-                id="bottom-profile-my-ads-btn"
-                onClick={() => {
-                  setProfileModalOpen(false);
-                  onMyAdsClick();
-                }}
-                className="w-full flex items-center justify-between p-3 rounded-2xl hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors group cursor-pointer"
-              >
+            {!isRegistered && (
+              <div className="my-3 rounded-2xl bg-indigo-50 p-3 dark:bg-indigo-950/40">
+                <p className="text-xs font-semibold text-indigo-800 dark:text-indigo-200">
+                  E'lonlaringizni saqlash va boshqa qurilmadan kirish uchun akkaunt yarating.
+                </p>
+                <button
+                  type="button"
+                  onClick={openAuth}
+                  className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-xs font-black text-white hover:bg-indigo-500"
+                >
+                  <LogIn size={15} /> {navLabels.login}
+                </button>
+              </div>
+            )}
+
+            <div className="space-y-1 py-2.5">
+              <button type="button" onClick={() => { setProfileModalOpen(false); onMyAdsClick(); }} className="group flex w-full items-center justify-between rounded-2xl p-3 hover:bg-slate-50 dark:hover:bg-slate-800/80">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-50 dark:bg-indigo-950/70 text-indigo-600 dark:text-indigo-400">
-                    <Layers size={18} />
-                  </div>
+                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 dark:bg-indigo-950/70 dark:text-indigo-400"><Layers size={18} /></div>
                   <div className="text-left">
-                    <span className="font-bold text-sm block">{navLabels.myAds}</span>
+                    <span className="block text-sm font-bold">{navLabels.myAds}</span>
                     <span className="text-[11px] text-slate-500 dark:text-slate-400">E'lonlarni boshqarish & VIP</span>
                   </div>
                 </div>
-                <ChevronRight size={16} className="text-slate-400 group-hover:translate-x-0.5 transition-transform" />
+                <ChevronRight size={16} className="text-slate-400" />
               </button>
 
-              {/* Admin Panel */}
               {onOpenAdmin && (
-                <button
-                  type="button"
-                  id="bottom-profile-admin-btn"
-                  onClick={() => {
-                    setProfileModalOpen(false);
-                    onOpenAdmin();
-                  }}
-                  className="w-full flex items-center justify-between p-3 rounded-2xl hover:bg-indigo-50/70 dark:hover:bg-indigo-950/50 transition-colors group cursor-pointer"
-                >
+                <button type="button" onClick={() => { setProfileModalOpen(false); onOpenAdmin(); }} className="group flex w-full items-center justify-between rounded-2xl p-3 hover:bg-indigo-50/70 dark:hover:bg-indigo-950/50">
                   <div className="flex items-center gap-3">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-100 dark:bg-indigo-900/60 text-indigo-600 dark:text-indigo-300">
-                      <ShieldCheck size={18} />
-                    </div>
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-100 text-indigo-600 dark:bg-indigo-900/60 dark:text-indigo-300"><ShieldCheck size={18} /></div>
                     <div className="text-left">
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-bold text-sm block">{t.adminPanel}</span>
-                        <span className="text-[9px] font-bold px-1.5 py-0.2 bg-indigo-600 text-white rounded-md">PRO</span>
-                      </div>
+                      <div className="flex items-center gap-1.5"><span className="block text-sm font-bold">{t.adminPanel}</span><span className="rounded-md bg-indigo-600 px-1.5 py-0.2 text-[9px] font-bold text-white">PRO</span></div>
                       <span className="text-[11px] text-slate-500 dark:text-slate-400">Moderatsiya & Tizim tahlili</span>
                     </div>
                   </div>
-                  <ChevronRight size={16} className="text-slate-400 group-hover:translate-x-0.5 transition-transform" />
+                  <ChevronRight size={16} className="text-slate-400" />
                 </button>
               )}
 
-              {/* Messages */}
-              <button
-                type="button"
-                id="bottom-profile-messages-btn"
-                onClick={() => {
-                  setProfileModalOpen(false);
-                  onMessagesClick();
-                }}
-                className="w-full flex items-center justify-between p-3 rounded-2xl hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors group cursor-pointer"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 dark:bg-blue-950/70 text-blue-600 dark:text-blue-400">
-                    <MessageSquare size={18} />
-                  </div>
-                  <div className="text-left">
-                    <span className="font-bold text-sm block">{navLabels.messages}</span>
-                    <span className="text-[11px] text-slate-500 dark:text-slate-400">Xaridorlar bilan yozishmalar</span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  {unreadCount > 0 && (
-                    <span className="px-2 py-0.5 rounded-full bg-indigo-600 text-white text-[11px] font-bold">
-                      {unreadCount}
-                    </span>
-                  )}
-                  <ChevronRight size={16} className="text-slate-400 group-hover:translate-x-0.5 transition-transform" />
-                </div>
+              <button type="button" onClick={() => { setProfileModalOpen(false); onMessagesClick(); }} className="group flex w-full items-center justify-between rounded-2xl p-3 hover:bg-slate-50 dark:hover:bg-slate-800/80">
+                <div className="flex items-center gap-3"><div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-950/70 dark:text-blue-400"><MessageSquare size={18} /></div><div className="text-left"><span className="block text-sm font-bold">{navLabels.messages}</span><span className="text-[11px] text-slate-500 dark:text-slate-400">Xaridorlar bilan yozishmalar</span></div></div>
+                <div className="flex items-center gap-2">{unreadCount > 0 && <span className="rounded-full bg-indigo-600 px-2 py-0.5 text-[11px] font-bold text-white">{unreadCount}</span>}<ChevronRight size={16} className="text-slate-400" /></div>
               </button>
 
-              {/* Favorites */}
-              <button
-                type="button"
-                id="bottom-profile-favorites-btn"
-                onClick={() => {
-                  setProfileModalOpen(false);
-                  onFavoritesClick();
-                }}
-                className="w-full flex items-center justify-between p-3 rounded-2xl hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors group cursor-pointer"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-rose-50 dark:bg-rose-950/70 text-rose-500">
-                    <Heart size={18} className="fill-rose-500" />
-                  </div>
-                  <div className="text-left">
-                    <span className="font-bold text-sm block">{navLabels.favorites}</span>
-                    <span className="text-[11px] text-slate-500 dark:text-slate-400">Saqlangan qiziqarli e'lonlar</span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  {favoritesCount > 0 && (
-                    <span className="px-2 py-0.5 rounded-full bg-rose-500 text-white text-[11px] font-bold">
-                      {favoritesCount}
-                    </span>
-                  )}
-                  <ChevronRight size={16} className="text-slate-400 group-hover:translate-x-0.5 transition-transform" />
-                </div>
+              <button type="button" onClick={() => { setProfileModalOpen(false); onFavoritesClick(); }} className="group flex w-full items-center justify-between rounded-2xl p-3 hover:bg-slate-50 dark:hover:bg-slate-800/80">
+                <div className="flex items-center gap-3"><div className="flex h-9 w-9 items-center justify-center rounded-xl bg-rose-50 text-rose-500 dark:bg-rose-950/70"><Heart size={18} className="fill-rose-500" /></div><div className="text-left"><span className="block text-sm font-bold">{navLabels.favorites}</span><span className="text-[11px] text-slate-500 dark:text-slate-400">Saqlangan qiziqarli e'lonlar</span></div></div>
+                <div className="flex items-center gap-2">{favoritesCount > 0 && <span className="rounded-full bg-rose-500 px-2 py-0.5 text-[11px] font-bold text-white">{favoritesCount}</span>}<ChevronRight size={16} className="text-slate-400" /></div>
               </button>
             </div>
 
-            {/* Logout button */}
-            <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
-              <button
-                type="button"
-                onClick={() => setProfileModalOpen(false)}
-                className="w-full flex items-center justify-center gap-2 p-3 text-xs font-bold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-xl transition-colors cursor-pointer"
-              >
-                <LogOut size={15} />
-                <span>{navLabels.logout}</span>
-              </button>
-            </div>
+            {isRegistered && (
+              <div className="border-t border-slate-100 pt-2 dark:border-slate-800">
+                <button type="button" onClick={handleLogout} className="flex w-full items-center justify-center gap-2 rounded-xl p-3 text-xs font-bold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30">
+                  <LogOut size={15} /> <span>{navLabels.logout}</span>
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
 
-      {/* Main Bottom Navigation Bar (hidden on desktop screens md:hidden, and auto-hidden when mobile keyboard is open to prevent pushing up) */}
+      <AuthModal isOpen={authModalOpen} onClose={() => setAuthModalOpen(false)} />
+
       <nav
         id="bottom-navigation-dock"
         aria-label="Pastki asosiy menyu"
         style={{ display: isKeyboardOpen ? 'none' : undefined }}
-        className={`md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white dark:bg-slate-900 border-t border-slate-200/90 dark:border-slate-800 shadow-[0_-4px_20px_rgba(0,0,0,0.06)] dark:shadow-[0_-4px_20px_rgba(0,0,0,0.3)] transition-all duration-200 transform-gpu ${
-          isKeyboardOpen ? 'translate-y-full opacity-0 pointer-events-none' : 'translate-y-0 opacity-100'
-        }`}
+        className={`md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white dark:bg-slate-900 border-t border-slate-200/90 dark:border-slate-800 shadow-[0_-4px_20px_rgba(0,0,0,0.06)] transition-all duration-200 ${isKeyboardOpen ? 'translate-y-full opacity-0 pointer-events-none' : 'translate-y-0 opacity-100'}`}
       >
-        <div className="max-w-xl mx-auto px-2 sm:px-6 h-16 flex items-center justify-between relative">
-          {/* 1. Asosiy (Home) */}
-          <button
-            id="bottom-nav-home-btn"
-            type="button"
-            onClick={onHomeClick}
-            className="flex-1 flex flex-col items-center justify-center py-1 text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer group"
-          >
-            <Home size={20} className="group-hover:scale-110 transition-transform" />
-            <span className="text-[10px] sm:text-[11px] font-bold mt-1 tracking-tight">
-              {navLabels.home}
-            </span>
+        <div className="mx-auto flex h-16 max-w-xl items-center justify-between px-2 sm:px-6">
+          <button id="bottom-nav-home-btn" type="button" onClick={onHomeClick} className="flex flex-1 flex-col items-center justify-center py-1 text-slate-600 hover:text-indigo-600 dark:text-slate-300 dark:hover:text-indigo-400">
+            <Home size={20} /><span className="mt-1 text-[10px] font-bold">{navLabels.home}</span>
           </button>
-
-          {/* 2. Xabarlar (Messages) */}
-          <button
-            id="bottom-nav-messages-btn"
-            type="button"
-            onClick={onMessagesClick}
-            className="flex-1 flex flex-col items-center justify-center py-1 text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer group relative"
-          >
-            <div className="relative">
-              <MessageSquare size={20} className="group-hover:scale-110 transition-transform" />
-              {unreadCount > 0 && (
-                <span className="absolute -top-1.5 -right-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-indigo-600 text-white text-[9px] font-black px-1 shadow-xs animate-pulse">
-                  {unreadCount}
-                </span>
-              )}
-            </div>
-            <span className="text-[10px] sm:text-[11px] font-bold mt-1 tracking-tight">
-              {navLabels.messages}
-            </span>
+          <button id="bottom-nav-messages-btn" type="button" onClick={onMessagesClick} className="relative flex flex-1 flex-col items-center justify-center py-1 text-slate-600 hover:text-indigo-600 dark:text-slate-300 dark:hover:text-indigo-400">
+            <div className="relative"><MessageSquare size={20} />{unreadCount > 0 && <span className="absolute -right-2 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-indigo-600 px-1 text-[9px] font-black text-white">{unreadCount}</span>}</div>
+            <span className="mt-1 text-[10px] font-bold">{navLabels.messages}</span>
           </button>
-
-          {/* 3. CENTER / O'RTADA: E'LON BERISH (POST AD) TUGMASI */}
-          <div className="flex-1 flex items-center justify-center">
-            <button
-              id="bottom-nav-post-ad-btn"
-              type="button"
-              onClick={onPostAdClick}
-              className="group relative -top-3 sm:-top-3.5 flex flex-col items-center justify-center cursor-pointer focus:outline-none"
-              title="Yangi e'lon berish"
-              aria-label="Yangi e'lon berish"
-            >
-              {/* Center Elevated Floating Pill/Circle */}
-              <div className="flex h-12 w-12 sm:h-13 sm:w-13 items-center justify-center rounded-full bg-gradient-to-tr from-indigo-600 via-indigo-600 to-blue-600 text-white shadow-lg shadow-indigo-600/35 border-3 sm:border-4 border-white dark:border-slate-900 group-hover:scale-110 group-active:scale-95 transition-all duration-200">
-                <Plus size={24} strokeWidth={3} className="group-hover:rotate-90 transition-transform duration-200" />
-              </div>
-              <span className="text-[10px] sm:text-[11px] font-black text-indigo-600 dark:text-indigo-400 mt-0.5 tracking-tight">
-                {navLabels.postAd}
-              </span>
+          <div className="flex flex-1 items-center justify-center">
+            <button id="bottom-nav-post-ad-btn" type="button" onClick={onPostAdClick} className="group relative -top-3 flex flex-col items-center justify-center">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full border-4 border-white bg-gradient-to-tr from-indigo-600 to-blue-600 text-white shadow-lg shadow-indigo-600/35 dark:border-slate-900"><Plus size={24} strokeWidth={3} /></div>
+              <span className="mt-0.5 text-[10px] font-black text-indigo-600 dark:text-indigo-400">{navLabels.postAd}</span>
             </button>
           </div>
-
-          {/* 4. Saralanganlar (Favorites) */}
-          <button
-            id="bottom-nav-favorites-btn"
-            type="button"
-            onClick={onFavoritesClick}
-            className="flex-1 flex flex-col items-center justify-center py-1 text-slate-600 dark:text-slate-300 hover:text-rose-500 dark:hover:text-rose-400 transition-colors cursor-pointer group relative"
-          >
-            <div className="relative">
-              <Heart
-                size={20}
-                className={`group-hover:scale-110 transition-transform ${
-                  favoritesCount > 0 ? 'fill-rose-500 text-rose-500' : ''
-                }`}
-              />
-              {favoritesCount > 0 && (
-                <span className="absolute -top-1.5 -right-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 text-white text-[9px] font-black px-1 shadow-xs">
-                  {favoritesCount}
-                </span>
-              )}
-            </div>
-            <span className="text-[10px] sm:text-[11px] font-bold mt-1 tracking-tight">
-              {navLabels.favorites}
-            </span>
+          <button id="bottom-nav-favorites-btn" type="button" onClick={onFavoritesClick} className="relative flex flex-1 flex-col items-center justify-center py-1 text-slate-600 hover:text-rose-500 dark:text-slate-300 dark:hover:text-rose-400">
+            <div className="relative"><Heart size={20} className={favoritesCount > 0 ? 'fill-rose-500 text-rose-500' : ''} />{favoritesCount > 0 && <span className="absolute -right-2 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-black text-white">{favoritesCount}</span>}</div>
+            <span className="mt-1 text-[10px] font-bold">{navLabels.favorites}</span>
           </button>
-
-          {/* 5. Profil (Profile) */}
-          <button
-            id="bottom-nav-profile-btn"
-            type="button"
-            onClick={() => setProfileModalOpen(true)}
-            className="flex-1 flex flex-col items-center justify-center py-1 text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer group"
-          >
-            <div className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 text-[10px] font-black border border-indigo-200 dark:border-indigo-800 group-hover:scale-110 transition-transform">
-              FI
-            </div>
-            <span className="text-[10px] sm:text-[11px] font-bold mt-1 tracking-tight">
-              {navLabels.profile}
-            </span>
+          <button id="bottom-nav-profile-btn" type="button" onClick={() => setProfileModalOpen(true)} className="flex flex-1 flex-col items-center justify-center py-1 text-slate-600 hover:text-indigo-600 dark:text-slate-300 dark:hover:text-indigo-400">
+            <div className="flex h-5 w-5 items-center justify-center rounded-full border border-indigo-200 bg-indigo-100 text-[10px] font-black text-indigo-700 dark:border-indigo-800 dark:bg-indigo-950 dark:text-indigo-300">{initials}</div>
+            <span className="mt-1 text-[10px] font-bold">{navLabels.profile}</span>
           </button>
         </div>
       </nav>
