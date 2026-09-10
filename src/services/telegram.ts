@@ -64,29 +64,27 @@ export function createTelegramShareUrl(listing: Listing, appUrl?: string): strin
   return `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`;
 }
 
-/** Publish an active listing through the secure Vercel endpoint. */
-export async function postListingToTelegram(listing: Listing, options?: { appUrl?: string }): Promise<TelegramPostResponse> {
+/** Publish a listing through the secure Vercel endpoint. Token/settings stay server-side. */
+export async function postListingToTelegram(
+  listing: Listing,
+  options?: { appUrl?: string; channelId?: string; botToken?: string }
+): Promise<TelegramPostResponse> {
   try {
-    const baseUrl = options?.appUrl || (typeof window !== 'undefined' ? window.location.origin : '');
+    const baseUrl = options?.appUrl || (typeof window !== 'undefined' ? window.location.origin : 'https://oldisotti.uz');
     const listingUrl = `${baseUrl}/?listing=${encodeURIComponent(listing.id)}`;
     const res = await fetch('/api/telegram/post-listing', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        title: listing.title,
-        price: formatPriceText(listing.price, listing.currency) + (listing.isNegotiable ? ' (kelishiladi)' : ''),
-        url: listingUrl,
-        imageUrl: listing.images?.[0] || '',
-        description: listing.description,
-        location: `${listing.location.region}${listing.location.district ? `, ${listing.location.district}` : ''}`,
-        category: listing.brand ? `${listing.categoryId} • ${listing.brand}` : listing.categoryId
+        listing,
+        appUrl: baseUrl
       })
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.success) {
       return { success: false, channel: data.channel, error: data.error || `Telegram server javobi: ${res.status}` };
     }
-    return data as TelegramPostResponse;
+    return { ...data, telegramPostUrl: data.messageId ? `${options?.channelId || '@OSot_uz'}/${data.messageId}` : undefined } as TelegramPostResponse;
   } catch (err: any) {
     console.warn('Telegram post API request failed:', err);
     return { success: false, error: err?.message || 'Telegram serveriga ulanib bo\'lmadi' };
