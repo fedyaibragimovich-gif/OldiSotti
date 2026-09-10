@@ -16,6 +16,14 @@ function escapeHtml(value: unknown): string {
     .replace(/"/g, '&quot;');
 }
 
+function formatPrice(price: unknown, currency?: string, negotiable?: boolean): string {
+  const numeric = Number(price);
+  if (!Number.isFinite(numeric)) return String(price ?? '');
+  const formatted = numeric.toLocaleString('uz-UZ');
+  const value = currency === 'USD' ? `$${formatted}` : `${formatted} so'm`;
+  return negotiable ? `${value} (kelishiladi)` : value;
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ success: false, error: 'Method not allowed' });
@@ -28,17 +36,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(503).json({ success: false, configured: false, error: 'Telegram token is not configured on the server' });
   }
 
-  const body = (req.body || {}) as Record<string, unknown>;
-  const title = String(body.title || '').trim();
-  const price = String(body.price || '').trim();
-  const url = String(body.url || '').trim();
-  const imageUrl = String(body.imageUrl || '').trim();
-  const description = String(body.description || '').trim();
-  const location = String(body.location || '').trim();
-  const category = String(body.category || '').trim();
+  const body = (req.body || {}) as Record<string, any>;
+  const listing = body.listing as Record<string, any> | undefined;
 
-  if (!title || !url) {
+  // Supports the OldiSotti Listing object directly, while retaining the simple API payload format.
+  const title = String(listing?.title ?? body.title ?? '').trim();
+  const price = listing
+    ? formatPrice(listing.price, listing.currency, Boolean(listing.isNegotiable))
+    : String(body.price || '').trim();
+  const baseUrl = String(body.appUrl || '').trim() || 'https://oldisotti.uz';
+  const url = listing
+    ? `${baseUrl}/?listing=${encodeURIComponent(String(listing.id || ''))}`
+    : String(body.url || '').trim();
+  const imageUrl = String(listing?.images?.[0] ?? body.imageUrl ?? '').trim();
+  const description = String(listing?.description ?? body.description ?? '').trim();
+  const location = listing?.location
+    ? `${String(listing.location.region || '')}${listing.location.district ? `, ${String(listing.location.district)}` : ''}`
+    : String(body.location || '').trim();
+  const category = listing
+    ? `${String(listing.categoryId || '')}${listing.brand ? ` • ${String(listing.brand)}` : ''}`
+    : String(body.category || '').trim();
+
+  if (!title || (!listing && !url)) {
     return res.status(400).json({ success: false, error: 'title and url are required' });
+  }
+
+  // Pending/rejected listings must never reach the public Telegram channel.
+  if (listing?.status && listing.status !== 'active') {
+    return res.status(409).json({ success: false, error: 'Only active listings can be published to Telegram' });
   }
 
   const lines = [
