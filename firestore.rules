@@ -2,45 +2,28 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     function isAdmin() {
-      return request.auth != null
-        && request.auth.uid == 'Q81AQDKw7GXYeNgdrnp2qvYgyS02';
+      return request.auth != null && request.auth.uid == 'Q81AQDKw7GXYeNgdrnp2qvYgyS02';
     }
-
-    function signedIn() {
-      return request.auth != null;
-    }
-
+    function signedIn() { return request.auth != null; }
     function isConversationParticipant() {
-      return signedIn()
-        && (resource.data.buyerId == request.auth.uid
-          || resource.data.sellerUserId == request.auth.uid);
+      return signedIn() && (resource.data.buyerId == request.auth.uid || resource.data.sellerUserId == request.auth.uid);
     }
-
     function isNewConversationParticipant() {
-      return signedIn()
-        && (request.resource.data.buyerId == request.auth.uid
-          || request.resource.data.sellerUserId == request.auth.uid);
+      return signedIn() && (request.resource.data.buyerId == request.auth.uid || request.resource.data.sellerUserId == request.auth.uid);
     }
 
     match /listings/{listingId} {
       allow read: if true;
-      allow create: if isAdmin()
-        || (signedIn() && request.resource.data.userId == request.auth.uid);
-      allow update, delete: if isAdmin()
-        || (signedIn() && resource.data.userId == request.auth.uid);
+      allow create: if isAdmin() || (signedIn() && request.resource.data.userId == request.auth.uid);
+      allow update, delete: if isAdmin() || (signedIn() && resource.data.userId == request.auth.uid);
     }
 
     match /conversations/{conversationId} {
       allow read: if isAdmin() || isConversationParticipant();
       allow create: if isAdmin() || isNewConversationParticipant();
-      allow update: if isAdmin() || (isConversationParticipant()
-        && request.resource.data.buyerId == resource.data.buyerId
-        && request.resource.data.sellerUserId == resource.data.sellerUserId);
+      allow update: if isAdmin() || (isConversationParticipant() && request.resource.data.buyerId == resource.data.buyerId && request.resource.data.sellerUserId == resource.data.sellerUserId);
       allow delete: if isAdmin() || isConversationParticipant();
-
-      match /messages/{messageId} {
-        allow read, write: if isAdmin() || isConversationParticipant();
-      }
+      match /messages/{messageId} { allow read, write: if isAdmin() || isConversationParticipant(); }
     }
 
     match /platform_settings/{settingId} {
@@ -53,8 +36,23 @@ service cloud.firestore {
     }
 
     match /moderation_reports/{reportId} {
-      allow create: if signedIn();
-      allow read, update, delete: if isAdmin();
+      allow create: if signedIn() && request.resource.data.reporterId == request.auth.uid;
+      allow read: if isAdmin();
+      allow update, delete: if isAdmin();
+    }
+
+    match /notifications/{notificationId} {
+      allow read: if isAdmin() || (signedIn() && resource.data.recipientId == request.auth.uid);
+      allow create: if signedIn() && request.resource.data.recipientId != null;
+      allow update: if isAdmin() || (signedIn() && resource.data.recipientId == request.auth.uid && request.resource.data.recipientId == resource.data.recipientId);
+      allow delete: if isAdmin() || (signedIn() && resource.data.recipientId == request.auth.uid);
+    }
+
+    match /blocked_sellers/{blockId} {
+      allow read: if isAdmin() || (signedIn() && resource.data.userId == request.auth.uid);
+      allow create: if signedIn() && request.resource.data.userId == request.auth.uid && request.resource.data.sellerUserId != request.auth.uid;
+      allow update: if signedIn() && resource.data.userId == request.auth.uid && request.resource.data.userId == request.auth.uid;
+      allow delete: if isAdmin() || (signedIn() && resource.data.userId == request.auth.uid);
     }
   }
 }
