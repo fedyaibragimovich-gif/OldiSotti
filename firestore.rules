@@ -11,6 +11,12 @@ service cloud.firestore {
     function isNewConversationParticipant() {
       return signedIn() && (request.resource.data.buyerId == request.auth.uid || request.resource.data.sellerUserId == request.auth.uid);
     }
+    function isConversationParticipantById(conversationId) {
+      return signedIn() && (
+        get(/databases/$(database)/documents/conversations/$(conversationId)).data.buyerId == request.auth.uid ||
+        get(/databases/$(database)/documents/conversations/$(conversationId)).data.sellerUserId == request.auth.uid
+      );
+    }
 
     match /listings/{listingId} {
       allow read: if true;
@@ -76,10 +82,11 @@ service cloud.firestore {
         )
       );
       allow delete: if isAdmin() || isConversationParticipant();
+
       match /messages/{messageId} {
-        allow read: if isAdmin() || isConversationParticipant();
+        allow read: if isAdmin() || isConversationParticipantById(conversationId);
         allow create: if isAdmin() || (
-          isConversationParticipant() &&
+          isConversationParticipantById(conversationId) &&
           request.resource.data.senderId == request.auth.uid &&
           request.resource.data.text is string &&
           request.resource.data.text.size() > 0 &&
