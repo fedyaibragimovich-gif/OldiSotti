@@ -5,6 +5,14 @@ import { NotificationCenter } from './components/NotificationCenter';
 import './index.css';
 import './performance.css';
 
+if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch((error) => {
+      console.warn('OldiSotti service worker registration failed:', error);
+    });
+  });
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />
