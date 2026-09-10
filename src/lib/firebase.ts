@@ -70,9 +70,27 @@ export async function seedInitialListingsIfEmpty(fallbackListings: Listing[]): P
 export async function saveListingToDb(listing: Listing): Promise<void> {
   const listingRef = doc(db, LISTINGS_COLLECTION, listing.id);
   const existing = await getDoc(listingRef);
+  const existingData = existing.exists() ? (existing.data() as Partial<Listing>) : {};
   const currentUid = auth.currentUser?.uid;
+
+  // Telegram publishing happens asynchronously. If the Telegram update wins the
+  // race and is followed by another save of the original listing object, never
+  // overwrite the already-recorded publication status/message ID/timestamp.
+  const telegramFields = existingData.isPostedToTelegram
+    ? {
+        isPostedToTelegram: true,
+        ...(existingData.telegramMessageId !== undefined
+          ? { telegramMessageId: existingData.telegramMessageId }
+          : {}),
+        ...(existingData.telegramPostedAt !== undefined
+          ? { telegramPostedAt: existingData.telegramPostedAt }
+          : {})
+      }
+    : {};
+
   const data: Listing = {
     ...listing,
+    ...telegramFields,
     ...(listing.userId ? {} : currentUid ? { userId: currentUid } : {}),
     ...(listing.seller?.id === 'user-self' || listing.seller?.name === 'Fedya Ibragimovich'
       ? {}
