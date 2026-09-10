@@ -14,7 +14,6 @@ service cloud.firestore {
 
     match /listings/{listingId} {
       allow read: if true;
-      // Paid-promotion flags and Telegram publication metadata cannot be forged by clients.
       allow create: if isAdmin() || (
         signedIn() &&
         request.resource.data.userId == request.auth.uid &&
@@ -41,7 +40,9 @@ service cloud.firestore {
       allow create: if isAdmin() || isNewConversationParticipant();
       allow update: if isAdmin() || (isConversationParticipant() && request.resource.data.buyerId == resource.data.buyerId && request.resource.data.sellerUserId == resource.data.sellerUserId);
       allow delete: if isAdmin() || isConversationParticipant();
-      match /messages/{messageId> { allow read, write: if isAdmin() || isConversationParticipant(); }
+      match /messages/{messageId} {
+        allow read, write: if isAdmin() || isConversationParticipant();
+      }
     }
 
     match /platform_settings/{settingId} {
