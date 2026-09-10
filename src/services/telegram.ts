@@ -71,14 +71,10 @@ export async function postListingToTelegram(
 ): Promise<TelegramPostResponse> {
   try {
     const baseUrl = options?.appUrl || (typeof window !== 'undefined' ? window.location.origin : 'https://oldisotti.uz');
-    const listingUrl = `${baseUrl}/?listing=${encodeURIComponent(listing.id)}`;
     const res = await fetch('/api/telegram/post-listing', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        listing,
-        appUrl: baseUrl
-      })
+      body: JSON.stringify({ listing, appUrl: baseUrl })
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.success) {
@@ -91,9 +87,13 @@ export async function postListingToTelegram(
   }
 }
 
-export async function testTelegramConnection(): Promise<TelegramConnectionResponse> {
+export async function testTelegramConnection(botToken?: string, channelId?: string): Promise<TelegramConnectionResponse> {
   try {
-    const res = await fetch('/api/telegram/test-connection', { method: 'GET' });
+    const res = await fetch('/api/telegram/test-connection', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ botToken, channelId })
+    });
     return (await res.json().catch(() => ({}))) as TelegramConnectionResponse;
   } catch (err: any) {
     return { success: false, error: err?.message || 'Telegram serveriga ulanib bo\'lmadi' };
