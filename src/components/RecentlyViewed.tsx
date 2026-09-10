@@ -31,10 +31,16 @@ export const RecentlyViewed: React.FC<RecentlyViewedProps> = ({
   }
 
   const scroll = (direction: 'left' | 'right') => {
-    if (scrollRef.current) {
-      const scrollAmount = direction === 'left' ? -300 : 300;
-      scrollRef.current.scrollBy({ left: scrollAmount, behavior: 'smooth' });
-    }
+    const element = scrollRef.current;
+    if (!element) return;
+
+    // Move by roughly one viewport instead of a fixed distance.
+    // This reduces repeated animations and feels much smoother on phones.
+    const scrollAmount = Math.max(220, Math.min(element.clientWidth * 0.82, 520));
+    element.scrollBy({
+      left: direction === 'left' ? -scrollAmount : scrollAmount,
+      behavior: 'smooth'
+    });
   };
 
   return (
@@ -99,13 +105,13 @@ export const RecentlyViewed: React.FC<RecentlyViewedProps> = ({
 
       <div
         ref={scrollRef}
-        className="flex gap-3.5 sm:gap-4 overflow-x-auto pb-2 scrollbar-none w-full max-w-full overscroll-x-contain touch-pan-x"
-        style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch' }}
+        className="recently-viewed-scroll flex gap-3.5 sm:gap-4 overflow-x-auto pb-2 scrollbar-none w-full max-w-full overscroll-x-contain touch-pan-x"
+        style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
       >
         {listings.map((item) => (
           <div
             key={item.id}
-            className="min-w-[220px] sm:min-w-[260px] max-w-[260px] sm:max-w-[280px] shrink-0"
+            className="recently-viewed-card min-w-[220px] sm:min-w-[260px] max-w-[260px] sm:max-w-[280px] shrink-0"
           >
             <ListingCard
               listing={item}
