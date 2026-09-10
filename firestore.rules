@@ -14,8 +14,26 @@ service cloud.firestore {
 
     match /listings/{listingId} {
       allow read: if true;
-      allow create: if isAdmin() || (signedIn() && request.resource.data.userId == request.auth.uid);
-      allow update, delete: if isAdmin() || (signedIn() && resource.data.userId == request.auth.uid);
+      // Paid-promotion flags and Telegram publication metadata cannot be forged by clients.
+      allow create: if isAdmin() || (
+        signedIn() &&
+        request.resource.data.userId == request.auth.uid &&
+        request.resource.data.isVip == false &&
+        request.resource.data.isTop == false &&
+        request.resource.data.isPostedToTelegram == false
+      );
+      allow update: if isAdmin() || (
+        signedIn() &&
+        resource.data.userId == request.auth.uid &&
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'isVip',
+          'isTop',
+          'isPostedToTelegram',
+          'telegramMessageId',
+          'telegramPostedAt'
+        ])
+      );
+      allow delete: if isAdmin() || (signedIn() && resource.data.userId == request.auth.uid);
     }
 
     match /conversations/{conversationId} {
@@ -23,7 +41,7 @@ service cloud.firestore {
       allow create: if isAdmin() || isNewConversationParticipant();
       allow update: if isAdmin() || (isConversationParticipant() && request.resource.data.buyerId == resource.data.buyerId && request.resource.data.sellerUserId == resource.data.sellerUserId);
       allow delete: if isAdmin() || isConversationParticipant();
-      match /messages/{messageId} { allow read, write: if isAdmin() || isConversationParticipant(); }
+      match /messages/{messageId> { allow read, write: if isAdmin() || isConversationParticipant(); }
     }
 
     match /platform_settings/{settingId} {
