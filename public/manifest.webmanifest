@@ -1,0 +1,16 @@
+{
+  "name": "OldiSotti — O'zbekiston e'lonlar bozori",
+  "short_name": "OldiSotti",
+  "description": "O'zbekistondagi zamonaviy e'lonlar va oldi-sotdi maydoni.",
+  "lang": "uz",
+  "dir": "ltr",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f8fafc",
+  "theme_color": "#0f172a",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
