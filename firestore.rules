@@ -77,7 +77,15 @@ service cloud.firestore {
       );
       allow delete: if isAdmin() || isConversationParticipant();
       match /messages/{messageId} {
-        allow read, write: if isAdmin() || isConversationParticipant();
+        allow read: if isAdmin() || isConversationParticipant();
+        allow create: if isAdmin() || (
+          isConversationParticipant() &&
+          request.resource.data.senderId == request.auth.uid &&
+          request.resource.data.text is string &&
+          request.resource.data.text.size() > 0 &&
+          request.resource.data.text.size() <= 2000
+        );
+        allow update, delete: if isAdmin();
       }
     }
 
@@ -115,14 +123,20 @@ service cloud.firestore {
             get(/databases/$(database)/documents/conversations/$(request.resource.data.chatId)).data.buyerId == request.resource.data.recipientId
           )
         );
-      allow update: if isAdmin() || (signedIn() && resource.data.recipientId == request.auth.uid && request.resource.data.recipientId == resource.data.recipientId);
+      allow update: if isAdmin() || (
+        signedIn() &&
+        resource.data.recipientId == request.auth.uid &&
+        request.resource.data.recipientId == resource.data.recipientId &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']) &&
+        request.resource.data.read is bool
+      );
       allow delete: if isAdmin() || (signedIn() && resource.data.recipientId == request.auth.uid);
     }
 
     match /blocked_sellers/{blockId} {
       allow read: if isAdmin() || (signedIn() && resource.data.userId == request.auth.uid);
       allow create: if signedIn() && request.resource.data.userId == request.auth.uid && request.resource.data.sellerUserId != request.auth.uid;
-      allow update: if signedIn() && resource.data.userId == request.auth.uid && request.resource.data.userId == request.auth.uid;
+      allow update: if false;
       allow delete: if isAdmin() || (signedIn() && resource.data.userId == request.auth.uid);
     }
   }
