@@ -215,8 +215,36 @@ export async function appendMessageInDb(chatId: string, newMessage: ChatMessage,
 
 export function subscribeToPlatformSettings(onSuccess: (settings: PlatformSettings) => void, onError?: (err: Error) => void) {
   try {
-    return onSnapshot(doc(db, SETTINGS_COLLECTION, 'global_config'), (docSnap) => {
-      if (docSnap.exists()) onSuccess(docSnap.data() as PlatformSettings);
+    return onSnapshot(doc(db, SETTINGS_COLLECTION, 'global_config'), async (docSnap) => {
+      if (!docSnap.exists()) return;
+
+      const rawSettings = docSnap.data() as PlatformSettings;
+      const hasLegacyTelegramConfig =
+        rawSettings.telegramChannelId === '@oldisotti_uz' ||
+        rawSettings.telegramBotUsername === 'OldisottiMarketBot';
+
+      // Never let a legacy/foreign Telegram configuration reach the UI or posting flow.
+      // When the current user has admin write access, also repair the persisted document.
+      const settings: PlatformSettings = hasLegacyTelegramConfig
+        ? {
+            ...rawSettings,
+            telegramChannelId: '@OSot_uz',
+            telegramBotUsername: 'OSotBot'
+          }
+        : rawSettings;
+
+      onSuccess(settings);
+
+      if (hasLegacyTelegramConfig && auth.currentUser?.uid === 'Q81AQDKw7GXYeNgdrnp2qvYgyS02') {
+        try {
+          await setDoc(doc(db, SETTINGS_COLLECTION, 'global_config'), {
+            telegramChannelId: '@OSot_uz',
+            telegramBotUsername: 'OSotBot'
+          }, { merge: true });
+        } catch (repairError) {
+          console.warn('Could not repair legacy Telegram settings:', repairError);
+        }
+      }
     }, (err) => {
       console.warn('Platform settings subscription error:', err);
       onError?.(err);
@@ -228,7 +256,12 @@ export function subscribeToPlatformSettings(onSuccess: (settings: PlatformSettin
 }
 
 export async function savePlatformSettingsToDb(settings: PlatformSettings): Promise<void> {
-  await setDoc(doc(db, SETTINGS_COLLECTION, 'global_config'), settings, { merge: true });
+  const sanitizedSettings: PlatformSettings = {
+    ...settings,
+    telegramChannelId: '@OSot_uz',
+    telegramBotUsername: 'OSotBot'
+  };
+  await setDoc(doc(db, SETTINGS_COLLECTION, 'global_config'), sanitizedSettings, { merge: true });
 }
 
 export function subscribeToModerationReports(onSuccess: (reports: ModerationReport[]) => void, onError?: (err: Error) => void) {
