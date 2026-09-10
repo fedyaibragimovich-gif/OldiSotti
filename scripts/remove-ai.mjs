@@ -15,6 +15,12 @@ s = s.replace(/\n                \/\* AI Quick Generate Trigger Card \*\/[\s\S]*
 s = s.replace(/\n              \/\* AI Image Generator Showcase Card \*\/[\s\S]*?(?=\n            \{\/\* 4\. Price)/, '');
 fs.writeFileSync(post, s);
 
+const app = 'src/App.tsx';
+let a = fs.readFileSync(app, 'utf8');
+a = a.replace("import { Megaphone, AlertTriangle } from 'lucide-react';", "import { AlertTriangle } from 'lucide-react';");
+a = a.replace(/\n\s*\{\/\* Platform Announcement Banner \(Admin Controlled\) \*\/\}\s*\{platformSettings\.isAnnouncementActive && platformSettings\.announcementText && \(\s*<div[\s\S]*?<\/div>\s*\)\}\n/, '\n');
+fs.writeFileSync(app, a);
+
 const server = 'server.ts';
 let t = fs.readFileSync(server, 'utf8');
 t = t.replace("import { GoogleGenAI } from '@google/genai';\n", '');
