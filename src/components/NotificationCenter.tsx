@@ -30,7 +30,16 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ lang = '
     return unsubscribe;
   }, []);
 
-  const unreadMessages = useMemo(() => conversations.reduce((sum, c) => sum + (c.unreadCount || 0), 0), [conversations]);
+  const unreadConversations = useMemo(
+    () => conversations.filter(c => (c.unreadCount || 0) > 0),
+    [conversations]
+  );
+
+  const unreadMessages = useMemo(
+    () => conversations.reduce((sum, c) => sum + (c.unreadCount || 0), 0),
+    [conversations]
+  );
+
   const notifications = useMemo(() => {
     const messageItems: AppNotification[] = unreadMessages > 0 ? [{
       id: 'unread-messages',
@@ -66,6 +75,25 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ lang = '
     try { localStorage.setItem('oldisotti_notifications', JSON.stringify(next)); } catch { /* ignore */ }
   };
 
+  const openUnreadChat = () => {
+    const target = unreadConversations[0] || conversations[0];
+    if (!target) return;
+
+    // Tell ChatDrawer which conversation should be opened after the messages drawer appears.
+    try { localStorage.setItem('oldisotti_notification_chat_id', target.id); } catch { /* ignore */ }
+
+    // Reuse the existing Messages navigation action instead of duplicating chat UI/state.
+    const buttons = Array.from(document.querySelectorAll('button'));
+    const messagesButton = buttons.find(button => {
+      const text = (button.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+      return text === 'xabarlar' || text === 'сообщения' || text === 'хабарлар' || text.includes('xabarlar');
+    });
+    if (messagesButton) {
+      (messagesButton as HTMLButtonElement).click();
+      setOpen(false);
+    }
+  };
+
   const visibleCount = notifications.length;
 
   return (
@@ -94,10 +122,15 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ lang = '
             {notifications.length === 0 ? (
               <div className="px-4 py-8 text-center text-xs text-slate-400">{t.empty}</div>
             ) : notifications.map(item => (
-              <div key={item.id} className="flex gap-3 rounded-xl p-3 hover:bg-slate-50 dark:hover:bg-slate-800/70">
+              <button
+                key={item.id}
+                type="button"
+                onClick={item.type === 'message' ? openUnreadChat : undefined}
+                className="flex w-full gap-3 rounded-xl p-3 text-left hover:bg-slate-50 dark:hover:bg-slate-800/70"
+              >
                 <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 dark:bg-indigo-950/60 dark:text-indigo-400"><MessageSquare size={15} /></div>
                 <div className="min-w-0"><div className="text-xs font-bold text-slate-900 dark:text-white">{item.title}</div><div className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">{item.message}</div></div>
-              </div>
+              </button>
             ))}
           </div>
         </div>
