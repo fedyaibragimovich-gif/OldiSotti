@@ -1,6 +1,6 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
-import { getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, onSnapshot, writeBatch, increment, query, where, or } from 'firebase/firestore';
+import { getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, onSnapshot, writeBatch, increment, query, where, or, limit } from 'firebase/firestore';
 import { Listing, Conversation, ChatMessage, PlatformSettings, ModerationReport, AppNotification } from '../types';
 import firebaseConfig from '../../firebase-applet-config.json';
 
@@ -55,7 +55,7 @@ export async function appendMessageInDb(chatId: string, newMessage: ChatMessage,
 
 export function subscribeToNotifications(onSuccess: (notifications: AppNotification[]) => void, onError?: (err: Error) => void) {
   let unsubscribeSnapshot: (() => void) | null = null; let unsubscribeAuth: (() => void) | null = null;
-  try { unsubscribeAuth = onAuthStateChanged(auth, (user) => { unsubscribeSnapshot?.(); unsubscribeSnapshot = null; if (!user) { onSuccess([]); return; } const q = query(collection(db, NOTIFICATIONS_COLLECTION), where('recipientId', '==', user.uid)); unsubscribeSnapshot = onSnapshot(q, (snapshot) => { const items: AppNotification[] = []; snapshot.forEach((snap) => items.push({ ...(snap.data() as AppNotification), id: snap.id })); items.sort((a, b) => b.createdAt.localeCompare(a.createdAt)); onSuccess(items); }, (error) => { console.warn('Notifications subscription error:', error); onError?.(error); }); }); return () => { unsubscribeSnapshot?.(); unsubscribeAuth?.(); }; }
+  try { unsubscribeAuth = onAuthStateChanged(auth, (user) => { unsubscribeSnapshot?.(); unsubscribeSnapshot = null; if (!user) { onSuccess([]); return; } const q = query(collection(db, NOTIFICATIONS_COLLECTION), where('recipientId', '==', user.uid), limit(50)); unsubscribeSnapshot = onSnapshot(q, (snapshot) => { const items: AppNotification[] = []; snapshot.forEach((snap) => items.push({ ...(snap.data() as AppNotification), id: snap.id })); items.sort((a, b) => b.createdAt.localeCompare(a.createdAt)); onSuccess(items); }, (error) => { console.warn('Notifications subscription error:', error); onError?.(error); }); }); return () => { unsubscribeSnapshot?.(); unsubscribeAuth?.(); }; }
   catch (err: any) { onError?.(err); return () => {}; }
 }
 export async function markNotificationRead(notificationId: string): Promise<void> { await updateDoc(doc(db, NOTIFICATIONS_COLLECTION, notificationId), { read: true }); }
