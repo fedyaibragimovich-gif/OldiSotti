@@ -43,6 +43,17 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
   const activeConv = conversations.find(c => c.id === activeChatId) || conversations[0];
 
   useEffect(() => {
+    if (!isOpen) return;
+    try {
+      const notificationChatId = localStorage.getItem('oldisotti_notification_chat_id');
+      if (notificationChatId && conversations.some(c => c.id === notificationChatId)) {
+        onSelectChat(notificationChatId);
+        localStorage.removeItem('oldisotti_notification_chat_id');
+      }
+    } catch { /* ignore */ }
+  }, [isOpen, conversations, onSelectChat]);
+
+  useEffect(() => {
     if (isOpen) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
