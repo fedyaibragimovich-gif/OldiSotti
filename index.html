@@ -11,21 +11,17 @@
     <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
     <meta name="theme-color" content="#0f172a" />
 
-    <!-- Canonical URL -->
     <link rel="canonical" href="https://oldisotti.uz/" />
 
-    <!-- Regional & Local SEO for Uzbekistan Market -->
     <meta name="geo.region" content="UZ" />
     <meta name="geo.placename" content="Toshkent, O'zbekiston" />
     <meta name="geo.position" content="41.2995;69.2401" />
     <meta name="ICBM" content="41.2995, 69.2401" />
 
-    <!-- Language Alternates / Hreflang -->
     <link rel="alternate" hreflang="uz" href="https://oldisotti.uz/" />
     <link rel="alternate" hreflang="ru" href="https://oldisotti.uz/?lang=ru" />
     <link rel="alternate" hreflang="x-default" href="https://oldisotti.uz/" />
 
-    <!-- Localized OpenGraph Meta Tags -->
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Oldisotti" />
     <meta property="og:url" content="https://oldisotti.uz/" />
@@ -39,14 +35,12 @@
     <meta property="og:image:height" content="630" />
     <meta property="og:image:alt" content="Oldisotti - O'zbekiston e'lonlar va savdo maydoni" />
 
-    <!-- Twitter Card Meta Tags -->
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:url" content="https://oldisotti.uz/" />
     <meta name="twitter:title" content="Oldisotti - O'zbekiston e'lonlar doskasi" />
     <meta name="twitter:description" content="O'zbekistondagi zamonaviy e'lonlar va oldi-sotdi maydoni: avtomobillar, ko'chmas mulk, elektronika va xizmatlar." />
     <meta name="twitter:image" content="https://images.unsplash.com/photo-1557804506-669a67965ba0?auto=format&fit=crop&w=1200&h=630&q=80" />
 
-    <!-- Structured Data (JSON-LD) for Local Classifieds Platform -->
     <script type="application/ld+json">
     {
       "@context": "https://schema.org",
@@ -67,10 +61,47 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet">
+
+    <!-- Runtime safety net: never expose the retired/foreign Telegram channel in the UI. -->
+    <script>
+      (() => {
+        const currentChannel = '@OSot_uz';
+        const currentUrl = 'https://t.me/OSot_uz';
+        const legacyChannel = '@oldisotti_uz';
+        const legacyUrl = 'https://t.me/oldisotti_uz';
+
+        const purgeLegacyTelegram = () => {
+          document.querySelectorAll('a[href="' + legacyUrl + '"]').forEach((link) => {
+            link.setAttribute('href', currentUrl);
+          });
+
+          const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+          const nodes = [];
+          let node;
+          while ((node = walker.nextNode())) nodes.push(node);
+          nodes.forEach((textNode) => {
+            if (textNode.nodeValue && textNode.nodeValue.includes(legacyChannel)) {
+              textNode.nodeValue = textNode.nodeValue.replaceAll(legacyChannel, currentChannel);
+            }
+          });
+        };
+
+        const observer = new MutationObserver(purgeLegacyTelegram);
+        const start = () => {
+          purgeLegacyTelegram();
+          observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+        };
+
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', start, { once: true });
+        } else {
+          start();
+        }
+      })();
+    </script>
   </head>
   <body class="bg-slate-50 text-slate-900 antialiased selection:bg-indigo-500 selection:text-white w-full max-w-full overflow-x-hidden">
     <div id="root" class="w-full max-w-full overflow-x-hidden"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
-
