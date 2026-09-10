@@ -138,3 +138,8 @@
 .dark ::-webkit-scrollbar-thumb:hover {
   background: #475569;
 }
+
+/* The full-page FAQ is now available from Footer -> Yordam / FAQ to keep the home page compact. */
+#faq-section {
+  display: none !important;
+}
