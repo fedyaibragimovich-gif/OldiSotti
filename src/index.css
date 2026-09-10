@@ -53,6 +53,23 @@
   contain-intrinsic-size: 320px 420px;
 }
 
+/* Recently viewed carousel performance: isolate horizontal scrolling from page layout/paint */
+.recently-viewed-scroll {
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+  overscroll-behavior-x: contain;
+  contain: layout paint style;
+  will-change: scroll-position;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+.recently-viewed-card {
+  contain: layout paint style;
+  content-visibility: auto;
+  contain-intrinsic-size: 280px 390px;
+}
+
 /* Horizontal smooth scroll helpers */
 .scroll-touch-smooth {
   -webkit-overflow-scrolling: touch;
@@ -121,4 +138,3 @@
 .dark ::-webkit-scrollbar-thumb:hover {
   background: #475569;
 }
-
