@@ -26,13 +26,20 @@ service cloud.firestore {
         resource.data.userId == request.auth.uid &&
         request.resource.data.userId == resource.data.userId &&
         request.resource.data.createdAt == resource.data.createdAt &&
-        !request.resource.data.diff(resource.data).affectedKeys().hasAny([
-          'isVip',
-          'isTop',
-          'isPostedToTelegram',
-          'telegramMessageId',
-          'telegramPostedAt'
-        ])
+        request.resource.data.seller == resource.data.seller &&
+        request.resource.data.isVip == resource.data.isVip &&
+        request.resource.data.isTop == resource.data.isTop &&
+        request.resource.data.isPostedToTelegram == resource.data.isPostedToTelegram &&
+        request.resource.data.telegramMessageId == resource.data.telegramMessageId &&
+        request.resource.data.telegramPostedAt == resource.data.telegramPostedAt &&
+        (
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['viewsCount']) ||
+          request.resource.data.viewsCount == resource.data.viewsCount + 1
+        ) &&
+        (
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['status']) ||
+          request.resource.data.status in ['active', 'reserved', 'sold']
+        )
       );
       allow delete: if isAdmin() || (signedIn() && resource.data.userId == request.auth.uid);
     }
