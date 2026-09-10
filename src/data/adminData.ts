@@ -7,8 +7,8 @@ export const initialPlatformSettings: PlatformSettings = {
   announcementText: "🎉 Oldisotti yangilandi! Endi barcha viloyatlar bo'yicha xavfsiz oldi-sotdi va qulay qidiruv tizimi ishlamoqda.",
   isAnnouncementActive: true,
   telegramBotToken: '',
-  telegramChannelId: '@oldisotti_uz',
-  telegramBotUsername: 'OldisottiMarketBot',
+  telegramChannelId: '@OSot_uz',
+  telegramBotUsername: 'OSotBot',
   autoPostListingsToTelegram: true,
   postOnlyVipToTelegram: false,
   notifySellerOnChat: true
