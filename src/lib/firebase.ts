@@ -1,35 +1,12 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
-import {
-  getFirestore,
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  setDoc,
-  updateDoc,
-  deleteDoc,
-  onSnapshot,
-  writeBatch,
-  increment,
-  query,
-  where,
-  or
-} from 'firebase/firestore';
-import {
-  Listing,
-  Conversation,
-  ChatMessage,
-  PlatformSettings,
-  ModerationReport,
-  AppNotification
-} from '../types';
+import { getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, onSnapshot, writeBatch, increment, query, where, or } from 'firebase/firestore';
+import { Listing, Conversation, ChatMessage, PlatformSettings, ModerationReport, AppNotification } from '../types';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 export const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 export const auth = getAuth(app);
 export const db = firebaseConfig.firestoreDatabaseId ? getFirestore(app, firebaseConfig.firestoreDatabaseId) : getFirestore(app);
-
 export const LISTINGS_COLLECTION = 'listings';
 export const CONVERSATIONS_COLLECTION = 'conversations';
 export const SETTINGS_COLLECTION = 'platform_settings';
@@ -38,213 +15,58 @@ export const NOTIFICATIONS_COLLECTION = 'notifications';
 export const BLOCKED_SELLERS_COLLECTION = 'blocked_sellers';
 
 export function subscribeToListings(onSuccess: (listings: Listing[]) => void, onError?: (err: Error) => void) {
-  try {
-    return onSnapshot(collection(db, LISTINGS_COLLECTION), (snapshot) => {
-      const items: Listing[] = [];
-      snapshot.forEach((docSnap) => items.push({ ...(docSnap.data() as Listing), id: docSnap.id }));
-      onSuccess(items);
-    }, (error) => { console.warn('Firestore listings subscription error:', error); onError?.(error); });
-  } catch (err: any) { onError?.(err); return () => {}; }
+  try { return onSnapshot(collection(db, LISTINGS_COLLECTION), (snapshot) => { const items: Listing[] = []; snapshot.forEach((docSnap) => items.push({ ...(docSnap.data() as Listing), id: docSnap.id })); onSuccess(items); }, (error) => { console.warn('Firestore listings subscription error:', error); onError?.(error); }); }
+  catch (err: any) { onError?.(err); return () => {}; }
 }
 
 export async function seedInitialListingsIfEmpty(fallbackListings: Listing[]): Promise<boolean> {
-  try {
-    const existingSnap = await getDocs(collection(db, LISTINGS_COLLECTION));
-    if (!existingSnap.empty) return false;
-    const batch = writeBatch(db);
-    fallbackListings.forEach((listing) => batch.set(doc(db, LISTINGS_COLLECTION, listing.id), listing));
-    await batch.commit();
-    return true;
-  } catch (error) { console.warn('Could not seed listings to Firestore:', error); return false; }
+  try { const existingSnap = await getDocs(collection(db, LISTINGS_COLLECTION)); if (!existingSnap.empty) return false; const batch = writeBatch(db); fallbackListings.forEach((listing) => batch.set(doc(db, LISTINGS_COLLECTION, listing.id), listing)); await batch.commit(); return true; }
+  catch (error) { console.warn('Could not seed listings to Firestore:', error); return false; }
 }
 
 export async function saveListingToDb(listing: Listing): Promise<void> {
-  const listingRef = doc(db, LISTINGS_COLLECTION, listing.id);
-  const existing = await getDoc(listingRef);
-  const existingData = existing.exists() ? (existing.data() as Partial<Listing>) : {};
-  const currentUid = auth.currentUser?.uid;
-  const telegramFields = existingData.isPostedToTelegram ? {
-    isPostedToTelegram: true,
-    ...(existingData.telegramMessageId !== undefined ? { telegramMessageId: existingData.telegramMessageId } : {}),
-    ...(existingData.telegramPostedAt !== undefined ? { telegramPostedAt: existingData.telegramPostedAt } : {})
-  } : {};
-  const data: Listing = {
-    ...listing,
-    ...telegramFields,
-    ...(listing.userId ? {} : currentUid ? { userId: currentUid } : {}),
-    ...(listing.seller?.id === 'user-self' || listing.seller?.name === 'Fedya Ibragimovich' ? {} : currentUid && !existing.exists() ? { seller: { ...listing.seller, id: 'user-self' } } : {})
-  };
+  const listingRef = doc(db, LISTINGS_COLLECTION, listing.id); const existing = await getDoc(listingRef); const existingData = existing.exists() ? (existing.data() as Partial<Listing>) : {}; const currentUid = auth.currentUser?.uid;
+  const telegramFields = existingData.isPostedToTelegram ? { isPostedToTelegram: true, ...(existingData.telegramMessageId !== undefined ? { telegramMessageId: existingData.telegramMessageId } : {}), ...(existingData.telegramPostedAt !== undefined ? { telegramPostedAt: existingData.telegramPostedAt } : {}) } : {};
+  const data: Listing = { ...listing, ...telegramFields, ...(listing.userId ? {} : currentUid ? { userId: currentUid } : {}), ...(listing.seller?.id === 'user-self' || listing.seller?.name === 'Fedya Ibragimovich' ? {} : currentUid && !existing.exists() ? { seller: { ...listing.seller, id: 'user-self' } } : {}) };
   await setDoc(listingRef, data);
 }
-
-export async function updateListingInDb(listingId: string, updates: Partial<Listing>): Promise<void> {
-  await updateDoc(doc(db, LISTINGS_COLLECTION, listingId), updates);
-}
-
+export async function updateListingInDb(listingId: string, updates: Partial<Listing>): Promise<void> { await updateDoc(doc(db, LISTINGS_COLLECTION, listingId), updates); }
 export async function deleteListingFromDb(listingId: string): Promise<void> { await deleteDoc(doc(db, LISTINGS_COLLECTION, listingId)); }
-
-export async function incrementListingViewsInDb(listingId: string): Promise<void> {
-  try { await updateDoc(doc(db, LISTINGS_COLLECTION, listingId), { viewsCount: increment(1) }); }
-  catch (err) { console.warn('Failed to increment views in DB:', err); }
-}
+export async function incrementListingViewsInDb(listingId: string): Promise<void> { try { await updateDoc(doc(db, LISTINGS_COLLECTION, listingId), { viewsCount: increment(1) }); } catch (err) { console.warn('Failed to increment views in DB:', err); } }
 
 export function subscribeToConversations(onSuccess: (conversations: Conversation[]) => void, onError?: (err: Error) => void) {
-  let unsubscribeSnapshot: (() => void) | null = null;
-  let unsubscribeAuth: (() => void) | null = null;
-  try {
-    unsubscribeAuth = onAuthStateChanged(auth, (user) => {
-      unsubscribeSnapshot?.(); unsubscribeSnapshot = null;
-      if (!user) { onSuccess([]); return; }
-      const participantQuery = query(collection(db, CONVERSATIONS_COLLECTION), or(where('buyerId', '==', user.uid), where('sellerUserId', '==', user.uid)));
-      unsubscribeSnapshot = onSnapshot(participantQuery, (snapshot) => {
-        const items: Conversation[] = [];
-        snapshot.forEach((docSnap) => items.push({ ...(docSnap.data() as Conversation), id: docSnap.id }));
-        onSuccess(items);
-      }, (error) => { console.warn('Firestore conversations subscription error:', error); onError?.(error); });
-    });
-    return () => { unsubscribeSnapshot?.(); unsubscribeAuth?.(); };
-  } catch (err: any) { onError?.(err); return () => {}; }
+  let unsubscribeSnapshot: (() => void) | null = null; let unsubscribeAuth: (() => void) | null = null;
+  try { unsubscribeAuth = onAuthStateChanged(auth, (user) => { unsubscribeSnapshot?.(); unsubscribeSnapshot = null; if (!user) { onSuccess([]); return; } const participantQuery = query(collection(db, CONVERSATIONS_COLLECTION), or(where('buyerId', '==', user.uid), where('sellerUserId', '==', user.uid))); unsubscribeSnapshot = onSnapshot(participantQuery, (snapshot) => { const items: Conversation[] = []; snapshot.forEach((docSnap) => items.push({ ...(docSnap.data() as Conversation), id: docSnap.id })); onSuccess(items); }, (error) => { console.warn('Firestore conversations subscription error:', error); onError?.(error); }); }); return () => { unsubscribeSnapshot?.(); unsubscribeAuth?.(); }; }
+  catch (err: any) { onError?.(err); return () => {}; }
 }
-
-export async function seedConversationsIfEmpty(initialConversations: Conversation[]): Promise<void> {
-  try {
-    const currentUid = auth.currentUser?.uid;
-    if (!currentUid) return;
-    const existingSnap = await getDocs(query(collection(db, CONVERSATIONS_COLLECTION), where('buyerId', '==', currentUid)));
-    if (!existingSnap.empty) return;
-    const batch = writeBatch(db);
-    initialConversations.forEach((conv) => batch.set(doc(db, CONVERSATIONS_COLLECTION, conv.id), { ...conv, buyerId: conv.buyerId || currentUid }));
-    await batch.commit();
-  } catch (err) { console.warn('Failed to seed conversations:', err); }
-}
-
-export async function saveConversationToDb(conv: Conversation): Promise<void> {
-  const currentUid = auth.currentUser?.uid;
-  if (!currentUid) throw new Error('Authentication required to create a conversation.');
-  let sellerUserId = conv.sellerUserId;
-  if (!sellerUserId && conv.listingId) {
-    try {
-      const listingSnap = await getDoc(doc(db, LISTINGS_COLLECTION, conv.listingId));
-      if (listingSnap.exists()) sellerUserId = (listingSnap.data() as Listing).userId;
-    } catch (err) { console.warn('Could not resolve seller UID for conversation:', err); }
-  }
-  const data: Conversation = { ...conv, buyerId: conv.buyerId || currentUid, ...(sellerUserId ? { sellerUserId } : {}) };
-  await setDoc(doc(db, CONVERSATIONS_COLLECTION, conv.id), data);
-}
+export async function seedConversationsIfEmpty(initialConversations: Conversation[]): Promise<void> { try { const currentUid = auth.currentUser?.uid; if (!currentUid) return; const existingSnap = await getDocs(query(collection(db, CONVERSATIONS_COLLECTION), where('buyerId', '==', currentUid))); if (!existingSnap.empty) return; const batch = writeBatch(db); initialConversations.forEach((conv) => batch.set(doc(db, CONVERSATIONS_COLLECTION, conv.id), { ...conv, buyerId: conv.buyerId || currentUid })); await batch.commit(); } catch (err) { console.warn('Failed to seed conversations:', err); } }
+export async function saveConversationToDb(conv: Conversation): Promise<void> { const currentUid = auth.currentUser?.uid; if (!currentUid) throw new Error('Authentication required to create a conversation.'); let sellerUserId = conv.sellerUserId; if (!sellerUserId && conv.listingId) { try { const listingSnap = await getDoc(doc(db, LISTINGS_COLLECTION, conv.listingId)); if (listingSnap.exists()) sellerUserId = (listingSnap.data() as Listing).userId; } catch (err) { console.warn('Could not resolve seller UID for conversation:', err); } } const data: Conversation = { ...conv, buyerId: conv.buyerId || currentUid, ...(sellerUserId ? { sellerUserId } : {}) }; await setDoc(doc(db, CONVERSATIONS_COLLECTION, conv.id), data); }
 
 export async function appendMessageInDb(chatId: string, newMessage: ChatMessage, allMessages: ChatMessage[]): Promise<void> {
-  const conversationRef = doc(db, CONVERSATIONS_COLLECTION, chatId);
-  const conversationSnap = await getDoc(conversationRef);
-  if (!conversationSnap.exists()) throw new Error('Conversation not found.');
-  const conversation = conversationSnap.data() as Conversation;
-  const currentUid = auth.currentUser?.uid;
-  if (!currentUid) throw new Error('Authentication required to send a message.');
-  const isBuyer = conversation.buyerId === currentUid;
-  const recipientId = isBuyer ? conversation.sellerUserId : conversation.buyerId;
-  await updateDoc(conversationRef, {
-    messages: allMessages,
-    lastUpdated: newMessage.timestamp,
-    unreadCount: isBuyer ? increment(0) : increment(1)
-  });
+  const conversationRef = doc(db, CONVERSATIONS_COLLECTION, chatId); const conversationSnap = await getDoc(conversationRef); if (!conversationSnap.exists()) throw new Error('Conversation not found.');
+  const conversation = conversationSnap.data() as Conversation; const currentUid = auth.currentUser?.uid; if (!currentUid) throw new Error('Authentication required to send a message.');
+  const recipientId = conversation.buyerId === currentUid ? conversation.sellerUserId : conversation.buyerId;
+  await updateDoc(conversationRef, { messages: allMessages, lastUpdated: newMessage.timestamp, unreadCount: increment(1) });
   if (recipientId && recipientId !== currentUid) {
-    const notification: AppNotification = {
-      id: `msg-${chatId}-${newMessage.id}`,
-      type: 'message',
-      title: 'Yangi xabar',
-      message: `${conversation.sellerName}: ${newMessage.text.slice(0, 90)}`,
-      createdAt: new Date().toISOString(),
-      read: false,
-      recipientId,
-      listingId: conversation.listingId,
-      chatId
-    };
+    const notification: AppNotification = { id: `msg-${chatId}-${newMessage.id}`, type: 'message', title: 'Yangi xabar', message: `${conversation.sellerName}: ${newMessage.text.slice(0, 90)}`, createdAt: new Date().toISOString(), read: false, recipientId, listingId: conversation.listingId, chatId };
     await setDoc(doc(db, NOTIFICATIONS_COLLECTION, notification.id), notification);
   }
 }
 
 export function subscribeToNotifications(onSuccess: (notifications: AppNotification[]) => void, onError?: (err: Error) => void) {
-  let unsubscribeSnapshot: (() => void) | null = null;
-  let unsubscribeAuth: (() => void) | null = null;
-  try {
-    unsubscribeAuth = onAuthStateChanged(auth, (user) => {
-      unsubscribeSnapshot?.(); unsubscribeSnapshot = null;
-      if (!user) { onSuccess([]); return; }
-      const q = query(collection(db, NOTIFICATIONS_COLLECTION), where('recipientId', '==', user.uid));
-      unsubscribeSnapshot = onSnapshot(q, (snapshot) => {
-        const items: AppNotification[] = [];
-        snapshot.forEach((snap) => items.push({ ...(snap.data() as AppNotification), id: snap.id }));
-        items.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-        onSuccess(items);
-      }, (error) => { console.warn('Notifications subscription error:', error); onError?.(error); });
-    });
-    return () => { unsubscribeSnapshot?.(); unsubscribeAuth?.(); };
-  } catch (err: any) { onError?.(err); return () => {}; }
+  let unsubscribeSnapshot: (() => void) | null = null; let unsubscribeAuth: (() => void) | null = null;
+  try { unsubscribeAuth = onAuthStateChanged(auth, (user) => { unsubscribeSnapshot?.(); unsubscribeSnapshot = null; if (!user) { onSuccess([]); return; } const q = query(collection(db, NOTIFICATIONS_COLLECTION), where('recipientId', '==', user.uid)); unsubscribeSnapshot = onSnapshot(q, (snapshot) => { const items: AppNotification[] = []; snapshot.forEach((snap) => items.push({ ...(snap.data() as AppNotification), id: snap.id })); items.sort((a, b) => b.createdAt.localeCompare(a.createdAt)); onSuccess(items); }, (error) => { console.warn('Notifications subscription error:', error); onError?.(error); }); }); return () => { unsubscribeSnapshot?.(); unsubscribeAuth?.(); }; }
+  catch (err: any) { onError?.(err); return () => {}; }
 }
+export async function markNotificationRead(notificationId: string): Promise<void> { await updateDoc(doc(db, NOTIFICATIONS_COLLECTION, notificationId), { read: true }); }
+export async function markAllNotificationsRead(notifications: AppNotification[]): Promise<void> { const batch = writeBatch(db); notifications.filter(n => !n.read && n.id !== 'unread-messages-fallback').forEach(n => batch.update(doc(db, NOTIFICATIONS_COLLECTION, n.id), { read: true })); if (notifications.some(n => !n.read && n.id !== 'unread-messages-fallback')) await batch.commit(); }
 
-export async function markNotificationRead(notificationId: string): Promise<void> {
-  await updateDoc(doc(db, NOTIFICATIONS_COLLECTION, notificationId), { read: true });
-}
+export async function isSellerBlockedInDb(sellerUserId: string): Promise<boolean> { const uid = auth.currentUser?.uid; if (!uid || !sellerUserId) return false; const snap = await getDoc(doc(db, BLOCKED_SELLERS_COLLECTION, `${uid}_${sellerUserId}`)); return snap.exists(); }
+export async function blockSellerInDb(sellerUserId: string): Promise<void> { const uid = auth.currentUser?.uid; if (!uid || !sellerUserId || uid === sellerUserId) return; await setDoc(doc(db, BLOCKED_SELLERS_COLLECTION, `${uid}_${sellerUserId}`), { userId: uid, sellerUserId, createdAt: new Date().toISOString() }); }
+export async function unblockSellerInDb(sellerUserId: string): Promise<void> { const uid = auth.currentUser?.uid; if (!uid || !sellerUserId) return; await deleteDoc(doc(db, BLOCKED_SELLERS_COLLECTION, `${uid}_${sellerUserId}`)); }
 
-export async function markAllNotificationsRead(notifications: AppNotification[]): Promise<void> {
-  const batch = writeBatch(db);
-  notifications.filter(n => !n.read).forEach(n => batch.update(doc(db, NOTIFICATIONS_COLLECTION, n.id), { read: true }));
-  await batch.commit();
-}
-
-export async function isSellerBlockedInDb(sellerUserId: string): Promise<boolean> {
-  const uid = auth.currentUser?.uid;
-  if (!uid || !sellerUserId) return false;
-  const snap = await getDoc(doc(db, BLOCKED_SELLERS_COLLECTION, `${uid}_${sellerUserId}`));
-  return snap.exists();
-}
-
-export async function blockSellerInDb(sellerUserId: string): Promise<void> {
-  const uid = auth.currentUser?.uid;
-  if (!uid || !sellerUserId || uid === sellerUserId) return;
-  await setDoc(doc(db, BLOCKED_SELLERS_COLLECTION, `${uid}_${sellerUserId}`), { userId: uid, sellerUserId, createdAt: new Date().toISOString() });
-}
-
-export async function unblockSellerInDb(sellerUserId: string): Promise<void> {
-  const uid = auth.currentUser?.uid;
-  if (!uid || !sellerUserId) return;
-  await deleteDoc(doc(db, BLOCKED_SELLERS_COLLECTION, `${uid}_${sellerUserId}`));
-}
-
-export function subscribeToPlatformSettings(onSuccess: (settings: PlatformSettings) => void, onError?: (err: Error) => void) {
-  try {
-    return onSnapshot(doc(db, SETTINGS_COLLECTION, 'global_config'), async (docSnap) => {
-      if (!docSnap.exists()) return;
-      const rawSettings = docSnap.data() as PlatformSettings;
-      const hasLegacyTelegramConfig = rawSettings.telegramChannelId === '@oldisotti_uz' || rawSettings.telegramBotUsername === 'OldisottiMarketBot';
-      const settings: PlatformSettings = hasLegacyTelegramConfig ? { ...rawSettings, telegramChannelId: '@OSot_uz', telegramBotUsername: 'OSotBot' } : rawSettings;
-      onSuccess(settings);
-      if (hasLegacyTelegramConfig && auth.currentUser?.uid === 'Q81AQDKw7GXYeNgdrnp2qvYgyS02') {
-        try { await setDoc(doc(db, SETTINGS_COLLECTION, 'global_config'), { telegramChannelId: '@OSot_uz', telegramBotUsername: 'OSotBot' }, { merge: true }); } catch (repairError) { console.warn('Could not repair legacy Telegram settings:', repairError); }
-      }
-    }, (err) => { console.warn('Platform settings subscription error:', err); onError?.(err); });
-  } catch (err: any) { onError?.(err); return () => {}; }
-}
-
-export async function savePlatformSettingsToDb(settings: PlatformSettings): Promise<void> {
-  const sanitizedSettings: PlatformSettings = { ...settings, telegramChannelId: '@OSot_uz', telegramBotUsername: 'OSotBot' };
-  await setDoc(doc(db, SETTINGS_COLLECTION, 'global_config'), sanitizedSettings, { merge: true });
-}
-
-export function subscribeToModerationReports(onSuccess: (reports: ModerationReport[]) => void, onError?: (err: Error) => void) {
-  try {
-    return onSnapshot(collection(db, REPORTS_COLLECTION), (snapshot) => {
-      const items: ModerationReport[] = [];
-      snapshot.forEach((docSnap) => items.push({ ...(docSnap.data() as ModerationReport), id: docSnap.id }));
-      onSuccess(items);
-    }, (err) => { console.warn('Reports subscription error:', err); onError?.(err); });
-  } catch (err: any) { onError?.(err); return () => {}; }
-}
-
-export async function saveReportToDb(report: ModerationReport): Promise<void> {
-  const currentUid = auth.currentUser?.uid;
-  if (!currentUid) throw new Error('Authentication required.');
-  const safeReport: ModerationReport = { ...report, reporterId: currentUid };
-  await setDoc(doc(db, REPORTS_COLLECTION, report.id), safeReport);
-}
-
+export function subscribeToPlatformSettings(onSuccess: (settings: PlatformSettings) => void, onError?: (err: Error) => void) { try { return onSnapshot(doc(db, SETTINGS_COLLECTION, 'global_config'), async (docSnap) => { if (!docSnap.exists()) return; const rawSettings = docSnap.data() as PlatformSettings; const hasLegacyTelegramConfig = rawSettings.telegramChannelId === '@oldisotti_uz' || rawSettings.telegramBotUsername === 'OldisottiMarketBot'; const settings: PlatformSettings = hasLegacyTelegramConfig ? { ...rawSettings, telegramChannelId: '@OSot_uz', telegramBotUsername: 'OSotBot' } : rawSettings; onSuccess(settings); if (hasLegacyTelegramConfig && auth.currentUser?.uid === 'Q81AQDKw7GXYeNgdrnp2qvYgyS02') { try { await setDoc(doc(db, SETTINGS_COLLECTION, 'global_config'), { telegramChannelId: '@OSot_uz', telegramBotUsername: 'OSotBot' }, { merge: true }); } catch (repairError) { console.warn('Could not repair legacy Telegram settings:', repairError); } } }, (err) => { console.warn('Platform settings subscription error:', err); onError?.(err); }); } catch (err: any) { onError?.(err); return () => {}; } }
+export async function savePlatformSettingsToDb(settings: PlatformSettings): Promise<void> { const sanitizedSettings: PlatformSettings = { ...settings, telegramChannelId: '@OSot_uz', telegramBotUsername: 'OSotBot' }; await setDoc(doc(db, SETTINGS_COLLECTION, 'global_config'), sanitizedSettings, { merge: true }); }
+export function subscribeToModerationReports(onSuccess: (reports: ModerationReport[]) => void, onError?: (err: Error) => void) { try { return onSnapshot(collection(db, REPORTS_COLLECTION), (snapshot) => { const items: ModerationReport[] = []; snapshot.forEach((docSnap) => items.push({ ...(docSnap.data() as ModerationReport), id: docSnap.id })); onSuccess(items); }, (err) => { console.warn('Reports subscription error:', err); onError?.(err); }); } catch (err: any) { onError?.(err); return () => {}; } }
+export async function saveReportToDb(report: ModerationReport): Promise<void> { const currentUid = auth.currentUser?.uid; if (!currentUid) throw new Error('Authentication required.'); const safeReport: ModerationReport = { ...report, reporterId: currentUid }; await setDoc(doc(db, REPORTS_COLLECTION, report.id), safeReport); }
 export async function updateReportStatusInDb(reportId: string, status: 'resolved' | 'dismissed'): Promise<void> { await updateDoc(doc(db, REPORTS_COLLECTION, reportId), { status }); }
