@@ -39,7 +39,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const body = (req.body || {}) as Record<string, any>;
   const listing = body.listing as Record<string, any> | undefined;
 
-  // Supports the OldiSotti Listing object directly, while retaining the simple API payload format.
   const title = String(listing?.title ?? body.title ?? '').trim();
   const price = listing
     ? formatPrice(listing.price, listing.currency, Boolean(listing.isNegotiable))
@@ -61,7 +60,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ success: false, error: 'title and url are required' });
   }
 
-  // Pending/rejected listings must never reach the public Telegram channel.
   if (listing?.status && listing.status !== 'active') {
     return res.status(409).json({ success: false, error: 'Only active listings can be published to Telegram' });
   }
@@ -78,8 +76,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const message = lines.join('\n');
 
+  async function sendMessage(): Promise<Response> {
+    return fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: channelId,
+        text: message,
+        parse_mode: 'HTML',
+        disable_web_page_preview: false
+      })
+    });
+  }
+
   try {
+    // First try the listing image. If Telegram cannot fetch the image URL,
+    // fall back to a text post so a valid listing is not lost.
     let telegramResponse: Response;
+    let usedImage = false;
 
     if (imageUrl) {
       telegramResponse = await fetch(`https://api.telegram.org/bot${token}/sendPhoto`, {
@@ -92,35 +106,50 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           parse_mode: 'HTML'
         })
       });
+      usedImage = telegramResponse.ok;
+
+      if (!telegramResponse.ok) {
+        const failedPhoto = await telegramResponse.json().catch(() => ({})) as { description?: string };
+        telegramResponse = await sendMessage();
+        if (!telegramResponse.ok) {
+          const failedText = await telegramResponse.json().catch(() => ({})) as { description?: string };
+          return res.status(502).json({
+            success: false,
+            configured: true,
+            error: `Telegram publish failed: ${failedText.description || failedPhoto.description || 'unknown Telegram error'}`,
+            photoError: failedPhoto.description || null
+          });
+        }
+      }
     } else {
-      telegramResponse = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          chat_id: channelId,
-          text: message,
-          parse_mode: 'HTML',
-          disable_web_page_preview: false
-        })
-      });
+      telegramResponse = await sendMessage();
     }
 
-    const telegramData = await telegramResponse.json() as { ok?: boolean; result?: { message_id?: number }; description?: string };
+    const telegramData = await telegramResponse.json().catch(() => ({})) as {
+      ok?: boolean;
+      result?: { message_id?: number };
+      description?: string;
+    };
 
     if (!telegramResponse.ok || !telegramData.ok) {
       return res.status(502).json({
         success: false,
         configured: true,
-        error: 'Telegram could not publish the listing'
+        error: `Telegram publish failed: ${telegramData.description || 'unknown Telegram error'}`
       });
     }
 
     return res.status(200).json({
       success: true,
       messageId: telegramData.result?.message_id || null,
-      channel: channelId
+      channel: channelId,
+      usedImage
     });
-  } catch {
-    return res.status(502).json({ success: false, configured: true, error: 'Telegram publishing failed' });
+  } catch (error: any) {
+    return res.status(502).json({
+      success: false,
+      configured: true,
+      error: `Telegram publishing failed: ${error?.message || 'network error'}`
+    });
   }
 }
