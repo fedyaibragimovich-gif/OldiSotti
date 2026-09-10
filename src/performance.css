@@ -1,0 +1,23 @@
+/* Lightweight rendering hints for the mobile marketplace feed. */
+.listing-card-contain {
+  contain: layout paint style;
+}
+
+/* Touch scrolling should not animate every intermediate frame. */
+.recently-viewed-scroll {
+  scroll-behavior: auto;
+  overscroll-behavior-x: contain;
+}
+
+.recently-viewed-card img,
+.listing-card-contain img {
+  content-visibility: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .listing-card-contain,
+  .recently-viewed-scroll {
+    scroll-behavior: auto !important;
+    transition: none !important;
+  }
+}
