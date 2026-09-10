@@ -38,7 +38,34 @@ service cloud.firestore {
     match /conversations/{conversationId} {
       allow read: if isAdmin() || isConversationParticipant();
       allow create: if isAdmin() || isNewConversationParticipant();
-      allow update: if isAdmin() || (isConversationParticipant() && request.resource.data.buyerId == resource.data.buyerId && request.resource.data.sellerUserId == resource.data.sellerUserId);
+      allow update: if isAdmin() || (
+        isConversationParticipant() &&
+        request.resource.data.buyerId == resource.data.buyerId &&
+        request.resource.data.sellerUserId == resource.data.sellerUserId &&
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'listingId',
+          'listingTitle',
+          'listingPrice',
+          'listingCurrency',
+          'listingImage',
+          'sellerId',
+          'sellerName',
+          'sellerAvatar',
+          'sellerPhone'
+        ]) &&
+        (
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['messages']) ||
+          (
+            request.resource.data.messages.size() == resource.data.messages.size() + 1 &&
+            request.resource.data.messages[resource.data.messages.size()].sender == (
+              resource.data.buyerId == request.auth.uid ? 'buyer' : 'seller'
+            ) &&
+            request.resource.data.messages[resource.data.messages.size()].text is string &&
+            request.resource.data.messages[resource.data.messages.size()].text.size() > 0 &&
+            request.resource.data.messages[resource.data.messages.size()].text.size() <= 2000
+          )
+        )
+      );
       allow delete: if isAdmin() || isConversationParticipant();
       match /messages/{messageId} {
         allow read, write: if isAdmin() || isConversationParticipant();
