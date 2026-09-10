@@ -42,7 +42,7 @@ export interface Listing {
   /** Firebase Auth UID of the listing owner. */
   userId?: string;
   attributes?: Record<string, string>;
-  status: 'active' | 'sold' | 'pending' | 'rejected';
+  status: 'active' | 'reserved' | 'sold' | 'pending' | 'rejected';
   rejectionReason?: string;
   isDeliveryAvailable: boolean;
   deliveryNote?: string;
@@ -141,4 +141,15 @@ export interface ModerationReport {
   comment?: string;
   createdAt: string;
   status: 'pending' | 'resolved' | 'dismissed';
+}
+
+export interface AppNotification {
+  id: string;
+  type: 'message' | 'listing' | 'status' | 'moderation' | 'system';
+  title: string;
+  message: string;
+  createdAt: string;
+  read: boolean;
+  listingId?: string;
+  chatId?: string;
 }
