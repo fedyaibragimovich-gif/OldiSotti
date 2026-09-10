@@ -39,7 +39,6 @@ export interface Listing {
   isTop: boolean;
   isVip: boolean;
   seller: SellerInfo;
-  /** Firebase Auth UID of the listing owner. */
   userId?: string;
   attributes?: Record<string, string>;
   status: 'active' | 'reserved' | 'sold' | 'pending' | 'rejected';
@@ -54,22 +53,14 @@ export interface Listing {
 
 export interface SubCategory {
   id: string;
-  name: {
-    uz: string;
-    ru: string;
-    oz: string;
-  };
+  name: { uz: string; ru: string; oz: string };
   iconName?: string;
 }
 
 export interface Category {
   id: string;
   slug: string;
-  name: {
-    uz: string;
-    ru: string;
-    oz: string;
-  };
+  name: { uz: string; ru: string; oz: string };
   iconName: string;
   iconBg: string;
   subcategories: SubCategory[];
@@ -93,9 +84,7 @@ export interface Conversation {
   sellerName: string;
   sellerAvatar: string;
   sellerPhone: string;
-  /** Firebase Auth UID of the buyer. */
   buyerId?: string;
-  /** Firebase Auth UID of the seller when known. */
   sellerUserId?: string;
   messages: ChatMessage[];
   lastUpdated: string;
@@ -137,6 +126,7 @@ export interface ModerationReport {
   listingId: string;
   listingTitle: string;
   reason: 'spam' | 'price' | 'prohibited' | 'fraud' | 'other';
+  reporterId?: string;
   reporterPhone?: string;
   comment?: string;
   createdAt: string;
@@ -150,6 +140,7 @@ export interface AppNotification {
   message: string;
   createdAt: string;
   read: boolean;
+  recipientId?: string;
   listingId?: string;
   chatId?: string;
 }
