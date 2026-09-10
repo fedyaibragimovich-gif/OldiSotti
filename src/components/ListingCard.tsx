@@ -50,10 +50,11 @@ export const ListingCard: React.FC<ListingCardProps> = React.memo(({ listing, cu
   const districtName = dist ? (dist.name[lang] || dist.name.uz || dist.name.ru) : '';
   const displayLocation = districtName ? `${regionName}, ${districtName}` : regionName;
 
+  // Paid listings should stand out, but remain consistent with the site's clean design.
   const paidFrame = listing.isVip
-    ? 'border-2 border-amber-400 dark:border-amber-500 shadow-[0_0_0_1px_rgba(245,158,11,0.15),0_8px_28px_rgba(245,158,11,0.12)] bg-gradient-to-b from-amber-50/70 via-white to-white dark:from-amber-950/20 dark:via-slate-900 dark:to-slate-900'
+    ? 'border-[3px] border-amber-400 dark:border-amber-500 ring-1 ring-inset ring-amber-200/70 dark:ring-amber-700/40 shadow-[0_0_0_1px_rgba(245,158,11,0.12),0_8px_28px_rgba(245,158,11,0.16)] bg-gradient-to-b from-amber-50/80 via-white to-white dark:from-amber-950/25 dark:via-slate-900 dark:to-slate-900'
     : listing.isTop
-      ? 'border-2 border-indigo-400 dark:border-indigo-500 shadow-[0_0_0_1px_rgba(99,102,241,0.12),0_8px_28px_rgba(99,102,241,0.10)] bg-gradient-to-b from-indigo-50/70 via-white to-white dark:from-indigo-950/20 dark:via-slate-900 dark:to-slate-900'
+      ? 'border-[3px] border-indigo-400 dark:border-indigo-500 ring-1 ring-inset ring-indigo-200/70 dark:ring-indigo-700/40 shadow-[0_0_0_1px_rgba(99,102,241,0.10),0_8px_28px_rgba(99,102,241,0.14)] bg-gradient-to-b from-indigo-50/80 via-white to-white dark:from-indigo-950/25 dark:via-slate-900 dark:to-slate-900'
       : 'border border-slate-200/80 dark:border-slate-800';
 
   const handleFavoriteClick = (e: React.MouseEvent) => { e.stopPropagation(); onToggleFavorite(listing.id); };
