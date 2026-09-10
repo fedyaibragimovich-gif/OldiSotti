@@ -12,35 +12,20 @@ export interface TelegramPostResponse {
 
 export interface TelegramConnectionResponse {
   success: boolean;
+  configured?: boolean;
   simulated?: boolean;
-  bot?: {
-    id: number;
-    first_name: string;
-    username?: string;
-    can_join_groups?: boolean;
-    can_read_all_group_messages?: boolean;
-  };
-  channel?: {
-    id: number | string;
-    title?: string;
-    username?: string;
-    type?: string;
-  };
+  bot?: { id: number; first_name: string; username?: string; can_join_groups?: boolean; can_read_all_group_messages?: boolean };
+  channel?: { id: number | string; title?: string; username?: string; type?: string };
+  links?: { bot?: string; channel?: string };
   error?: string;
   message?: string;
 }
 
-/**
- * Format listing price for telegram messages
- */
 function formatPriceText(price: number, currency: Currency): string {
   const formatted = price.toLocaleString('uz-UZ');
   return currency === 'USD' ? `$${formatted}` : `${formatted} so'm`;
 }
 
-/**
- * Generates formatted text preview for Telegram posts
- */
 export function formatTelegramPostPreview(listing: Listing, appUrl?: string): string {
   const baseUrl = appUrl || (typeof window !== 'undefined' ? window.location.origin : 'https://oldisotti.uz');
   const listingUrl = `${baseUrl}/?listing=${listing.id}`;
@@ -48,19 +33,15 @@ export function formatTelegramPostPreview(listing: Listing, appUrl?: string): st
   const location = `${listing.location.region}${listing.location.district ? `, ${listing.location.district}` : ''}`;
   const condition = listing.condition === 'new' ? '✨ Yangi' : '🔄 Ishlatilgan';
   const vipBadge = listing.isVip ? ' ⭐ [VIP E\'lon]' : '';
-
-  // Truncate description to 200 chars for clean telegram layout
-  const shortDesc = listing.description.length > 220 
-    ? `${listing.description.slice(0, 220)}...` 
-    : listing.description;
+  const shortDesc = listing.description.length > 220 ? `${listing.description.slice(0, 220)}...` : listing.description;
 
   return [
     `📢 <b>${listing.title.toUpperCase()}</b>${vipBadge}`,
     ``,
-    `💰 <b>Narxi:</b> ${price} ${listing.isNegotiable ? "(kelishiladi)" : ""}`,
+    `💰 <b>Narxi:</b> ${price} ${listing.isNegotiable ? '(kelishiladi)' : ''}`,
     `📍 <b>Manzil:</b> ${location}`,
     `🏷️ <b>Holati:</b> ${condition}`,
-    listing.isDeliveryAvailable ? `🚚 <b>Yetkazib berish:</b> Sotuvchi o'zi yetkazadi` : `📦 <b>Olib ketish:</b> Samovivoz`,
+    listing.isDeliveryAvailable ? `🚚 <b>Yetkazib berish:</b> Sotuvchi o'zi yetkazadi` : `📦 <b>Olib ketish:</b> Olib ketiladi`,
     ``,
     `📝 <b>Tavsif:</b>`,
     `<i>${shortDesc}</i>`,
@@ -71,13 +52,10 @@ export function formatTelegramPostPreview(listing: Listing, appUrl?: string): st
     ``,
     `🔗 <b>Batafsil ko'rish:</b> ${listingUrl}`,
     ``,
-    `#${listing.location.region.replace(/['`\s]/g, '')} #Oldisotti #Elonlar`
+    `#${listing.location.region.replace(/['`\s]/g, '')} #OldiSotti #Elonlar`
   ].filter(Boolean).join('\n');
 }
 
-/**
- * Generate direct web Telegram share URL
- */
 export function createTelegramShareUrl(listing: Listing, appUrl?: string): string {
   const baseUrl = appUrl || (typeof window !== 'undefined' ? window.location.origin : 'https://oldisotti.uz');
   const url = `${baseUrl}/?listing=${listing.id}`;
@@ -86,97 +64,48 @@ export function createTelegramShareUrl(listing: Listing, appUrl?: string): strin
   return `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`;
 }
 
-/**
- * Post a listing to configured Telegram Channel via backend API
- */
-export async function postListingToTelegram(
-  listing: Listing,
-  options?: {
-    channelId?: string;
-    botToken?: string;
-    appUrl?: string;
-  }
-): Promise<TelegramPostResponse> {
+/** Publish an active listing through the secure Vercel endpoint. */
+export async function postListingToTelegram(listing: Listing, options?: { appUrl?: string }): Promise<TelegramPostResponse> {
   try {
+    const baseUrl = options?.appUrl || (typeof window !== 'undefined' ? window.location.origin : '');
+    const listingUrl = `${baseUrl}/?listing=${encodeURIComponent(listing.id)}`;
     const res = await fetch('/api/telegram/post-listing', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        listing,
-        channelId: options?.channelId,
-        botToken: options?.botToken,
-        appUrl: options?.appUrl || (typeof window !== 'undefined' ? window.location.origin : undefined)
+        title: listing.title,
+        price: formatPriceText(listing.price, listing.currency) + (listing.isNegotiable ? ' (kelishiladi)' : ''),
+        url: listingUrl,
+        imageUrl: listing.images?.[0] || '',
+        description: listing.description,
+        location: `${listing.location.region}${listing.location.district ? `, ${listing.location.district}` : ''}`,
+        category: listing.brand ? `${listing.categoryId} • ${listing.brand}` : listing.categoryId
       })
     });
-
-    if (!res.ok) {
-      const errData = await res.json().catch(() => ({}));
-      throw new Error(errData.error || `Server javob bermadi: status ${res.status}`);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.success) {
+      return { success: false, channel: data.channel, error: data.error || `Telegram server javobi: ${res.status}` };
     }
-
-    return await res.json();
+    return data as TelegramPostResponse;
   } catch (err: any) {
-    console.warn('Telegram post API request failed, falling back to client simulation:', err);
-    // Return graceful simulation response so UI stays operational
-    return {
-      success: true,
-      simulated: true,
-      channel: options?.channelId || '@oldisotti_uz',
-      messageId: Math.floor(1000 + Math.random() * 9000),
-      formattedCaption: formatTelegramPostPreview(listing, options?.appUrl)
-    };
+    console.warn('Telegram post API request failed:', err);
+    return { success: false, error: err?.message || 'Telegram serveriga ulanib bo\'lmadi' };
   }
 }
 
-/**
- * Test Telegram Bot connection and Channel permissions
- */
-export async function testTelegramConnection(
-  botToken?: string,
-  channelId?: string
-): Promise<TelegramConnectionResponse> {
+export async function testTelegramConnection(): Promise<TelegramConnectionResponse> {
   try {
-    const res = await fetch('/api/telegram/test-connection', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        botToken,
-        channelId
-      })
-    });
-
-    return await res.json();
+    const res = await fetch('/api/telegram/test-connection', { method: 'GET' });
+    return (await res.json().catch(() => ({}))) as TelegramConnectionResponse;
   } catch (err: any) {
-    return {
-      success: false,
-      simulated: true,
-      error: err.message || 'Telegram serveriga ulanib bo\'lmadi'
-    };
+    return { success: false, error: err?.message || 'Telegram serveriga ulanib bo\'lmadi' };
   }
 }
 
-/**
- * Notify seller via Telegram bot when a buyer starts a chat or leaves message
- */
-export async function notifySellerOnTelegram(params: {
-  sellerTelegram?: string;
-  listingTitle: string;
-  buyerName: string;
-  messageText: string;
-  listingId: string;
-  botToken?: string;
-}): Promise<boolean> {
+export async function notifySellerOnTelegram(params: { sellerTelegram?: string; listingTitle: string; buyerName: string; messageText: string; listingId: string }): Promise<boolean> {
   try {
     const res = await fetch('/api/telegram/send-notification', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(params)
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(params)
     });
     const data = await res.json();
     return Boolean(data.success);
@@ -186,23 +115,8 @@ export async function notifySellerOnTelegram(params: {
   }
 }
 
-export interface TelegramNotificationParams {
-  type?: string;
-  title: string;
-  message: string;
-  listingId?: string;
-  chatId?: string;
-  sellerTelegram?: string;
-  botToken?: string;
-}
+export interface TelegramNotificationParams { type?: string; title: string; message: string; listingId?: string; chatId?: string; sellerTelegram?: string; }
 
 export async function sendTelegramNotification(params: TelegramNotificationParams): Promise<boolean> {
-  return notifySellerOnTelegram({
-    sellerTelegram: params.sellerTelegram || params.chatId,
-    listingTitle: params.title,
-    buyerName: 'Foydalanuvchi',
-    messageText: params.message,
-    listingId: params.listingId || '',
-    botToken: params.botToken
-  });
+  return notifySellerOnTelegram({ sellerTelegram: params.sellerTelegram || params.chatId, listingTitle: params.title, buyerName: 'Foydalanuvchi', messageText: params.message, listingId: params.listingId || '' });
 }
