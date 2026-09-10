@@ -143,3 +143,13 @@
 #faq-section {
   display: none !important;
 }
+
+/* Chat must never create horizontal viewport overflow on narrow mobile screens. */
+body:has(.slide-in-from-right) {
+  overflow-x: hidden;
+  max-width: 100vw;
+}
+
+.slide-in-from-right {
+  max-width: 100vw;
+}
