@@ -48,7 +48,6 @@ export function formatTelegramPostPreview(listing: Listing, appUrl?: string): st
     ``,
     `👤 <b>Sotuvchi:</b> ${listing.seller.name}`,
     `📞 <b>Aloqa:</b> ${listing.seller.phone}`,
-    listing.seller.telegram ? `✈️ <b>Telegram:</b> ${listing.seller.telegram}` : '',
     ``,
     `🔗 <b>Batafsil ko'rish:</b> ${listingUrl}`,
     ``,
