@@ -16,14 +16,6 @@ function escapeHtml(value: unknown): string {
     .replace(/"/g, '&quot;');
 }
 
-function formatPrice(price: unknown, currency?: string, negotiable?: boolean): string {
-  const numeric = Number(price);
-  if (!Number.isFinite(numeric)) return String(price ?? '');
-  const formatted = numeric.toLocaleString('uz-UZ');
-  const value = currency === 'USD' ? `$${formatted}` : `${formatted} so'm`;
-  return negotiable ? `${value} (kelishiladi)` : value;
-}
-
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ success: false, error: 'Method not allowed' });
@@ -38,43 +30,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const body = (req.body || {}) as Record<string, any>;
   const listing = body.listing as Record<string, any> | undefined;
-
-  const title = String(listing?.title ?? body.title ?? '').trim();
-  const price = listing
-    ? formatPrice(listing.price, listing.currency, Boolean(listing.isNegotiable))
-    : String(body.price || '').trim();
   const baseUrl = String(body.appUrl || '').trim() || 'https://oldisotti.uz';
   const url = listing
     ? `${baseUrl}/?listing=${encodeURIComponent(String(listing.id || ''))}`
     : String(body.url || '').trim();
-  const imageUrl = String(listing?.images?.[0] ?? body.imageUrl ?? '').trim();
-  const description = String(listing?.description ?? body.description ?? '').trim();
-  const location = listing?.location
-    ? `${String(listing.location.region || '')}${listing.location.district ? `, ${String(listing.location.district)}` : ''}`
-    : String(body.location || '').trim();
-  const category = listing
-    ? `${String(listing.categoryId || '')}${listing.brand ? ` • ${String(listing.brand)}` : ''}`
-    : String(body.category || '').trim();
 
-  if (!title || (!listing && !url)) {
-    return res.status(400).json({ success: false, error: 'title and url are required' });
+  if (!url) {
+    return res.status(400).json({ success: false, error: 'listing url is required' });
   }
 
   if (listing?.status && listing.status !== 'active') {
     return res.status(409).json({ success: false, error: 'Only active listings can be published to Telegram' });
   }
 
-  const lines = [
-    `<b>${escapeHtml(title)}</b>`,
-    price ? `💰 ${escapeHtml(price)}` : '',
-    category ? `📂 ${escapeHtml(category)}` : '',
-    location ? `📍 ${escapeHtml(location)}` : '',
-    description ? `\n${escapeHtml(description.slice(0, 700))}` : '',
-    `\n🔗 <a href="${escapeHtml(url)}">E'lonni ko'rish</a>`,
-    `\n#OldiSotti`
-  ].filter(Boolean);
-
-  const message = lines.join('\n');
+  // Telegram channel posts intentionally contain no seller name, phone,
+  // Telegram username, price, location, description, or other contact data.
+  // The channel is only a gateway to the listing on OldiSotti.
+  const message = `<a href="${escapeHtml(url)}">OldiSotti'da e'lonni ko'rish</a>`;
 
   async function sendMessage(): Promise<Response> {
     return fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
@@ -90,41 +62,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    // First try the listing image. If Telegram cannot fetch the image URL,
-    // fall back to a text post so a valid listing is not lost.
-    let telegramResponse: Response;
-    let usedImage = false;
-
-    if (imageUrl) {
-      telegramResponse = await fetch(`https://api.telegram.org/bot${token}/sendPhoto`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          chat_id: channelId,
-          photo: imageUrl,
-          caption: message,
-          parse_mode: 'HTML'
-        })
-      });
-      usedImage = telegramResponse.ok;
-
-      if (!telegramResponse.ok) {
-        const failedPhoto = await telegramResponse.json().catch(() => ({})) as { description?: string };
-        telegramResponse = await sendMessage();
-        if (!telegramResponse.ok) {
-          const failedText = await telegramResponse.json().catch(() => ({})) as { description?: string };
-          return res.status(502).json({
-            success: false,
-            configured: true,
-            error: `Telegram publish failed: ${failedText.description || failedPhoto.description || 'unknown Telegram error'}`,
-            photoError: failedPhoto.description || null
-          });
-        }
-      }
-    } else {
-      telegramResponse = await sendMessage();
-    }
-
+    const telegramResponse = await sendMessage();
     const telegramData = await telegramResponse.json().catch(() => ({})) as {
       ok?: boolean;
       result?: { message_id?: number };
@@ -143,7 +81,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       success: true,
       messageId: telegramData.result?.message_id || null,
       channel: channelId,
-      usedImage
+      usedImage: false
     });
   } catch (error: any) {
     return res.status(502).json({
