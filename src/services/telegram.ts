@@ -32,6 +32,16 @@ async function getAuthHeaders(): Promise<Record<string, string> | null> {
   };
 }
 
+async function readJsonResponse<T extends Record<string, any>>(res: Response): Promise<T> {
+  const text = await res.text();
+  if (!text) return {} as T;
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    return {} as T;
+  }
+}
+
 export function formatTelegramPostPreview(listing: Listing, appUrl?: string): string {
   const baseUrl = appUrl || (typeof window !== 'undefined' ? window.location.origin : 'https://oldisotti.uz');
   return `<a href="${baseUrl}/?listing=${encodeURIComponent(listing.id)}">OldiSotti'da e'lonni ko'rish</a>`;
@@ -57,9 +67,9 @@ export async function postListingToTelegram(
       headers,
       body: JSON.stringify({ listing, appUrl: baseUrl, channelId: options?.channelId })
     });
-    const data = await res.json().catch(() => ({}));
+    const data = await readJsonResponse<any>(res);
     if (!res.ok || !data.success) {
-      return { success: false, channel: data.channel, error: data.error || `Telegram server javobi: ${res.status}` };
+      return { success: false, channel: data.channel, error: data.error || `Telegram server javobi: HTTP ${res.status}` };
     }
     return { ...data, telegramPostUrl: data.messageId ? `${options?.channelId || '@OSot_uz'}/${data.messageId}` : undefined } as TelegramPostResponse;
   } catch (err: any) {
@@ -77,7 +87,15 @@ export async function testTelegramConnection(_botToken?: string, channelId?: str
       headers,
       body: JSON.stringify({ channelId })
     });
-    return (await res.json().catch(() => ({}))) as TelegramConnectionResponse;
+    const data = await readJsonResponse<TelegramConnectionResponse>(res);
+    if (!res.ok || !data.success) {
+      return {
+        ...data,
+        success: false,
+        error: data.error || `Telegram ulanishini tekshirishda server xatosi: HTTP ${res.status}`
+      };
+    }
+    return data;
   } catch (err: any) {
     return { success: false, error: err?.message || 'Telegram serveriga ulanib bo\'lmadi' };
   }
@@ -92,7 +110,7 @@ export async function notifySellerOnTelegram(params: { sellerTelegram?: string; 
       headers,
       body: JSON.stringify(params)
     });
-    const data = await res.json().catch(() => ({}));
+    const data = await readJsonResponse<any>(res);
     return Boolean(res.ok && data.success);
   } catch (err) {
     console.warn('Telegram seller notification error:', err);
