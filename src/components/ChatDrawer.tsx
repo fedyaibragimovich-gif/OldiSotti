@@ -3,7 +3,7 @@ import { X, Send, MessageSquare, ArrowLeft, Zap, HelpCircle, Tag, Calendar, Truc
 import { Conversation, Language, Currency } from '../types';
 import { getTranslation } from '../data/translations';
 import { formatPrice } from '../utils/formatters';
-import { markConversationReadInDb } from '../lib/firebase';
+import { auth, markConversationReadInDb } from '../lib/firebase';
 
 interface ChatDrawerProps { isOpen: boolean; onClose: () => void; lang: Language; currency: Currency; conversations: Conversation[]; activeChatId: string | null; onSelectChat: (chatId: string) => void; onSendMessage: (chatId: string, text: string) => void; }
 
@@ -12,6 +12,8 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ isOpen, onClose, lang, c
   const [inputText, setInputText] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const activeConv = conversations.find(c => c.id === activeChatId) || conversations[0];
+  const currentUid = auth.currentUser?.uid;
+  const currentRole: 'buyer' | 'seller' = activeConv?.sellerUserId === currentUid ? 'seller' : 'buyer';
 
   useEffect(() => {
     if (!isOpen) return;
@@ -40,7 +42,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ isOpen, onClose, lang, c
   const handleSend = (textToSend?: string) => {
     const text = textToSend || inputText;
     if (!text.trim() || !activeConv) return;
-    onSendMessage(activeConv.id, text.trim());
+    onSendMessage(activeConv.id, text.trim().slice(0, 2000));
     setInputText('');
   };
 
@@ -92,7 +94,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ isOpen, onClose, lang, c
             </div>
 
             <div className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden overscroll-contain p-3 sm:p-4 space-y-3 bg-slate-50/60 dark:bg-slate-950/30">
-              {activeConv.messages.map((msg) => { const isMe = msg.sender === 'buyer'; return <div key={msg.id} className={`flex min-w-0 flex-col ${isMe ? 'items-end' : 'items-start'}`}>
+              {activeConv.messages.map((msg) => { const isMe = msg.sender === currentRole; return <div key={msg.id} className={`flex min-w-0 flex-col ${isMe ? 'items-end' : 'items-start'}`}>
                 <div className={`max-w-[86%] sm:max-w-[80%] min-w-0 break-words whitespace-pre-wrap rounded-2xl px-3.5 sm:px-4 py-2.5 text-xs sm:text-sm shadow-xs ${isMe ? 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white rounded-br-none' : 'bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-200/80 dark:border-slate-700/80 rounded-bl-none'}`}>{msg.text}</div>
                 <span className="text-[10px] text-slate-400 dark:text-slate-500 mt-1 px-1">{msg.timestamp}</span>
               </div>; })}
@@ -107,7 +109,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ isOpen, onClose, lang, c
             </div>
 
             <div className="p-2.5 sm:p-3 pb-[calc(0.625rem+env(safe-area-inset-bottom))] bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 flex min-w-0 items-center gap-2 shrink-0">
-              <input type="text" inputMode="text" autoComplete="off" enterKeyHint="send" value={inputText} onChange={(e) => setInputText(e.target.value)} onKeyDown={handleKeyDown} placeholder={t.typeMessagePlaceholder} className="min-w-0 flex-1 w-0 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white dark:placeholder:text-slate-500 p-2.5 text-xs sm:text-sm font-medium focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none" />
+              <input type="text" inputMode="text" autoComplete="off" enterKeyHint="send" maxLength={2000} value={inputText} onChange={(e) => setInputText(e.target.value)} onKeyDown={handleKeyDown} placeholder={t.typeMessagePlaceholder} className="min-w-0 flex-1 w-0 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white dark:placeholder:text-slate-500 p-2.5 text-xs sm:text-sm font-medium focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none" />
               <button onClick={() => handleSend()} disabled={!inputText.trim()} aria-label="Yuborish" className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 text-white hover:from-indigo-500 hover:to-blue-500 disabled:opacity-40 shadow-md shadow-indigo-600/20 transition-all shrink-0 cursor-pointer"><Send size={16} className="text-white" /></button>
             </div>
           </div> : <div className="flex-1 min-w-0 flex flex-col items-center justify-center p-6 text-center text-slate-400"><MessageSquare size={48} className="mb-2 opacity-40" /><p className="text-sm font-semibold">{t.noChats}</p></div>}
