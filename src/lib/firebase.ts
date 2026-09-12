@@ -27,6 +27,23 @@ function isCurrentAdmin(): boolean {
   return Boolean(user.emailVerified && user.email?.toLowerCase() === ADMIN_EMAIL);
 }
 
+// Firestore does not accept undefined values, including nested optional fields.
+function stripUndefinedDeep<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value
+      .filter((item) => item !== undefined)
+      .map((item) => stripUndefinedDeep(item)) as T;
+  }
+  if (value && typeof value === 'object') {
+    const clean: Record<string, unknown> = {};
+    Object.entries(value as Record<string, unknown>).forEach(([key, item]) => {
+      if (item !== undefined) clean[key] = stripUndefinedDeep(item);
+    });
+    return clean as T;
+  }
+  return value;
+}
+
 export function subscribeToListings(onSuccess: (listings: Listing[]) => void, onError?: (err: Error) => void) {
   try {
     const listingsQuery = query(collection(db, LISTINGS_COLLECTION), orderBy('createdAt', 'desc'), limit(LISTINGS_REALTIME_LIMIT));
@@ -50,7 +67,7 @@ export async function seedInitialListingsIfEmpty(fallbackListings: Listing[]): P
     const existingSnap = await getDocs(collection(db, LISTINGS_COLLECTION));
     if (!existingSnap.empty) return false;
     const batch = writeBatch(db);
-    fallbackListings.forEach((listing) => batch.set(doc(db, LISTINGS_COLLECTION, listing.id), listing));
+    fallbackListings.forEach((listing) => batch.set(doc(db, LISTINGS_COLLECTION, listing.id), stripUndefinedDeep(listing)));
     await batch.commit();
     return true;
   } catch (error) {
@@ -107,7 +124,7 @@ export async function saveListingToDb(listing: Listing): Promise<void> {
       viewsCount: 0
     };
 
-    await setDoc(listingRef, safeListing);
+    await setDoc(listingRef, stripUndefinedDeep(safeListing));
     return;
   }
 
@@ -116,11 +133,11 @@ export async function saveListingToDb(listing: Listing): Promise<void> {
     ...telegramFields,
     ...(listing.userId ? {} : currentUid ? { userId: currentUid } : {})
   };
-  await setDoc(listingRef, data);
+  await setDoc(listingRef, stripUndefinedDeep(data));
 }
 
 export async function updateListingInDb(listingId: string, updates: Partial<Listing>): Promise<void> {
-  await updateDoc(doc(db, LISTINGS_COLLECTION, listingId), updates);
+  await updateDoc(doc(db, LISTINGS_COLLECTION, listingId), stripUndefinedDeep(updates));
 }
 
 export async function deleteListingFromDb(listingId: string): Promise<void> {
