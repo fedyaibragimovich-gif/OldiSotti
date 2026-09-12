@@ -18,6 +18,19 @@ if (s.includes(userStateMarker)) {
   );
 }
 
+// Fresh users should never inherit demo favorites, recent views, or fake conversations.
+s = s.replace("    return ['olx-001', 'olx-002'];", '    return [];');
+s = s.replace("    return ['olx-001', 'olx-002', 'olx-004'];", '    return [];');
+s = s.replace('    return mockConversations;', '    return [];');
+
+const conversationSeedOld = `        if (dbConversations.length === 0) {\n          await seedConversationsIfEmpty(mockConversations);\n        } else {\n          setConversations(dbConversations);\n          localStorage.setItem('olx_conversations', JSON.stringify(dbConversations));\n        }`;
+if (s.includes(conversationSeedOld)) {
+  s = s.replace(
+    conversationSeedOld,
+    `        setConversations(dbConversations);\n        localStorage.setItem('olx_conversations', JSON.stringify(dbConversations));`
+  );
+}
+
 const reportSubscriptionOld = `    // 4. Moderation Reports real-time listener\n    const unsubscribeReports = subscribeToModerationReports((dbReports) => {\n      if (!isMounted) return;\n      setReports(dbReports);\n      localStorage.setItem('olx_moderation_reports', JSON.stringify(dbReports));\n    });`;
 if (s.includes(reportSubscriptionOld)) {
   s = s.replace(
@@ -35,6 +48,15 @@ if (s.includes(adminReportsEffectMarker) && !s.includes('Admin-only moderation r
 const myListingsOld = `  // User's own listings (posted by user-self or default)\n  const myListings = useMemo(() => {\n    return listings.filter((l) => l.seller.id === 'user-self' || l.seller.name === 'Fedya Ibragimovich');\n  }, [listings]);`;
 const myListingsNew = `  // User's own listings are strictly bound to the authenticated Firebase UID.\n  const myListings = useMemo(() => {\n    if (!currentUser) return [];\n    return listings.filter((l) => l.userId === currentUser.uid);\n  }, [listings, currentUser]);`;
 if (s.includes(myListingsOld)) s = s.replace(myListingsOld, myListingsNew);
+
+// Persist a new listing before showing it locally. Also propagate the moderation status
+// back to the submitted object so the success screen can tell the user the truth.
+const addListingStart = s.indexOf('  // Add new listing handler\n  const handleAddListing = async (newListing: Listing) => {');
+const addListingEnd = s.indexOf('\n\n  // Admin and Moderation handlers', addListingStart);
+if (addListingStart !== -1 && addListingEnd !== -1) {
+  const secureAddListing = `  // Add new listing handler\n  const handleAddListing = async (newListing: Listing) => {\n    const status = platformSettings.autoApproveListings ? 'active' : 'pending';\n    newListing.status = status;\n    const finalizedListing: Listing = {\n      ...newListing,\n      status\n    };\n\n    try {\n      await saveListingToDb(finalizedListing);\n    } catch (e) {\n      console.warn('Failed to save listing to Firestore:', e);\n      throw e;\n    }\n\n    setListings((prev) => [finalizedListing, ...prev]);\n\n    // Pending listings must never be published to Telegram before moderation.\n    const shouldPostTelegram =\n      finalizedListing.status === 'active' &&\n      platformSettings.autoPostListingsToTelegram &&\n      (!platformSettings.postOnlyVipToTelegram || finalizedListing.isVip || finalizedListing.isTop);\n\n    if (shouldPostTelegram) {\n      postListingToTelegram(finalizedListing, {\n        channelId: platformSettings.telegramChannelId,\n        botToken: platformSettings.telegramBotToken\n      })\n        .then(async (tgRes) => {\n          if (tgRes.success) {\n            const withTg: Listing = {\n              ...finalizedListing,\n              isPostedToTelegram: true,\n              telegramMessageId: tgRes.messageId,\n              telegramPostedAt: new Date().toISOString()\n            };\n            setListings((prev) =>\n              prev.map((item) => (item.id === withTg.id ? withTg : item))\n            );\n            try {\n              await saveListingToDb(withTg);\n            } catch (err) {\n              console.warn('Failed to update Telegram status in DB:', err);\n            }\n          }\n        })\n        .catch((tgErr) => {\n          console.warn('Telegram auto-post error:', tgErr);\n        });\n    }\n  };`;
+  s = s.slice(0, addListingStart) + secureAddListing + s.slice(addListingEnd);
+}
 
 const startChatMarker = `  const handleStartChat = async (listing: Listing) => {\n    setSelectedListing(null);`;
 const startChatReplacement = `  const handleStartChat = async (listing: Listing) => {\n    if (!currentUser || currentUser.isAnonymous) {\n      window.alert('Chatdan foydalanish uchun avval akkauntingizga kiring.');\n      return;\n    }\n    if (listing.userId === currentUser.uid) {\n      window.alert("O'zingizning e'loningiz bilan chat ochib bo'lmaydi.");\n      return;\n    }\n    setSelectedListing(null);`;
