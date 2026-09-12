@@ -18,6 +18,20 @@ if (s.includes(userStateMarker)) {
   );
 }
 
+const reportSubscriptionOld = `    // 4. Moderation Reports real-time listener\n    const unsubscribeReports = subscribeToModerationReports((dbReports) => {\n      if (!isMounted) return;\n      setReports(dbReports);\n      localStorage.setItem('olx_moderation_reports', JSON.stringify(dbReports));\n    });`;
+if (s.includes(reportSubscriptionOld)) {
+  s = s.replace(
+    reportSubscriptionOld,
+    `    // Moderation reports are admin-only and are subscribed in a separate auth-aware effect.\n    const unsubscribeReports = () => {};`
+  );
+}
+
+const adminReportsEffectMarker = `  const handleOpenInfoModal = (tab: InfoTabKey = 'help') => {`;
+if (s.includes(adminReportsEffectMarker) && !s.includes('Admin-only moderation reports listener')) {
+  const adminReportsEffect = `  // Admin-only moderation reports listener. Regular users never issue a forbidden Firestore read.\n  useEffect(() => {\n    if (!isAdminUser(currentUser)) {\n      setReports([]);\n      return;\n    }\n    return subscribeToModerationReports((dbReports) => {\n      setReports(dbReports);\n      localStorage.setItem('olx_moderation_reports', JSON.stringify(dbReports));\n    });\n  }, [currentUser]);\n\n`;
+  s = s.replace(adminReportsEffectMarker, adminReportsEffect + adminReportsEffectMarker);
+}
+
 const myListingsOld = `  // User's own listings (posted by user-self or default)\n  const myListings = useMemo(() => {\n    return listings.filter((l) => l.seller.id === 'user-self' || l.seller.name === 'Fedya Ibragimovich');\n  }, [listings]);`;
 const myListingsNew = `  // User's own listings are strictly bound to the authenticated Firebase UID.\n  const myListings = useMemo(() => {\n    if (!currentUser) return [];\n    return listings.filter((l) => l.userId === currentUser.uid);\n  }, [listings, currentUser]);`;
 if (s.includes(myListingsOld)) s = s.replace(myListingsOld, myListingsNew);
