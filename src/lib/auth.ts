@@ -24,9 +24,6 @@ export const loginWithEmail = (email: string, password: string) => signInWithEma
 export const registerWithEmail = (email: string, password: string) => createUserWithEmailAndPassword(auth, email, password);
 
 export const resetPassword = (email: string) => {
-  // Keep the reset flow associated with the actual OldiSotti domain instead of
-  // relying only on Firebase's default continue URL. The domain must be added
-  // to Firebase Authentication > Settings > Authorized domains.
   const continueUrl = typeof window !== 'undefined' ? window.location.origin : undefined;
   auth.languageCode = 'uz';
   return sendPasswordResetEmail(
