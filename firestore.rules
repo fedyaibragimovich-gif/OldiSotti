@@ -96,6 +96,20 @@ service cloud.firestore {
         ));
     }
 
+    function isSafePaymentOrder() {
+      return signedIn()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.listingId is string
+        && listingExists(request.resource.data.listingId)
+        && listingOwnerUid(request.resource.data.listingId) == request.auth.uid
+        && request.resource.data.provider in ['click', 'payme']
+        && request.resource.data.planDays in [1, 3, 7]
+        && request.resource.data.amountUzs == request.resource.data.planDays * 25000
+        && request.resource.data.status == 'pending'
+        && request.resource.data.createdAt is string
+        && request.resource.data.updatedAt is string;
+    }
+
     match /listings/{listingId} {
       allow read: if true;
       allow create: if isAdmin() || isSafeNewListing();
@@ -183,6 +197,12 @@ service cloud.firestore {
         && request.resource.data.read is bool
       );
       allow delete: if isAdmin() || (signedIn() && resource.data.recipientId == request.auth.uid);
+    }
+
+    match /payment_orders/{orderId} {
+      allow create: if isSafePaymentOrder();
+      allow read: if isAdmin() || (signedIn() && resource.data.userId == request.auth.uid);
+      allow update, delete: if isAdmin();
     }
 
     match /blocked_sellers/{blockId} {
