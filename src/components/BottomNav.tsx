@@ -32,6 +32,8 @@ interface BottomNavProps {
   onOpenAdmin?: () => void;
 }
 
+const REMEMBERED_EMAIL_KEY = 'oldisotti_remembered_email';
+
 export const BottomNav: React.FC<BottomNavProps> = React.memo(({
   lang,
   unreadCount,
@@ -55,9 +57,19 @@ export const BottomNav: React.FC<BottomNavProps> = React.memo(({
   const [forgotMessage, setForgotMessage] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [rememberEmail, setRememberEmail] = useState(true);
   const profileRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => subscribeToAuth(setUser), []);
+
+  useEffect(() => {
+    try {
+      const savedEmail = window.localStorage.getItem(REMEMBERED_EMAIL_KEY);
+      if (savedEmail) setEmail(savedEmail);
+    } catch {
+      // localStorage may be unavailable in private/restricted browsing modes.
+    }
+  }, []);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -89,8 +101,8 @@ export const BottomNav: React.FC<BottomNavProps> = React.memo(({
     setAuthMode(mode);
     setAuthError('');
     setForgotMessage('');
-    setEmail('');
     setPassword('');
+    if (mode === 'register') setEmail('');
     setProfileModalOpen(false);
     setAuthModalOpen(true);
   };
@@ -100,11 +112,19 @@ export const BottomNav: React.FC<BottomNavProps> = React.memo(({
     setAuthLoading(true);
     setAuthError('');
     setForgotMessage('');
+    const normalizedEmail = email.trim();
     try {
-      if (authMode === 'login') await loginWithEmail(email.trim(), password);
-      else await registerWithEmail(email.trim(), password);
+      if (authMode === 'login') {
+        if (rememberEmail) {
+          try { window.localStorage.setItem(REMEMBERED_EMAIL_KEY, normalizedEmail); } catch { /* ignore */ }
+        } else {
+          try { window.localStorage.removeItem(REMEMBERED_EMAIL_KEY); } catch { /* ignore */ }
+        }
+        await loginWithEmail(normalizedEmail, password);
+      } else {
+        await registerWithEmail(normalizedEmail, password);
+      }
       setAuthModalOpen(false);
-      setEmail('');
       setPassword('');
     } catch (error) {
       setAuthError(friendlyAuthError(error));
@@ -151,8 +171,8 @@ export const BottomNav: React.FC<BottomNavProps> = React.memo(({
 
   const handleLogout = async () => {
     try {
-      await logoutUser();
-      setProfileModalOpen(false);
+      const loggedOut = await logoutUser();
+      if (loggedOut) setProfileModalOpen(false);
     } catch {
       setAuthError('Chiqishda xatolik yuz berdi.');
     }
@@ -174,19 +194,25 @@ export const BottomNav: React.FC<BottomNavProps> = React.memo(({
               <button type="button" onClick={() => setAuthModalOpen(false)} className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"><X size={18} /></button>
             </div>
 
-            <form onSubmit={submitAuth} className="space-y-3">
+            <form onSubmit={submitAuth} className="space-y-3" autoComplete="on">
               <div className="relative">
                 <Mail size={17} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input value={email} onChange={e => { setEmail(e.target.value); setForgotMessage(''); }} type="email" autoComplete="email" required placeholder="Email" className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 pl-10 pr-3 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500" />
+                <input value={email} onChange={e => { setEmail(e.target.value); setForgotMessage(''); }} type="email" name="email" autoComplete="username email" required placeholder="Email" className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 pl-10 pr-3 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500" />
               </div>
               <div className="relative">
                 <Lock size={17} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input value={password} onChange={e => setPassword(e.target.value)} type="password" autoComplete={authMode === 'login' ? 'current-password' : 'new-password'} required minLength={6} placeholder="Parol" className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 pl-10 pr-3 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500" />
+                <input value={password} onChange={e => setPassword(e.target.value)} type="password" name="password" autoComplete={authMode === 'login' ? 'current-password' : 'new-password'} required minLength={6} placeholder="Parol" className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 pl-10 pr-3 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500" />
               </div>
               {authMode === 'login' && (
-                <button disabled={authLoading || forgotLoading} type="button" onClick={handleForgotPassword} className="w-full text-right text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline disabled:opacity-60 cursor-pointer">
-                  {forgotLoading ? 'Yuborilmoqda…' : 'Parolni unutdingizmi?'}
-                </button>
+                <>
+                  <label className="flex items-center gap-2 px-1 py-1 text-xs text-slate-600 dark:text-slate-300 cursor-pointer select-none">
+                    <input type="checkbox" checked={rememberEmail} onChange={e => setRememberEmail(e.target.checked)} className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
+                    <span>Emailni eslab qolish</span>
+                  </label>
+                  <button disabled={authLoading || forgotLoading} type="button" onClick={handleForgotPassword} className="w-full text-right text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline disabled:opacity-60 cursor-pointer">
+                    {forgotLoading ? 'Yuborilmoqda…' : 'Parolni unutdingizmi?'}
+                  </button>
+                </>
               )}
               {authError && <div className="rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900 p-3 text-xs font-semibold text-rose-700 dark:text-rose-300">{authError}</div>}
               {forgotMessage && <div className="rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900 p-3 text-xs font-semibold text-emerald-700 dark:text-emerald-300">{forgotMessage}</div>}
@@ -196,7 +222,8 @@ export const BottomNav: React.FC<BottomNavProps> = React.memo(({
             <div className="flex items-center gap-3 my-4"><div className="h-px flex-1 bg-slate-200 dark:bg-slate-700" /><span className="text-[11px] text-slate-400">yoki</span><div className="h-px flex-1 bg-slate-200 dark:bg-slate-700" /></div>
             <button disabled={authLoading || forgotLoading} type="button" onClick={handleGoogle} className="w-full flex items-center justify-center gap-2 rounded-xl border border-slate-200 dark:border-slate-700 py-3 text-sm font-bold hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-60 cursor-pointer"><Chrome size={17} /> Google bilan davom etish</button>
 
-            <button type="button" onClick={() => { setAuthMode(authMode === 'login' ? 'register' : 'login'); setAuthError(''); setForgotMessage(''); }} className="w-full mt-4 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer">
+            <p className="mt-3 text-center text-[10px] text-slate-400">Parolni saqlashni tasdiqlash oynasi brauzeringiz tomonidan ko‘rsatiladi.</p>
+            <button type="button" onClick={() => { setAuthMode(authMode === 'login' ? 'register' : 'login'); setAuthError(''); setForgotMessage(''); }} className="w-full mt-3 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer">
               {authMode === 'login' ? navLabels.register : navLabels.login}
             </button>
           </div>
