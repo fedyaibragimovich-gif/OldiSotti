@@ -22,12 +22,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const body = (req.body || {}) as Record<string, any>;
-  const token = body.botToken || process.env.TELEGRAM_BOT_TOKEN;
-  const channelId = body.channelId || process.env.TELEGRAM_CHANNEL_ID || '@OSot_uz';
+  // Never accept a bot token from the client. Secrets must stay server-side.
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  const channelId = process.env.TELEGRAM_CHANNEL_ID || String(body.channelId || '').trim() || '@OSot_uz';
 
   if (!token) {
     return res.status(503).json({ success: false, configured: false, error: 'Telegram token is not configured on the server' });
   }
+
   const listing = body.listing as Record<string, any> | undefined;
   const baseUrl = String(body.appUrl || '').trim() || 'https://oldisotti.uz';
   const url = listing
@@ -42,13 +44,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(409).json({ success: false, error: 'Only active listings can be published to Telegram' });
   }
 
-  // Telegram channel posts intentionally contain no seller name, phone,
-  // Telegram username, price, location, description, or other contact data.
-  // The channel is only a gateway to the listing on OldiSotti.
+  // Public channel posts intentionally contain only a link to the listing.
   const message = `<a href="${escapeHtml(url)}">OldiSotti'da e'lonni ko'rish</a>`;
 
-  async function sendMessage(): Promise<Response> {
-    return fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+  try {
+    const telegramResponse = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -58,10 +58,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         disable_web_page_preview: false
       })
     });
-  }
 
-  try {
-    const telegramResponse = await sendMessage();
     const telegramData = await telegramResponse.json().catch(() => ({})) as {
       ok?: boolean;
       result?: { message_id?: number };

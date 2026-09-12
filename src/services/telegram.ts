@@ -1,5 +1,4 @@
-import { Listing, Currency } from '../types';
-import { regions } from '../data/locations';
+import { Listing } from '../types';
 
 export interface TelegramPostResponse {
   success: boolean;
@@ -22,50 +21,18 @@ export interface TelegramConnectionResponse {
   message?: string;
 }
 
-function formatPriceText(price: number, currency: Currency): string {
-  const formatted = price.toLocaleString('uz-UZ');
-  return currency === 'USD' ? `$${formatted}` : `${formatted} so'm`;
-}
-
 export function formatTelegramPostPreview(listing: Listing, appUrl?: string): string {
   const baseUrl = appUrl || (typeof window !== 'undefined' ? window.location.origin : 'https://oldisotti.uz');
-  const listingUrl = `${baseUrl}/?listing=${listing.id}`;
-  const price = formatPriceText(listing.price, listing.currency);
-  const reg = regions.find(r => r.id === listing.location.region);
-  const location = reg ? reg.name.uz : listing.location.region;
-  const condition = listing.condition === 'new' ? '✨ Yangi' : '🔄 Ishlatilgan';
-  const vipBadge = listing.isVip ? ' ⭐ [VIP E\'lon]' : '';
-  const shortDesc = listing.description.length > 220 ? `${listing.description.slice(0, 220)}...` : listing.description;
-
-  return [
-    `📢 <b>${listing.title.toUpperCase()}</b>${vipBadge}`,
-    ``,
-    `💰 <b>Narxi:</b> ${price} ${listing.isNegotiable ? '(kelishiladi)' : ''}`,
-    `📍 <b>Manzil:</b> ${location}`,
-    `🏷️ <b>Holati:</b> ${condition}`,
-    listing.isDeliveryAvailable ? `🚚 <b>Yetkazib berish:</b> Sotuvchi o'zi yetkazadi` : `📦 <b>Olib ketish:</b> Olib ketiladi`,
-    ``,
-    `📝 <b>Tavsif:</b>`,
-    `<i>${shortDesc}</i>`,
-    ``,
-    `👤 <b>Sotuvchi:</b> ${listing.seller.name}`,
-    `📞 <b>Aloqa:</b> ${listing.seller.phone}`,
-    ``,
-    `🔗 <b>Batafsil ko'rish:</b> ${listingUrl}`,
-    ``,
-    `#${listing.location.region.replace(/['`\s]/g, '')} #OldiSotti #Elonlar`
-  ].filter(Boolean).join('\n');
+  return `<a href="${baseUrl}/?listing=${encodeURIComponent(listing.id)}">OldiSotti'da e'lonni ko'rish</a>`;
 }
 
 export function createTelegramShareUrl(listing: Listing, appUrl?: string): string {
   const baseUrl = appUrl || (typeof window !== 'undefined' ? window.location.origin : 'https://oldisotti.uz');
   const url = `${baseUrl}/?listing=${listing.id}`;
-  const price = formatPriceText(listing.price, listing.currency);
-  const text = `📢 ${listing.title} — ${price}\n📍 ${listing.location.region}\nOldisotti platformasida batafsil ko'ring:`;
-  return `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`;
+  return `https://t.me/share/url?url=${encodeURIComponent(url)}`;
 }
 
-/** Publish a listing through the secure Vercel endpoint. Token/settings stay server-side. */
+/** Bot credentials are never accepted from the browser. */
 export async function postListingToTelegram(
   listing: Listing,
   options?: { appUrl?: string; channelId?: string; botToken?: string }
@@ -75,12 +42,7 @@ export async function postListingToTelegram(
     const res = await fetch('/api/telegram/post-listing', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        listing,
-        appUrl: baseUrl,
-        channelId: options?.channelId,
-        botToken: options?.botToken
-      })
+      body: JSON.stringify({ listing, appUrl: baseUrl, channelId: options?.channelId })
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.success) {
@@ -93,12 +55,12 @@ export async function postListingToTelegram(
   }
 }
 
-export async function testTelegramConnection(botToken?: string, channelId?: string): Promise<TelegramConnectionResponse> {
+export async function testTelegramConnection(_botToken?: string, channelId?: string): Promise<TelegramConnectionResponse> {
   try {
     const res = await fetch('/api/telegram/test-connection', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ botToken, channelId })
+      body: JSON.stringify({ channelId })
     });
     return (await res.json().catch(() => ({}))) as TelegramConnectionResponse;
   } catch (err: any) {
@@ -109,7 +71,9 @@ export async function testTelegramConnection(botToken?: string, channelId?: stri
 export async function notifySellerOnTelegram(params: { sellerTelegram?: string; listingTitle: string; buyerName: string; messageText: string; listingId: string }): Promise<boolean> {
   try {
     const res = await fetch('/api/telegram/send-notification', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(params)
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params)
     });
     const data = await res.json();
     return Boolean(data.success);

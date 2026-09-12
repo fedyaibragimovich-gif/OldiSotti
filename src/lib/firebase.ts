@@ -1,6 +1,6 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
-import { getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, onSnapshot, writeBatch, increment, query, where, or, limit, orderBy } from 'firebase/firestore';
+import { getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, onSnapshot, writeBatch, increment, query, where, or, limit, orderBy, deleteField } from 'firebase/firestore';
 import { Listing, Conversation, ChatMessage, PlatformSettings, ModerationReport, AppNotification } from '../types';
 import firebaseConfig from '../../firebase-applet-config.json';
 
@@ -42,14 +42,16 @@ export async function saveNotificationToDb(notification: AppNotification): Promi
   await setDoc(doc(db, NOTIFICATIONS_COLLECTION, notification.id), notification);
 }
 
-export function subscribeToPlatformSettings(onSuccess: (settings: PlatformSettings) => void, onError?: (err: Error) => void) { try { return onSnapshot(doc(db, SETTINGS_COLLECTION, 'global_config'), async (docSnap) => { if (!docSnap.exists()) return; const rawSettings = docSnap.data() as PlatformSettings; onSuccess(rawSettings); }, (err) => { console.warn('Platform settings subscription error:', err); onError?.(err); }); } catch (err: any) { onError?.(err); return () => {}; } }
+export function subscribeToPlatformSettings(onSuccess: (settings: PlatformSettings) => void, onError?: (err: Error) => void) { try { return onSnapshot(doc(db, SETTINGS_COLLECTION, 'global_config'), (docSnap) => { if (!docSnap.exists()) return; const rawSettings = docSnap.data() as PlatformSettings; const { telegramBotToken: _ignoredToken, ...safeSettings } = rawSettings as PlatformSettings & { telegramBotToken?: string }; onSuccess(safeSettings as PlatformSettings); }, (err) => { console.warn('Platform settings subscription error:', err); onError?.(err); }); } catch (err: any) { onError?.(err); return () => {}; } }
+
 export async function savePlatformSettingsToDb(settings: PlatformSettings): Promise<void> {
+  const { telegramBotToken: _ignoredToken, ...publicSettings } = settings as PlatformSettings & { telegramBotToken?: string };
   const sanitizedSettings: PlatformSettings = {
-    ...settings,
+    ...publicSettings,
     telegramChannelId: (settings.telegramChannelId || '').trim() || '@OSot_uz',
     telegramBotUsername: (settings.telegramBotUsername || '').trim().replace(/^@/, '') || 'OSotBot'
   };
-  await setDoc(doc(db, SETTINGS_COLLECTION, 'global_config'), sanitizedSettings, { merge: true });
+  await setDoc(doc(db, SETTINGS_COLLECTION, 'global_config'), { ...sanitizedSettings, telegramBotToken: deleteField() }, { merge: true });
 }
 export function subscribeToModerationReports(onSuccess: (reports: ModerationReport[]) => void, onError?: (err: Error) => void) { try { return onSnapshot(collection(db, REPORTS_COLLECTION), (snapshot) => { const items: ModerationReport[] = []; snapshot.forEach((docSnap) => items.push({ ...(docSnap.data() as ModerationReport), id: docSnap.id })); onSuccess(items); }, (err) => { console.warn('Reports subscription error:', err); onError?.(err); }); } catch (err: any) { onError?.(err); return () => {}; } }
 export async function saveReportToDb(report: ModerationReport): Promise<void> { const currentUid = auth.currentUser?.uid; if (!currentUid) throw new Error('Authentication required.'); const safeReport: ModerationReport = { ...report, reporterId: currentUid }; await setDoc(doc(db, REPORTS_COLLECTION, report.id), safeReport); }

@@ -6,11 +6,10 @@ export default async function handler(req: any, res: any) {
     return res.status(200).end();
   }
 
+  // Do not expose whether server-side secrets are configured.
   res.status(200).json({
     status: 'ok',
     platform: 'OldiSotti Uzbekistan Classifieds API',
-    hasGeminiKey: Boolean(process.env.GEMINI_API_KEY),
-    hasTelegramToken: Boolean(process.env.TELEGRAM_BOT_TOKEN),
     timestamp: new Date().toISOString()
   });
 }
