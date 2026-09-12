@@ -39,4 +39,11 @@ export const resetPassword = (email: string) => {
 };
 
 export const loginWithGoogle = () => signInWithPopup(auth, new GoogleAuthProvider());
-export const logoutUser = async () => { await signOut(auth); return true; };
+export const logoutUser = async () => {
+  if (typeof window !== 'undefined') {
+    const confirmed = window.confirm('Akkauntdan chiqmoqchimisiz?');
+    if (!confirmed) return false;
+  }
+  await signOut(auth);
+  return true;
+};
