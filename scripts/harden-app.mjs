@@ -49,6 +49,12 @@ const myListingsOld = `  // User's own listings (posted by user-self or default)
 const myListingsNew = `  // User's own listings are strictly bound to the authenticated Firebase UID.\n  const myListings = useMemo(() => {\n    if (!currentUser) return [];\n    return listings.filter((l) => l.userId === currentUser.uid);\n  }, [listings, currentUser]);`;
 if (s.includes(myListingsOld)) s = s.replace(myListingsOld, myListingsNew);
 
+// Only active listings belong in the public marketplace feed.
+s = s.replace(
+  `      // Hide listings pending review or rejected from public search feed\n      if (item.status === 'pending' || item.status === 'rejected') {\n        return false;\n      }`,
+  `      // Only active listings are visible in the public marketplace feed.\n      if (item.status && item.status !== 'active') {\n        return false;\n      }`
+);
+
 // Persist a new listing before showing it locally. Also propagate the moderation status
 // back to the submitted object so the success screen can tell the user the truth.
 const addListingStart = s.indexOf('  // Add new listing handler\n  const handleAddListing = async (newListing: Listing) => {');
@@ -81,6 +87,23 @@ if (vipStart !== -1 && vipEnd !== -1) {
   const safeVipHandler = `  // VIP is never granted directly from the browser.\n  const handleUpgradeToVip = async (_id: string) => {\n    window.alert("VIP faqat tasdiqlangan to'lovdan keyin faollashtiriladi.");\n  };`;
   s = s.slice(0, vipStart) + safeVipHandler + s.slice(vipEnd);
 }
+
+// Support shareable /?listing=<id> links used by Telegram and the Share button.
+const selectMarker = `  // Centralized selection handler that tracks recently viewed listings\n  const handleSelectListing = (listing: Listing) => {`;
+if (s.includes(selectMarker) && !s.includes('Open an active listing from a shareable URL')) {
+  const deepLinkEffect = `  // Open an active listing from a shareable URL such as /?listing=olx-123.\n  useEffect(() => {\n    const listingId = new URLSearchParams(window.location.search).get('listing');\n    if (!listingId || selectedListing?.id === listingId) return;\n    const linked = listings.find((item) => item.id === listingId);\n    if (!linked || (linked.status && linked.status !== 'active')) return;\n    setSelectedListing(linked);\n  }, [listings, selectedListing?.id]);\n\n`;
+  s = s.replace(selectMarker, deepLinkEffect + selectMarker);
+}
+
+s = s.replace(
+  `  const handleSelectListing = (listing: Listing) => {\n    setSelectedListing(listing);`,
+  `  const handleSelectListing = (listing: Listing) => {\n    const url = new URL(window.location.href);\n    url.searchParams.set('listing', listing.id);\n    window.history.replaceState({}, '', url);\n    setSelectedListing(listing);`
+);
+
+s = s.replace(
+  `          onClose={() => setSelectedListing(null)}`,
+  `          onClose={() => {\n            const url = new URL(window.location.href);\n            url.searchParams.delete('listing');\n            window.history.replaceState({}, '', url);\n            setSelectedListing(null);\n          }}`
+);
 
 // Maintenance banner must not expose an admin entry point to regular users.
 s = s.replace(
