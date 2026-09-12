@@ -1,0 +1,40 @@
+name: Deploy Firebase Storage Rules
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'storage.rules'
+      - 'firebase.json'
+      - '.github/workflows/firebase-storage-rules.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy-storage-rules:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check Firebase credentials
+        id: creds
+        shell: bash
+        env:
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+        run: |
+          if [ -z "$FIREBASE_SERVICE_ACCOUNT_JSON" ]; then
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "FIREBASE_SERVICE_ACCOUNT_JSON is not configured; skipping Storage rules deployment."
+          else
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Write service account
+        if: steps.creds.outputs.available == 'true'
+        shell: bash
+        env:
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+        run: |
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT_JSON" > /tmp/firebase-service-account.json
+      - name: Deploy Storage rules
+        if: steps.creds.outputs.available == 'true'
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: /tmp/firebase-service-account.json
+        run: npx --yes firebase-tools@latest deploy --only storage --project gen-lang-client-0261863601 --non-interactive
