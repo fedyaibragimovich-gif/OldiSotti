@@ -7,6 +7,8 @@ import {
   GoogleAuthProvider,
   signOut,
   sendPasswordResetEmail,
+  setPersistence,
+  browserLocalPersistence,
   User
 } from 'firebase/auth';
 import { auth } from './firebase';
@@ -21,8 +23,20 @@ export const isAdminUser = (user: User | null): boolean => {
 };
 
 export const subscribeToAuth = (callback: (user: User | null) => void) => onAuthStateChanged(auth, callback);
-export const loginWithEmail = (email: string, password: string) => signInWithEmailAndPassword(auth, email, password);
-export const registerWithEmail = (email: string, password: string) => createUserWithEmailAndPassword(auth, email, password);
+
+const persistAuthSession = async () => {
+  await setPersistence(auth, browserLocalPersistence);
+};
+
+export const loginWithEmail = async (email: string, password: string) => {
+  await persistAuthSession();
+  return signInWithEmailAndPassword(auth, email, password);
+};
+
+export const registerWithEmail = async (email: string, password: string) => {
+  await persistAuthSession();
+  return createUserWithEmailAndPassword(auth, email, password);
+};
 
 export const resetPassword = (email: string) => {
   const continueUrl = typeof window !== 'undefined' ? window.location.origin : undefined;
@@ -45,6 +59,8 @@ const isMobileBrowser = () => {
 };
 
 export const loginWithGoogle = async () => {
+  await persistAuthSession();
+
   const provider = new GoogleAuthProvider();
   provider.setCustomParameters({ prompt: 'select_account' });
 
