@@ -1,4 +1,4 @@
-import { isVerifiedAdmin, verifyFirebaseUser } from '../_shared';
+import { isVerifiedAdmin, verifyFirebaseUser } from '../_shared.js';
 
 type VercelRequest = {
   method?: string;
@@ -25,34 +25,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const currentUser = await verifyFirebaseUser(req);
-  if (!currentUser) {
-    return res.status(401).json({ success: false, error: 'Authentication required' });
-  }
-  if (!isVerifiedAdmin(currentUser)) {
-    return res.status(403).json({ success: false, error: 'Admin access required' });
-  }
+  if (!currentUser) return res.status(401).json({ success: false, error: 'Authentication required' });
+  if (!isVerifiedAdmin(currentUser)) return res.status(403).json({ success: false, error: 'Admin access required' });
 
   const body = (req.body || {}) as Record<string, any>;
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const channelId = process.env.TELEGRAM_CHANNEL_ID || String(body.channelId || '').trim() || '@OSot_uz';
 
-  if (!token) {
-    return res.status(503).json({ success: false, configured: false, error: 'Telegram token is not configured on the server' });
-  }
+  if (!token) return res.status(503).json({ success: false, configured: false, error: 'Telegram token is not configured on the server' });
 
   const listing = body.listing as Record<string, any> | undefined;
   const baseUrl = String(body.appUrl || '').trim() || 'https://oldisotti.uz';
-  const url = listing
-    ? `${baseUrl}/?listing=${encodeURIComponent(String(listing.id || ''))}`
-    : String(body.url || '').trim();
+  const url = listing ? `${baseUrl}/?listing=${encodeURIComponent(String(listing.id || ''))}` : String(body.url || '').trim();
 
-  if (!url) {
-    return res.status(400).json({ success: false, error: 'listing url is required' });
-  }
-
-  if (listing?.status && listing.status !== 'active') {
-    return res.status(409).json({ success: false, error: 'Only active listings can be published to Telegram' });
-  }
+  if (!url) return res.status(400).json({ success: false, error: 'listing url is required' });
+  if (listing?.status && listing.status !== 'active') return res.status(409).json({ success: false, error: 'Only active listings can be published to Telegram' });
 
   const message = `<a href="${escapeHtml(url)}">OldiSotti'da e'lonni ko'rish</a>`;
 
@@ -60,39 +47,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const telegramResponse = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: channelId,
-        text: message,
-        parse_mode: 'HTML',
-        disable_web_page_preview: false
-      })
+      body: JSON.stringify({ chat_id: channelId, text: message, parse_mode: 'HTML', disable_web_page_preview: false })
     });
-
-    const telegramData = await telegramResponse.json().catch(() => ({})) as {
-      ok?: boolean;
-      result?: { message_id?: number };
-      description?: string;
-    };
-
+    const telegramData = await telegramResponse.json().catch(() => ({})) as { ok?: boolean; result?: { message_id?: number }; description?: string };
     if (!telegramResponse.ok || !telegramData.ok) {
-      return res.status(502).json({
-        success: false,
-        configured: true,
-        error: `Telegram publish failed: ${telegramData.description || 'unknown Telegram error'}`
-      });
+      return res.status(502).json({ success: false, configured: true, error: `Telegram publish failed: ${telegramData.description || 'unknown Telegram error'}` });
     }
-
-    return res.status(200).json({
-      success: true,
-      messageId: telegramData.result?.message_id || null,
-      channel: channelId,
-      usedImage: false
-    });
+    return res.status(200).json({ success: true, messageId: telegramData.result?.message_id || null, channel: channelId, usedImage: false });
   } catch (error: any) {
-    return res.status(502).json({
-      success: false,
-      configured: true,
-      error: `Telegram publishing failed: ${error?.message || 'network error'}`
-    });
+    return res.status(502).json({ success: false, configured: true, error: `Telegram publishing failed: ${error?.message || 'network error'}` });
   }
 }
