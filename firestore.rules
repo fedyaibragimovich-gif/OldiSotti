@@ -7,13 +7,70 @@ service cloud.firestore {
         (request.auth.token.email != null && request.auth.token.email_verified == true && request.auth.token.email.lower() == 'fedya.ibragimovich@gmail.com')
       );
     }
+
     function signedIn() { return request.auth != null; }
+
+    function listingExists(listingId) {
+      return exists(/databases/$(database)/documents/listings/$(listingId));
+    }
+
+    function listingOwnerUid(listingId) {
+      return get(/databases/$(database)/documents/listings/$(listingId)).data.userId;
+    }
+
+    function isSafeNewListing() {
+      return signedIn()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.title.size() <= 80
+        && request.resource.data.description is string
+        && request.resource.data.description.size() <= 5000
+        && request.resource.data.price is number
+        && request.resource.data.price >= 0
+        && request.resource.data.images is list
+        && request.resource.data.images.size() > 0
+        && request.resource.data.images.size() <= 8
+        && request.resource.data.viewsCount is number
+        && request.resource.data.viewsCount >= 0
+        && request.resource.data.viewsCount <= 1
+        && request.resource.data.isVip == false
+        && request.resource.data.isTop == false
+        && request.resource.data.isPostedToTelegram == false
+        && request.resource.data.status in ['active', 'pending']
+        && request.resource.data.seller is map
+        && request.resource.data.seller.isVerified == false;
+    }
+
+    function isOwnerListingUpdate() {
+      return signedIn()
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.seller == resource.data.seller
+        && request.resource.data.isVip == resource.data.isVip
+        && request.resource.data.isTop == resource.data.isTop
+        && request.resource.data.isPostedToTelegram == resource.data.isPostedToTelegram
+        && request.resource.data.telegramMessageId == resource.data.telegramMessageId
+        && request.resource.data.telegramPostedAt == resource.data.telegramPostedAt
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['viewsCount']) || request.resource.data.viewsCount == resource.data.viewsCount + 1)
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['status']) || request.resource.data.status in ['active', 'reserved', 'sold']);
+    }
+
+    function isViewIncrementOnly() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewsCount'])
+        && request.resource.data.viewsCount is number
+        && resource.data.viewsCount is number
+        && request.resource.data.viewsCount == resource.data.viewsCount + 1;
+    }
+
     function isConversationParticipant() {
-      return signedIn() && (resource.data.buyerId == request.auth.uid || resource.data.sellerUserId == request.auth.uid);
+      return signedIn() && (
+        resource.data.buyerId == request.auth.uid ||
+        resource.data.sellerUserId == request.auth.uid
+      );
     }
-    function isNewConversationParticipant() {
-      return signedIn() && (request.resource.data.buyerId == request.auth.uid || request.resource.data.sellerUserId == request.auth.uid);
-    }
+
     function isConversationParticipantById(conversationId) {
       return signedIn() && (
         get(/databases/$(database)/documents/conversations/$(conversationId)).data.buyerId == request.auth.uid ||
@@ -21,21 +78,61 @@ service cloud.firestore {
       );
     }
 
+    function isSafeNewConversation() {
+      return signedIn()
+        && request.resource.data.buyerId == request.auth.uid
+        && request.resource.data.sellerUserId is string
+        && request.resource.data.sellerUserId != request.auth.uid
+        && request.resource.data.listingId is string
+        && listingExists(request.resource.data.listingId)
+        && listingOwnerUid(request.resource.data.listingId) == request.resource.data.sellerUserId
+        && request.resource.data.messages is list
+        && request.resource.data.messages.size() <= 1
+        && (request.resource.data.messages.size() == 0 || (
+          request.resource.data.messages[0].sender == 'buyer'
+          && request.resource.data.messages[0].text is string
+          && request.resource.data.messages[0].text.size() > 0
+          && request.resource.data.messages[0].text.size() <= 2000
+        ));
+    }
+
     match /listings/{listingId} {
       allow read: if true;
-      allow create: if isAdmin() || (signedIn() && request.resource.data.userId == request.auth.uid && request.resource.data.isVip == false && request.resource.data.isTop == false && request.resource.data.isPostedToTelegram == false);
-      allow update: if isAdmin() || (signedIn() && resource.data.userId == request.auth.uid && request.resource.data.userId == resource.data.userId && request.resource.data.createdAt == resource.data.createdAt && request.resource.data.seller == resource.data.seller && request.resource.data.isVip == resource.data.isVip && request.resource.data.isTop == resource.data.isTop && request.resource.data.isPostedToTelegram == resource.data.isPostedToTelegram && request.resource.data.telegramMessageId == resource.data.telegramMessageId && request.resource.data.telegramPostedAt == resource.data.telegramPostedAt && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['viewsCount']) || request.resource.data.viewsCount == resource.data.viewsCount + 1) && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['status']) || request.resource.data.status in ['active', 'reserved', 'sold']));
+      allow create: if isAdmin() || isSafeNewListing();
+      allow update: if isAdmin() || isOwnerListingUpdate() || isViewIncrementOnly();
       allow delete: if isAdmin() || (signedIn() && resource.data.userId == request.auth.uid);
     }
 
     match /conversations/{conversationId} {
       allow read: if isAdmin() || isConversationParticipant();
-      allow create: if isAdmin() || isNewConversationParticipant();
-      allow update: if isAdmin() || (isConversationParticipant() && request.resource.data.buyerId == resource.data.buyerId && request.resource.data.sellerUserId == resource.data.sellerUserId && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['listingId','listingTitle','listingPrice','listingCurrency','listingImage','sellerId','sellerName','sellerAvatar','sellerPhone']) && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['messages']) || (request.resource.data.messages.size() == resource.data.messages.size() + 1 && request.resource.data.messages[resource.data.messages.size()].sender == (resource.data.buyerId == request.auth.uid ? 'buyer' : 'seller') && request.resource.data.messages[resource.data.messages.size()].text is string && request.resource.data.messages[resource.data.messages.size()].text.size() > 0 && request.resource.data.messages[resource.data.messages.size()].text.size() <= 2000)));
+      allow create: if isAdmin() || isSafeNewConversation();
+      allow update: if isAdmin() || (
+        isConversationParticipant()
+        && request.resource.data.buyerId == resource.data.buyerId
+        && request.resource.data.sellerUserId == resource.data.sellerUserId
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'listingId','listingTitle','listingPrice','listingCurrency','listingImage',
+          'sellerId','sellerName','sellerAvatar','sellerPhone'
+        ])
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['messages']) || (
+          request.resource.data.messages.size() == resource.data.messages.size() + 1
+          && request.resource.data.messages[resource.data.messages.size()].sender == (resource.data.buyerId == request.auth.uid ? 'buyer' : 'seller')
+          && request.resource.data.messages[resource.data.messages.size()].text is string
+          && request.resource.data.messages[resource.data.messages.size()].text.size() > 0
+          && request.resource.data.messages[resource.data.messages.size()].text.size() <= 2000
+        ))
+      );
       allow delete: if isAdmin() || isConversationParticipant();
+
       match /messages/{messageId} {
         allow read: if isAdmin() || isConversationParticipantById(conversationId);
-        allow create: if isAdmin() || (isConversationParticipantById(conversationId) && request.resource.data.senderId == request.auth.uid && request.resource.data.text is string && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 2000);
+        allow create: if isAdmin() || (
+          isConversationParticipantById(conversationId)
+          && request.resource.data.senderId == request.auth.uid
+          && request.resource.data.text is string
+          && request.resource.data.text.size() > 0
+          && request.resource.data.text.size() <= 2000
+        );
         allow update, delete: if isAdmin();
       }
     }
@@ -50,21 +147,50 @@ service cloud.firestore {
     }
 
     match /moderation_reports/{reportId} {
-      allow create: if signedIn() && request.resource.data.reporterId == request.auth.uid;
+      allow create: if signedIn()
+        && request.resource.data.reporterId == request.auth.uid
+        && request.resource.data.listingId is string
+        && listingExists(request.resource.data.listingId);
       allow read: if isAdmin();
       allow update, delete: if isAdmin();
     }
 
     match /notifications/{notificationId} {
       allow read: if isAdmin() || (signedIn() && resource.data.recipientId == request.auth.uid);
-      allow create: if isAdmin() || (signedIn() && request.resource.data.type == 'message' && request.resource.data.recipientId is string && request.resource.data.recipientId != request.auth.uid && request.resource.data.chatId is string && request.resource.data.listingId is string && get(/databases/$(database)/documents/conversations/$(request.resource.data.chatId)).data.listingId == request.resource.data.listingId && (((get(/databases/$(database)/documents/conversations/$(request.resource.data.chatId)).data.buyerId == request.auth.uid) && (get(/databases/$(database)/documents/conversations/$(request.resource.data.chatId)).data.sellerUserId == request.resource.data.recipientId)) || ((get(/databases/$(database)/documents/conversations/$(request.resource.data.chatId)).data.sellerUserId == request.auth.uid) && (get(/databases/$(database)/documents/conversations/$(request.resource.data.chatId)).data.buyerId == request.resource.data.recipientId))));
-      allow update: if isAdmin() || (signedIn() && resource.data.recipientId == request.auth.uid && request.resource.data.recipientId == resource.data.recipientId && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']) && request.resource.data.read is bool);
+      allow create: if isAdmin() || (
+        signedIn()
+        && request.resource.data.type == 'message'
+        && request.resource.data.recipientId is string
+        && request.resource.data.recipientId != request.auth.uid
+        && request.resource.data.chatId is string
+        && request.resource.data.listingId is string
+        && get(/databases/$(database)/documents/conversations/$(request.resource.data.chatId)).data.listingId == request.resource.data.listingId
+        && (
+          (
+            get(/databases/$(database)/documents/conversations/$(request.resource.data.chatId)).data.buyerId == request.auth.uid
+            && get(/databases/$(database)/documents/conversations/$(request.resource.data.chatId)).data.sellerUserId == request.resource.data.recipientId
+          ) || (
+            get(/databases/$(database)/documents/conversations/$(request.resource.data.chatId)).data.sellerUserId == request.auth.uid
+            && get(/databases/$(database)/documents/conversations/$(request.resource.data.chatId)).data.buyerId == request.resource.data.recipientId
+          )
+        )
+      );
+      allow update: if isAdmin() || (
+        signedIn()
+        && resource.data.recipientId == request.auth.uid
+        && request.resource.data.recipientId == resource.data.recipientId
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read'])
+        && request.resource.data.read is bool
+      );
       allow delete: if isAdmin() || (signedIn() && resource.data.recipientId == request.auth.uid);
     }
 
     match /blocked_sellers/{blockId} {
       allow read: if isAdmin() || (signedIn() && resource.data.userId == request.auth.uid);
-      allow create: if signedIn() && request.resource.data.userId == request.auth.uid && request.resource.data.sellerUserId != request.auth.uid;
+      allow create: if signedIn()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.sellerUserId is string
+        && request.resource.data.sellerUserId != request.auth.uid;
       allow update: if false;
       allow delete: if isAdmin() || (signedIn() && resource.data.userId == request.auth.uid);
     }
