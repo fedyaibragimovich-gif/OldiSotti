@@ -1,4 +1,10 @@
 import { parseJsonBody, setCorsHeaders, verifyFirebaseUser } from '../_shared';
+import {
+  ALLOWED_PLAN_DAYS,
+  createPaymentOrderId,
+  createPendingPaymentOrder,
+  getVipAmountUzs
+} from './_shared';
 
 type VercelRequest = {
   method?: string;
@@ -14,8 +20,6 @@ type VercelResponse = {
   setHeader: (name: string, value: string) => void;
 };
 
-const VIP_PRICE_PER_DAY_UZS = 25_000;
-const ALLOWED_PLAN_DAYS = new Set([1, 3, 7]);
 const FALLBACK_SITE_URL = 'https://fedyaibragimovich-gif.vercel.app';
 
 function encodePaymeParams(params: Record<string, string>): string {
@@ -79,11 +83,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
-  const amountUzs = VIP_PRICE_PER_DAY_UZS * planDays;
+  const amountUzs = getVipAmountUzs(planDays);
   const amountTiyn = amountUzs * 100;
-  const orderId = `vip_${planDays}d_${user.localId}_${listingId}_${Date.now()}`;
-  const returnUrl = getTrustedReturnUrl();
+  const orderId = createPaymentOrderId('payme');
 
+  try {
+    await createPendingPaymentOrder({
+      req,
+      orderId,
+      provider: 'payme',
+      userId: user.localId,
+      listingId,
+      planDays,
+      amountUzs
+    });
+  } catch (error: any) {
+    res.status(error?.message === 'Listing ownership could not be verified' ? 403 : 500).json({
+      success: false,
+      error: error?.message || 'Could not create payment order'
+    });
+    return;
+  }
+
+  const returnUrl = getTrustedReturnUrl();
   const encoded = encodePaymeParams({
     m: merchantId,
     'ac.order_id': orderId,
