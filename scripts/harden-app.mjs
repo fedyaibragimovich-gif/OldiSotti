@@ -32,6 +32,13 @@ const sendMessageMarker = `  const handleSendMessage = async (chatId: string, te
 const sendMessageReplacement = `  const handleSendMessage = async (chatId: string, text: string) => {\n    const sendingConversation = conversations.find((c) => c.id === chatId);\n    const senderRole: ChatMessage['sender'] = sendingConversation?.sellerUserId === currentUser?.uid ? 'seller' : 'buyer';\n    const newMessage: ChatMessage = {\n      id: \`msg-\${Date.now()}-\${Math.random().toString(36).substr(2, 4)}\`,\n      sender: senderRole,`;
 if (s.includes(sendMessageMarker)) s = s.replace(sendMessageMarker, sendMessageReplacement);
 
+const verifyStart = s.indexOf('  const handleToggleVerifySeller = (sellerId: string) => {');
+const verifyEnd = s.indexOf('\n\n  const handleUpdateReportStatus', verifyStart);
+if (verifyStart !== -1 && verifyEnd !== -1) {
+  const secureVerifyHandler = `  const handleToggleVerifySeller = async (sellerId: string) => {\n    if (!isAdminUser(currentUser)) return;\n    const affected = listings.filter((l) => l.seller.id === sellerId || l.userId === sellerId);\n    const currentlyVerified = affected.some((l) => l.seller.isVerified) || verifiedSellerIds.includes(sellerId);\n    const newVerified = !currentlyVerified;\n\n    try {\n      for (const listing of affected) {\n        await updateListingInDb(listing.id, {\n          seller: { ...listing.seller, isVerified: newVerified }\n        });\n      }\n      setVerifiedSellerIds((prev) =>\n        newVerified ? Array.from(new Set([...prev, sellerId])) : prev.filter((id) => id !== sellerId)\n      );\n      setListings((prev) =>\n        prev.map((l) =>\n          l.seller.id === sellerId || l.userId === sellerId\n            ? { ...l, seller: { ...l.seller, isVerified: newVerified } }\n            : l\n        )\n      );\n    } catch (e) {\n      console.warn('Failed to persist seller verification:', e);\n    }\n  };`;
+  s = s.slice(0, verifyStart) + secureVerifyHandler + s.slice(verifyEnd);
+}
+
 const vipStart = s.indexOf('  // Upgrade to VIP\n  const handleUpgradeToVip = async');
 const vipEnd = s.indexOf('\n\n  // Start chat for listing', vipStart);
 if (vipStart !== -1 && vipEnd !== -1) {
@@ -40,10 +47,6 @@ if (vipStart !== -1 && vipEnd !== -1) {
 }
 
 // Maintenance banner must not expose an admin entry point to regular users.
-s = s.replace(
-  `{platformSettings.maintenanceMode && (`,
-  `{platformSettings.maintenanceMode && (`
-);
 s = s.replace(
   `          <button\n            type="button"\n            onClick={() => setIsAdminOpen(true)}\n            className="underline hover:text-rose-100 text-xs font-black cursor-pointer mr-2"\n          >\n            Admin\n          </button>`,
   `          {isAdminUser(currentUser) && (\n            <button\n              type="button"\n              onClick={() => setIsAdminOpen(true)}\n              className="underline hover:text-rose-100 text-xs font-black cursor-pointer mr-2"\n            >\n              Admin\n            </button>\n          )}`
