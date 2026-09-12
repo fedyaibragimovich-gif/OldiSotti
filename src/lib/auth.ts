@@ -10,7 +10,7 @@ import {
 } from 'firebase/auth';
 import { auth } from './firebase';
 
-export const ADMIN_UID = 'Q81AQDKw7GXYNeGdrnp2qvYgyS02';
+export const ADMIN_UID = 'Q81AQDKw7GXYNgdrnp2qvYgyS02';
 export const ADMIN_EMAILS = ['fedya.ibragimovich@gmail.com'];
 
 export const isAdminUser = (user: User | null): boolean => {
