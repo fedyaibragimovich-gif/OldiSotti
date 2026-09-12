@@ -14,7 +14,7 @@ This file is the persistent technical context for AI-assisted development of Old
 
 ## Product
 
-OldiSotti is an Uzbekistan classifieds marketplace. Default language is Uzbek, with Russian and Uzbek Cyrillic support. Currency supports UZS/USD. The UI is mobile-first, minimalist, supports dark mode, categories/subcategories, popular brands, search, filters, favorites, recently viewed listings, user auth, chat, personal listings, moderation/admin, Telegram posting, AI image generation, and payment-preparation flows.
+OldiSotti is an Uzbekistan classifieds marketplace. Default language is Uzbek, with Russian and Uzbek Cyrillic support. Currency supports UZS/USD. The UI is mobile-first, minimalist, supports dark mode, categories/subcategories, popular brands, search, filters, favorites, recently viewed listings, user auth, chat, personal listings, moderation/admin, Telegram posting, AI image generation, map location, nearby sorting, and payment-preparation flows.
 
 ## Important development rules
 
@@ -27,13 +27,13 @@ OldiSotti is an Uzbekistan classifieds marketplace. Default language is Uzbek, w
 7. Never ask users to paste secrets into chat. Secrets belong in Vercel/GitHub/Firebase environment configuration.
 8. Never grant VIP/TOP from the browser. Promotion must come from a verified server-side payment flow.
 9. The project uses `"type": "module"`; local imports in Vercel serverless API files must use `.js` where Node ESM requires it.
-10. Some production hardening is injected by prebuild scripts. Before directly editing behavior in `src/App.tsx` or `PostAdModal.tsx`, inspect `scripts/harden-app.mjs` and `scripts/require-auth.mjs` to avoid conflicts.
+10. Some production hardening is injected by prebuild scripts. Before directly editing behavior in `src/App.tsx` or `PostAdModal.tsx`, inspect the prebuild scripts to avoid conflicts.
 
 ## Build and CI
 
 `package.json` important scripts:
 
-- `prebuild`: `node scripts/remove-ai.mjs && node scripts/require-auth.mjs && node scripts/harden-app.mjs`
+- `prebuild`: `node scripts/remove-ai.mjs && node scripts/require-auth.mjs && node scripts/harden-app.mjs && node scripts/location-map.mjs`
 - `build`: Vite build plus bundled Node server
 - `lint`: `tsc --noEmit`
 
@@ -66,6 +66,18 @@ Current expectations:
 - Browser input must not be trusted for `isVip`, `isTop`, `isPostedToTelegram`, or seller verification.
 - The listing must be successfully persisted before the UI reports success.
 - If moderation is enabled, success text must say the listing was sent for review rather than falsely saying it is already public.
+
+## Map / location
+
+- Mapping uses OpenStreetMap tiles with Leaflet (`leaflet` + `@types/leaflet`).
+- Reusable component: `src/components/LocationMap.tsx`.
+- `LocationInfo` supports optional `latitude` and `longitude`.
+- Posting allows a user to place a pin manually or explicitly request browser geolocation via `navigator.geolocation`.
+- Exact street address remains optional; users can place an approximate nearby pin for privacy.
+- Listing details show the real map only when coordinates exist; legacy listings without coordinates show a fallback message.
+- The listing sort includes `distance` / “Menga yaqin”. Selecting it requests browser location permission and sorts coordinate-enabled listings by Haversine distance. Listings without coordinates fall to the end.
+- Browser location is cached only in localStorage under `oldisotti_user_location` for nearby sorting.
+- Production wiring for PostAd, ListingDetail, App sorting, and ListingFilters is injected by `scripts/location-map.mjs`; inspect that script before changing related source behavior.
 
 ## Listing status behavior
 
@@ -182,6 +194,12 @@ Long-term priority: migrate listing images to Firebase Storage or another object
   - hardens listing publication flow
   - supports listing deep links / active-only public visibility
 
+- `scripts/location-map.mjs`
+  - wires the Leaflet picker into posting
+  - persists optional latitude/longitude in listing location
+  - replaces the old mock map in listing details with the real map
+  - adds browser-location-based “Menga yaqin” sorting
+
 When changing source code, verify the prebuild scripts do not overwrite or re-patch the same behavior.
 
 ## Recent important fixes
@@ -196,6 +214,7 @@ When changing source code, verify the prebuild scripts do not overwrite or re-pa
 - Google login flow fixed.
 - Moderation report subscription restricted to admins.
 - Security headers added in `vercel.json`.
+- OpenStreetMap/Leaflet location picker, listing map, and nearby sorting added.
 
 ## Before every new task
 
