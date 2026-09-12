@@ -25,6 +25,13 @@ if (s.includes(imageValidationMarker) && !s.includes('totalImagePayload')) {
   s = s.replace(imageValidationMarker, imageValidationReplacement);
 }
 
+// Mobile devices do not have hover, so the image delete control must always be visible there.
+// Keep the cleaner hover-only behavior on larger screens.
+s = s.replace(
+  'className="absolute top-1 right-1 p-1 rounded-full bg-black/60 text-white hover:bg-rose-600 transition-colors opacity-0 group-hover:opacity-100 cursor-pointer"',
+  'className="absolute top-1 right-1 z-10 p-1.5 rounded-full bg-black/70 text-white hover:bg-rose-600 transition-colors opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100 cursor-pointer shadow-sm" aria-label="Rasmni o‘chirish"'
+);
+
 // Do not trust promotion or verification flags from the browser. Paid promotion
 // is enabled only after a verified server-side payment flow.
 s = s.replace('      isTop: isVip,\n      isVip,', '      isTop: false,\n      isVip: false,\n      isPostedToTelegram: false,');
