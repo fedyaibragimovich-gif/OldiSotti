@@ -3,6 +3,7 @@ import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   signInWithPopup,
+  signInWithRedirect,
   GoogleAuthProvider,
   signOut,
   sendPasswordResetEmail,
@@ -38,7 +39,31 @@ export const resetPassword = (email: string) => {
   );
 };
 
-export const loginWithGoogle = () => signInWithPopup(auth, new GoogleAuthProvider());
+const isMobileBrowser = () => {
+  if (typeof navigator === 'undefined') return false;
+  return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+};
+
+export const loginWithGoogle = async () => {
+  const provider = new GoogleAuthProvider();
+  provider.setCustomParameters({ prompt: 'select_account' });
+
+  if (isMobileBrowser()) {
+    await signInWithRedirect(auth, provider);
+    return;
+  }
+
+  try {
+    await signInWithPopup(auth, provider);
+  } catch (error: any) {
+    if (error?.code === 'auth/popup-blocked' || error?.code === 'auth/operation-not-supported-in-this-environment') {
+      await signInWithRedirect(auth, provider);
+      return;
+    }
+    throw error;
+  }
+};
+
 export const logoutUser = async () => {
   if (typeof window !== 'undefined') {
     const confirmed = window.confirm('Akkauntdan chiqmoqchimisiz?');
