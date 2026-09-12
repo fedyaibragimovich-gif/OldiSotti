@@ -10,6 +10,13 @@ if (!s.includes("import { auth } from '../lib/firebase';")) {
   );
 }
 
+if (!s.includes("import { uploadListingImagesToStorage } from '../lib/storage';")) {
+  s = s.replace(
+    "import { auth } from '../lib/firebase';",
+    "import { auth } from '../lib/firebase';\nimport { uploadListingImagesToStorage } from '../lib/storage';"
+  );
+}
+
 // Submission must wait for the database write. Otherwise the UI can show a false success state.
 s = s.replace(
   '  onAddListing: (newListing: Listing) => void;',
@@ -23,9 +30,8 @@ if (s.includes(marker)) {
   s = s.replace(marker, replacement);
 }
 
-// Accept source images up to 10 MB each, but compress them in-browser before storing
-// as data URLs. This keeps the current Firestore-document storage approach below its
-// strict document-size ceiling until image storage is migrated to Firebase Storage.
+// Accept source images up to 10 MB each, compress them in-browser for faster uploads,
+// then upload local images to Firebase Storage during submission.
 const oldUploadHandler = `  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -48,8 +54,8 @@ const newUploadHandler = `  const handleFileUpload = async (e: React.ChangeEvent
 
     const MAX_SOURCE_BYTES = 10 * 1024 * 1024;
     const MAX_IMAGES = 4;
-    const MAX_SIDE = 1280;
-    const JPEG_QUALITY = 0.72;
+    const MAX_SIDE = 1600;
+    const JPEG_QUALITY = 0.82;
 
     const oversized = selectedFiles.find((file) => file.size > MAX_SOURCE_BYTES);
     if (oversized) {
@@ -100,13 +106,21 @@ if (s.includes(oldUploadHandler)) {
   s = s.replace(oldUploadHandler, newUploadHandler);
 }
 
-// Firestore documents have a strict size limit. Prevent large base64 image payloads
-// from creating listings that only appear successful locally but fail in the cloud.
 const imageValidationMarker = "    if (images.length === 0) {\n      setErrorMsg('Kamida bitta fotosurat yuklang');\n      return;\n    }\n";
-const imageValidationReplacement = `${imageValidationMarker}\n    const totalImagePayload = images.reduce((sum, image) => sum + image.length, 0);\n    if (images.length > 4) {\n      setErrorMsg('Ko\\'pi bilan 4 ta rasm yuklash mumkin.');\n      return;\n    }\n    if (totalImagePayload > 700000) {\n      setErrorMsg('Rasmlar siqilgandan keyin ham umumiy hajm juda katta. Kamroq rasm yuklang yoki kichikroq rasmlarni tanlang.');\n      return;\n    }\n`;
-if (s.includes(imageValidationMarker) && !s.includes('totalImagePayload')) {
+const imageValidationReplacement = `${imageValidationMarker}\n    if (images.length > 4) {\n      setErrorMsg('Ko\\'pi bilan 4 ta rasm yuklash mumkin.');\n      return;\n    }\n`;
+if (s.includes(imageValidationMarker) && !s.includes("Ko\\'pi bilan 4 ta rasm yuklash mumkin.")) {
   s = s.replace(imageValidationMarker, imageValidationReplacement);
 }
+
+// Upload embedded local images to Firebase Storage before creating the listing.
+// Until Storage rules are actually deployed, the helper safely falls back to embedded
+// images; the old Firestore payload guard below prevents oversized documents.
+const listingMarker = "    const newListing: Listing = {\n      id: `olx-${Date.now()}`,";
+const listingReplacement = `    const listingId = \`olx-\${Date.now()}\`;\n    const uploadResult = await uploadListingImagesToStorage(listingId, images);\n    const storedImages = uploadResult.images;\n    const embeddedPayload = storedImages\n      .filter((image) => image.startsWith('data:image/'))\n      .reduce((sum, image) => sum + image.length, 0);\n    if (embeddedPayload > 700000) {\n      setErrorMsg('Firebase Storage hali tayyor emas va rasmlar Firestore uchun juda katta. Storage qoidalarini yoqib, qayta urinib ko\\'ring.');\n      return;\n    }\n\n    const newListing: Listing = {\n      id: listingId,`;
+if (s.includes(listingMarker)) {
+  s = s.replace(listingMarker, listingReplacement);
+}
+s = s.replace('      images,\n      createdAt:', '      images: storedImages,\n      createdAt:');
 
 // Mobile devices do not have hover, so the image delete control must always be visible there.
 // Keep the cleaner hover-only behavior on larger screens.
