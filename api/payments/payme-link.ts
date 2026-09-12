@@ -1,12 +1,22 @@
+import { parseJsonBody, setCorsHeaders, verifyFirebaseUser } from '../_shared';
+
 type VercelRequest = {
   method?: string;
   body?: unknown;
+  headers?: Record<string, string | string[] | undefined>;
+  on?: (...args: any[]) => void;
 };
 
 type VercelResponse = {
   status: (code: number) => VercelResponse;
   json: (body: unknown) => void;
+  end: () => void;
+  setHeader: (name: string, value: string) => void;
 };
+
+const VIP_PRICE_PER_DAY_UZS = 25_000;
+const ALLOWED_PLAN_DAYS = new Set([1, 3, 7]);
+const FALLBACK_SITE_URL = 'https://fedyaibragimovich-gif.vercel.app';
 
 function encodePaymeParams(params: Record<string, string>): string {
   return Buffer.from(
@@ -17,33 +27,63 @@ function encodePaymeParams(params: Record<string, string>): string {
   ).toString('base64url');
 }
 
-export default function handler(req: VercelRequest, res: VercelResponse) {
+function getTrustedReturnUrl(): string {
+  const configured = String(process.env.PUBLIC_SITE_URL || process.env.SITE_URL || FALLBACK_SITE_URL).trim();
+  try {
+    const url = new URL(configured);
+    if (url.protocol !== 'https:') return FALLBACK_SITE_URL;
+    return url.origin;
+  } catch {
+    return FALLBACK_SITE_URL;
+  }
+}
+
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  setCorsHeaders(res);
+
+  if (req.method === 'OPTIONS') {
+    res.status(204).end();
+    return;
+  }
+
   if (req.method !== 'POST') {
-    return res.status(405).json({ success: false, error: 'Method not allowed' });
+    res.status(405).json({ success: false, error: 'Method not allowed' });
+    return;
+  }
+
+  const user = await verifyFirebaseUser(req);
+  if (!user) {
+    res.status(401).json({ success: false, error: 'Authentication required' });
+    return;
   }
 
   const merchantId = process.env.PAYME_MERCHANT_ID;
   if (!merchantId) {
-    return res.status(503).json({
+    res.status(503).json({
       success: false,
       configured: false,
       error: 'Payme merchant is not configured on the server'
     });
+    return;
   }
 
-  const body = (req.body || {}) as Record<string, unknown>;
-  const orderId = String(body.orderId || '').trim();
-  const amountUzs = Number(body.amountUzs);
-  const returnUrl = String(body.returnUrl || 'https://oldisotti.uz').trim();
+  const body = await parseJsonBody(req);
+  const listingId = String(body?.listingId || '').trim();
+  const planDays = Number(body?.planDays);
 
-  if (!orderId || !Number.isInteger(amountUzs) || amountUzs <= 0) {
-    return res.status(400).json({
+  if (!/^[-A-Za-z0-9_]{3,128}$/.test(listingId) || !Number.isInteger(planDays) || !ALLOWED_PLAN_DAYS.has(planDays)) {
+    res.status(400).json({
       success: false,
-      error: 'orderId and a positive integer amountUzs are required'
+      error: 'Valid listingId and planDays (1, 3 or 7) are required'
     });
+    return;
   }
 
+  const amountUzs = VIP_PRICE_PER_DAY_UZS * planDays;
   const amountTiyn = amountUzs * 100;
+  const orderId = `vip_${planDays}d_${user.localId}_${listingId}_${Date.now()}`;
+  const returnUrl = getTrustedReturnUrl();
+
   const encoded = encodePaymeParams({
     m: merchantId,
     'ac.order_id': orderId,
@@ -53,10 +93,12 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
     cr: '860'
   });
 
-  return res.status(200).json({
+  res.status(200).json({
     success: true,
     provider: 'payme',
     orderId,
+    listingId,
+    planDays,
     amountUzs,
     checkoutUrl: `https://checkout.paycom.uz/${encoded}`
   });
