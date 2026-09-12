@@ -1,35 +1,23 @@
 import fs from 'fs';
 
+// Keep the AI product-image UI in the production build, but replace the old
+// demo/preset generator with the secure server endpoint.
 const post = 'src/components/PostAdModal.tsx';
 let s = fs.readFileSync(post, 'utf8');
 
-s = s.replace("import React, { useState, useEffect } from 'react';", "import React, { useState } from 'react';");
-s = s.replace(/\n  Image as ImageIcon,\n  Wand2,\n  RefreshCw,\n  Loader2,\n  Sliders,\n  AlertCircle,/, '\n  AlertCircle,');
-s = s.replace(/\nconst SAMPLE_PHOTO_PRESETS = \[[\s\S]*?\n\];\n\ninterface SmartSuggestion[\s\S]*?\n\];\n\nexport const PostAdModal/, '\nexport const PostAdModal');
-s = s.replace(/\n  \/\/ AI image generation state[\s\S]*?\n  const selectedCategory =/, '\n  const selectedCategory =');
-s = s.replace(/\n  \/\/ Sync default style when category changes[\s\S]*?\n  \}, \[categoryId\]\);\n/, '\n');
-s = s.replace(/\n  const handleGenerateAiPhoto = async \([\s\S]*?\n  \};\n\n  const handleFileUpload =/, '\n  const handleFileUpload =');
-s = s.replace(/\n  const handleAddPresetPhoto = \(url: string\) => \{[\s\S]*?\n  \};\n/, '\n');
-s = s.replace(/\n              \/\* Smart Auto-Detected Model Suggestion Banners for ALL suggestions \*\/[\s\S]*?\n              \}\)\(\)\}\n            <\/div>/, '\n            </div>');
-s = s.replace(/\n                \/\* AI Quick Generate Trigger Card \*\/[\s\S]*?\n                <\/button>/, '');
-s = s.replace(/\n              \/\* AI Image Generator Showcase Card \*\/[\s\S]*?(?=\n            \{\/\* 4\. Price)/, '');
+const start = s.indexOf('  const handleGenerateAiPhoto = async');
+const end = s.indexOf('  const handleAddPresetPhoto =', start);
+
+if (start !== -1 && end !== -1) {
+  const realGenerator = `  const handleGenerateAiPhoto = async (customPrompt?: string) => {\n    setIsGeneratingAi(true);\n    setErrorMsg('');\n\n    try {\n      const prompt = (customPrompt || aiPrompt || title || 'Mahsulot').trim();\n      const styleLabel = {\n        studio: 'clean professional e-commerce studio photography, soft neutral background',\n        lifestyle: 'premium lifestyle product photography, natural realistic environment',\n        minimalist: 'minimalist premium product photography, clean composition and soft lighting',\n        automotive: 'professional automotive/product photography, realistic showroom or outdoor lighting'\n      }[aiStyle];\n\n      const response = await fetch('/api/ai-product-image', {\n        method: 'POST',\n        headers: { 'Content-Type': 'application/json' },\n        body: JSON.stringify({\n          title,\n          prompt,\n          style: styleLabel,\n          imageDataUrl: images[0] || null\n        })\n      });\n\n      const data = await response.json().catch(() => ({}));\n      if (!response.ok || !data.imageDataUrl) {\n        throw new Error(data.error || 'AI rasm yaratishda xatolik yuz berdi.');\n      }\n\n      setImages(prev => [data.imageDataUrl, ...prev.filter(img => img !== data.imageDataUrl)]);\n      setLastGenerated({ url: data.imageDataUrl, source: 'ai' });\n    } catch (error: any) {\n      console.error('AI image generation error:', error);\n      setErrorMsg(error?.message || 'AI rasm yaratishda xatolik yuz berdi.');\n    } finally {\n      setIsGeneratingAi(false);\n    }\n  };\n\n\n`;
+  s = s.slice(0, start) + realGenerator + s.slice(end);
+}
+
 fs.writeFileSync(post, s);
 
+// Remove the admin-controlled announcement banner from the app shell, as before.
 const app = 'src/App.tsx';
 let a = fs.readFileSync(app, 'utf8');
 a = a.replace("import { Megaphone, AlertTriangle } from 'lucide-react';", "import { AlertTriangle } from 'lucide-react';");
 a = a.replace(/\n\s*\{\/\* Platform Announcement Banner \(Admin Controlled\) \*\/\}\s*\{platformSettings\.isAnnouncementActive && platformSettings\.announcementText && \(\s*<div[\s\S]*?<\/div>\s*\)\}\n/, '\n');
 fs.writeFileSync(app, a);
-
-const server = 'server.ts';
-let t = fs.readFileSync(server, 'utf8');
-t = t.replace("import { GoogleGenAI } from '@google/genai';\n", '');
-t = t.replace(/\n\/\/ High-quality contextual placeholder fallback library[\s\S]*?\nlet geminiQuotaCooldownUntil = 0;\n/, '\n');
-t = t.replace(/\n  \/\/ 1\. Health check endpoint[\s\S]*?\n  \/\/ Helper to escape HTML characters for Telegram HTML parse_mode/, `\n  // 1. Health check endpoint\n  app.get('/api/health', (req, res) => {\n    res.json({\n      status: 'ok',\n      timestamp: new Date().toISOString()\n    });\n  });\n\n  // Helper to escape HTML characters for Telegram HTML parse_mode`);
-fs.writeFileSync(server, t);
-
-const pkgPath = 'package.json';
-const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
-if (pkg.dependencies?.['@google/genai']) delete pkg.dependencies['@google/genai'];
-if (!pkg.scripts.prebuild) pkg.scripts.prebuild = 'node scripts/remove-ai.mjs';
-fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n');
