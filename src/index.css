@@ -181,9 +181,8 @@ body:has(.slide-in-from-right) {
   max-width: 100vw;
 }
 
-/* Admin panel: the save/test feedback was hidden on mobile by `hidden sm:flex`.
-   Keep it visible on narrow screens too, without changing other responsive UI. */
-.fixed.inset-0.z-50 > div > div:first-child > div:last-child > div.hidden.sm\\:flex {
+/* Admin panel: keep the save/test feedback visible on narrow screens too. */
+.fixed.inset-0.z-50 > div > div:first-child > div:last-child > div.hidden[class~="sm:flex"] {
   display: flex !important;
   max-width: min(70vw, 520px);
   overflow: hidden;
