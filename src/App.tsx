@@ -7,13 +7,14 @@ import {
   Conversation,
   ChatMessage,
   PlatformSettings,
-  ModerationReport
+  ModerationReport,
+  AppNotification
 } from './types';
 import { mockListings, mockConversations } from './data/mockListings';
 import { USD_TO_UZS_RATE } from './utils/formatters';
 import { getTranslation } from './data/translations';
 import { initialPlatformSettings, initialModerationReports } from './data/adminData';
-import { Megaphone, AlertTriangle } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
 import {
   subscribeToListings,
   seedInitialListingsIfEmpty,
@@ -28,7 +29,10 @@ import {
   subscribeToPlatformSettings,
   savePlatformSettingsToDb,
   subscribeToModerationReports,
-  updateReportStatusInDb
+  updateReportStatusInDb,
+  blockSellerInDb,
+  unblockSellerInDb,
+  saveNotificationToDb
 } from './lib/firebase';
 
 // Components
@@ -259,6 +263,31 @@ export default function App() {
     return ['seller-001', 'seller-003'];
   });
 
+  useEffect(() => {
+    localStorage.setItem('olx_blocked_sellers', JSON.stringify(blockedSellerIds));
+  }, [blockedSellerIds]);
+
+  useEffect(() => {
+    const handleStorage = () => {
+      const saved = localStorage.getItem('olx_blocked_sellers');
+      if (saved) {
+        try {
+          setBlockedSellerIds(JSON.parse(saved));
+        } catch { /* ignore */ }
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+    window.addEventListener('olx_blocked_sellers_updated', handleStorage);
+    return () => {
+      window.removeEventListener('storage', handleStorage);
+      window.removeEventListener('olx_blocked_sellers_updated', handleStorage);
+    };
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem('olx_verified_sellers', JSON.stringify(verifiedSellerIds));
+  }, [verifiedSellerIds]);
+
   const [reports, setReports] = useState<ModerationReport[]>(() => {
     const saved = localStorage.getItem('olx_moderation_reports');
     if (saved) {
@@ -274,14 +303,6 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('olx_platform_settings', JSON.stringify(platformSettings));
   }, [platformSettings]);
-
-  useEffect(() => {
-    localStorage.setItem('olx_blocked_sellers', JSON.stringify(blockedSellerIds));
-  }, [blockedSellerIds]);
-
-  useEffect(() => {
-    localStorage.setItem('olx_verified_sellers', JSON.stringify(verifiedSellerIds));
-  }, [verifiedSellerIds]);
 
   useEffect(() => {
     localStorage.setItem('olx_moderation_reports', JSON.stringify(reports));
@@ -387,6 +408,14 @@ export default function App() {
         return false;
       }
 
+      // Hide listings from blocked sellers
+      if (
+        blockedSellerIds.includes(item.seller.id) ||
+        (item.userId && blockedSellerIds.includes(item.userId))
+      ) {
+        return false;
+      }
+
       // 1. Text Search query
       if (filters.query.trim()) {
         const q = filters.query.toLowerCase().trim();
@@ -395,8 +424,8 @@ export default function App() {
         const inSeller = item.seller.name.toLowerCase().includes(q);
         const inLocation =
           item.location.region.toLowerCase().includes(q) ||
-          item.location.district.toLowerCase().includes(q) ||
-          (item.location.address && item.location.address.toLowerCase().includes(q));
+          Boolean(item.location.district && item.location.district.toLowerCase().includes(q)) ||
+          Boolean(item.location.address && item.location.address.toLowerCase().includes(q));
 
         let inAttributes = false;
         if (item.attributes) {
@@ -502,7 +531,7 @@ export default function App() {
       if (!a.isVip && b.isVip) return 1;
       return 0;
     });
-  }, [listings, filters, currency]);
+  }, [listings, filters, currency, blockedSellerIds]);
 
   // Add new listing handler
   const handleAddListing = async (newListing: Listing) => {
@@ -564,8 +593,24 @@ export default function App() {
     }
     try {
       await saveListingToDb(updated);
+      if (updated.userId && (updated.status === 'active' || updated.status === 'rejected')) {
+        const notif: AppNotification = {
+          id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          type: 'status',
+          title: updated.status === 'active' ? "E'lon tasdiqlandi" : "E'lon rad etildi",
+          message: updated.status === 'active'
+            ? `"${updated.title}" e'loningiz muvaffaqiyatli moderatsiyadan o'tdi va e'lonlar ro'yxatiga chiqarildi.`
+            : `"${updated.title}" e'loningiz rad etildi. Sababi: ${updated.rejectionReason || "Moderatsiya qoidalariga to'g'ri kelmadi"}`,
+          createdAt: new Date().toISOString(),
+          read: false,
+          recipientId: updated.userId,
+          listingId: updated.id
+        };
+        await saveNotificationToDb(notif).catch((err) => console.warn('Could not save notification:', err));
+      }
     } catch (e) {
       console.warn('Failed to update listing in Firestore:', e);
+      throw e;
     }
   };
 
@@ -579,18 +624,38 @@ export default function App() {
       }
     } catch (e) {
       console.warn('Failed to reset catalog in Firestore:', e);
+      throw e;
     }
   };
 
-  const handleToggleBlockSeller = (sellerId: string) => {
+  const handleToggleBlockSeller = async (sellerId: string) => {
+    const isCurrentlyBlocked = blockedSellerIds.includes(sellerId);
     setBlockedSellerIds((prev) =>
-      prev.includes(sellerId) ? prev.filter((id) => id !== sellerId) : [...prev, sellerId]
+      isCurrentlyBlocked ? prev.filter((id) => id !== sellerId) : [...prev, sellerId]
     );
+    try {
+      if (isCurrentlyBlocked) {
+        await unblockSellerInDb(sellerId);
+      } else {
+        await blockSellerInDb(sellerId);
+      }
+    } catch (e) {
+      console.warn('Failed to sync blocked seller with Firestore:', e);
+    }
   };
 
   const handleToggleVerifySeller = (sellerId: string) => {
+    const isCurrentlyVerified = verifiedSellerIds.includes(sellerId);
+    const newVerified = !isCurrentlyVerified;
     setVerifiedSellerIds((prev) =>
-      prev.includes(sellerId) ? prev.filter((id) => id !== sellerId) : [...prev, sellerId]
+      isCurrentlyVerified ? prev.filter((id) => id !== sellerId) : [...prev, sellerId]
+    );
+    setListings((prev) =>
+      prev.map((l) =>
+        l.seller.id === sellerId
+          ? { ...l, seller: { ...l.seller, isVerified: newVerified } }
+          : l
+      )
     );
   };
 
@@ -797,13 +862,6 @@ export default function App() {
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 w-full max-w-full overflow-x-hidden pb-20 sm:pb-24 transition-colors duration-200 smooth-scroll">
-      {/* Platform Announcement Banner (Admin Controlled) */}
-      {platformSettings.isAnnouncementActive && platformSettings.announcementText && (
-        <div className="bg-gradient-to-r from-indigo-700 via-indigo-600 to-blue-600 text-white px-4 py-2 text-xs sm:text-sm font-semibold flex items-center justify-center gap-2 shadow-xs transition-colors z-40">
-          <Megaphone size={15} className="shrink-0" />
-          <span className="text-center tracking-tight">{platformSettings.announcementText}</span>
-        </div>
-      )}
 
       {/* Maintenance Mode Notice (Admin Controlled) */}
       {platformSettings.maintenanceMode && (
@@ -857,8 +915,7 @@ export default function App() {
         searchQuery={filters.query}
         onSearchChange={(q) => handleFilterChange({ query: q })}
         selectedRegion={filters.region}
-        selectedDistrict={filters.district}
-        onLocationChange={(r, d) => handleFilterChange({ region: r, district: d })}
+        onLocationChange={(r) => handleFilterChange({ region: r, district: '' })}
         onSearchSubmit={() => {
           // Scroll smoothly to results
           document.getElementById('listings-feed-anchor')?.scrollIntoView({ behavior: 'smooth' });
@@ -907,6 +964,7 @@ export default function App() {
             favorites={favorites}
             onToggleFavorite={handleToggleFavorite}
             onSelectListing={handleSelectListing}
+            blockedSellerIds={blockedSellerIds}
           />
         )}
 
@@ -1089,6 +1147,7 @@ export default function App() {
             await savePlatformSettingsToDb(settings);
           } catch (e) {
             console.warn('Failed to save settings to Firestore:', e);
+            throw e;
           }
         }}
         blockedSellerIds={blockedSellerIds}

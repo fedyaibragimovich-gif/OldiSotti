@@ -10,11 +10,17 @@ import {
 } from 'firebase/auth';
 import { auth } from './firebase';
 
-// OldiSotti super-admin Firebase Auth UID.
+// OldiSotti super-admin Firebase Auth UID & verified owner emails.
 export const ADMIN_UID = 'Q81AQDKw7GXYeNgdrnp2qvYgyS02';
+export const ADMIN_EMAILS = [
+  'fedya.ibragimovich@gmail.com'
+];
 
 export const isAdminUser = (user: User | null): boolean => {
-  return user?.uid === ADMIN_UID;
+  if (!user) return false;
+  if (user.uid === ADMIN_UID) return true;
+  if (user.email && ADMIN_EMAILS.includes(user.email.toLowerCase())) return true;
+  return false;
 };
 
 export const subscribeToAuth = (callback: (user: User | null) => void) => {

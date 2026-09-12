@@ -6,9 +6,8 @@ export const initialPlatformSettings: PlatformSettings = {
   vipPricePerDay: 25000,
   announcementText: "🎉 Oldisotti yangilandi! Endi barcha viloyatlar bo'yicha xavfsiz oldi-sotdi va qulay qidiruv tizimi ishlamoqda.",
   isAnnouncementActive: true,
-  telegramBotToken: '',
-  telegramChannelId: '@OSot_uz',
-  telegramBotUsername: 'OSotBot',
+  telegramChannelId: '@oldisotti_uz',
+  telegramBotUsername: 'OldisottiMarketBot',
   autoPostListingsToTelegram: true,
   postOnlyVipToTelegram: false,
   notifySellerOnChat: true

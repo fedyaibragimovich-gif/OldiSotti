@@ -113,9 +113,7 @@ export const SimilarListingsSection: React.FC<SimilarListingsSectionProps> = ({
   // Helper to format item location
   const getLocationName = (item: Listing) => {
     const reg = regions.find((r) => r.id === item.location.region);
-    const regionName = reg ? (reg.name[lang] || reg.name.uz || reg.name.ru) : item.location.region;
-    const dist = reg?.districts.find((d) => d.id === item.location.district);
-    return dist ? `${regionName}, ${dist.name[lang] || dist.name.uz || dist.name.ru}` : regionName;
+    return reg ? (reg.name[lang] || reg.name.uz || reg.name.ru) : item.location.region;
   };
 
   // If there are no other listings in this category at all, hide section

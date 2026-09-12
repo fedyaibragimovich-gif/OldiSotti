@@ -6,14 +6,12 @@ import {
   ArrowLeftRight,
   Sun,
   Moon,
-  Layers,
   ShieldCheck
 } from 'lucide-react';
 import { Language, Currency } from '../types';
 import { getTranslation } from '../data/translations';
-import { categories } from '../data/categories';
-import { CategoryIcon } from './CategoryIcon';
 import { subscribeToAuth, isAdminUser } from '../lib/auth';
+import { NotificationCenter } from './NotificationCenter';
 
 interface HeaderProps {
   lang: Language;
@@ -45,8 +43,6 @@ export const Header: React.FC<HeaderProps> = React.memo(({
   onResetToHome,
   darkMode = false,
   onToggleDarkMode,
-  selectedCategoryId = '',
-  onSelectCategory,
   onOpenAdmin,
   isDbConnected = false
 }) => {
@@ -54,21 +50,10 @@ export const Header: React.FC<HeaderProps> = React.memo(({
   const [langDropdownOpen, setLangDropdownOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const langContainerRef = useRef<HTMLDivElement>(null);
-  const quickBarRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     return subscribeToAuth((user) => setIsAdmin(isAdminUser(user)));
   }, []);
-
-  // Auto-scroll active category into view inside quick bar
-  useEffect(() => {
-    if (selectedCategoryId && quickBarRef.current) {
-      const activeBtn = quickBarRef.current.querySelector<HTMLElement>(`[data-category-id="${selectedCategoryId}"]`);
-      if (activeBtn) {
-        activeBtn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
-      }
-    }
-  }, [selectedCategoryId]);
 
   // Close language dropdown on outside click/touch or page scroll
   useEffect(() => {
@@ -91,12 +76,6 @@ export const Header: React.FC<HeaderProps> = React.memo(({
       window.removeEventListener('scroll', handleScroll);
     };
   }, []);
-
-  const allCategoryLabel = {
-    uz: 'Barchasi',
-    ru: 'Все',
-    oz: 'Барчаси'
-  }[lang] || 'Barchasi';
 
   return (
     <header className="sticky top-0 z-30 bg-white dark:bg-slate-900 border-b border-slate-200/90 dark:border-slate-800 shadow-2xs w-full max-w-full transition-colors duration-200 transform-gpu">
@@ -164,6 +143,8 @@ export const Header: React.FC<HeaderProps> = React.memo(({
             </button>
           )}
 
+          <NotificationCenter lang={lang} />
+
           <button id="header-favorites-btn" type="button" onClick={onOpenFavorites} className="relative hidden md:flex items-center gap-1.5 rounded-xl px-2 sm:px-2.5 py-1.5 text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-200 hover:text-rose-500 dark:hover:text-rose-400 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200/70 dark:hover:bg-slate-700 transition-colors cursor-pointer border border-slate-200/80 dark:border-slate-700" title={t.favorites}>
             <div className="relative">
               <Heart size={16} className={favoritesCount > 0 ? "fill-rose-500 text-rose-500" : ""} />
@@ -172,21 +153,6 @@ export const Header: React.FC<HeaderProps> = React.memo(({
             <span className="hidden md:inline font-bold">{t.favorites}</span>
           </button>
         </div>
-      </div>
-
-      <div id="header-quick-categories-bar" ref={quickBarRef} className="md:hidden border-t border-slate-200/70 dark:border-slate-800 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur-md px-2 py-1.5 overflow-x-auto [&::-webkit-scrollbar]:hidden flex items-center gap-1.5 w-full transition-colors" style={{ WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }} aria-label="Quick Categories">
-        <button id="header-quick-cat-all" type="button" onClick={() => { onSelectCategory?.(''); document.getElementById('listings-feed-anchor')?.scrollIntoView({ behavior: 'smooth' }); }} className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs whitespace-nowrap shrink-0 transition-all cursor-pointer ${!selectedCategoryId ? 'bg-indigo-600 text-white font-bold shadow-xs' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200/80 dark:border-slate-700/80 hover:bg-slate-100 dark:hover:bg-slate-700 font-medium'}`}>
-          <Layers size={13} className={!selectedCategoryId ? 'text-white' : 'text-indigo-600 dark:text-indigo-400'} />
-          <span>{allCategoryLabel}</span>
-        </button>
-        {categories.map((cat) => {
-          const isSelected = selectedCategoryId === cat.id;
-          const catName = cat.name[lang] || cat.name.uz;
-          return <button key={cat.id} id={`header-quick-cat-${cat.slug}`} data-category-id={cat.id} type="button" onClick={() => { if (isSelected) onSelectCategory?.(''); else { onSelectCategory?.(cat.id); document.getElementById('listings-feed-anchor')?.scrollIntoView({ behavior: 'smooth' }); } }} className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs whitespace-nowrap shrink-0 transition-all cursor-pointer ${isSelected ? 'bg-indigo-600 text-white font-bold shadow-xs' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200/80 dark:border-slate-700/80 hover:bg-slate-100 dark:hover:bg-slate-700 font-medium'}`}>
-            <CategoryIcon name={cat.iconName} size={13} className={`shrink-0 ${isSelected ? 'text-white' : 'text-indigo-600 dark:text-indigo-400'}`} />
-            <span>{catName}</span>
-          </button>;
-        })}
       </div>
     </header>
   );

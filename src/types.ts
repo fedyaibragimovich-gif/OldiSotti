@@ -3,7 +3,7 @@ export type Currency = 'UZS' | 'USD';
 export type Condition = 'all' | 'new' | 'used';
 export type SortOption = 'newest' | 'price_asc' | 'price_desc' | 'popular';
 
-export interface LocationInfo { region: string; district: string; address?: string; }
+export interface LocationInfo { region: string; district?: string; address?: string; }
 export interface SellerInfo { id: string; name: string; phone: string; avatar?: string; telegram?: string; registeredSince: string; responseTime: string; isVerified: boolean; rating: number; activeAdsCount: number; }
 export interface Listing { id: string; title: string; description: string; categoryId: string; subcategoryId?: string; price: number; currency: Currency; isNegotiable: boolean; condition: 'new' | 'used'; location: LocationInfo; images: string[]; createdAt: string; viewsCount: number; isTop: boolean; isVip: boolean; seller: SellerInfo; userId?: string; attributes?: Record<string, string>; status: 'active' | 'reserved' | 'sold' | 'pending' | 'rejected'; rejectionReason?: string; isDeliveryAvailable: boolean; deliveryNote?: string; brand?: string; isPostedToTelegram?: boolean; telegramMessageId?: number; telegramPostedAt?: string; }
 export interface SubCategory { id: string; name: { uz: string; ru: string; oz: string }; iconName?: string; }

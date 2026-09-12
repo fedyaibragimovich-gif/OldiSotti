@@ -1,4 +1,5 @@
 import { Listing, Currency } from '../types';
+import { regions } from '../data/locations';
 
 export interface TelegramPostResponse {
   success: boolean;
@@ -30,7 +31,8 @@ export function formatTelegramPostPreview(listing: Listing, appUrl?: string): st
   const baseUrl = appUrl || (typeof window !== 'undefined' ? window.location.origin : 'https://oldisotti.uz');
   const listingUrl = `${baseUrl}/?listing=${listing.id}`;
   const price = formatPriceText(listing.price, listing.currency);
-  const location = `${listing.location.region}${listing.location.district ? `, ${listing.location.district}` : ''}`;
+  const reg = regions.find(r => r.id === listing.location.region);
+  const location = reg ? reg.name.uz : listing.location.region;
   const condition = listing.condition === 'new' ? '✨ Yangi' : '🔄 Ishlatilgan';
   const vipBadge = listing.isVip ? ' ⭐ [VIP E\'lon]' : '';
   const shortDesc = listing.description.length > 220 ? `${listing.description.slice(0, 220)}...` : listing.description;
@@ -73,7 +75,12 @@ export async function postListingToTelegram(
     const res = await fetch('/api/telegram/post-listing', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ listing, appUrl: baseUrl })
+      body: JSON.stringify({
+        listing,
+        appUrl: baseUrl,
+        channelId: options?.channelId,
+        botToken: options?.botToken
+      })
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.success) {

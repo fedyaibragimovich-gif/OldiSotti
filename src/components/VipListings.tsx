@@ -11,6 +11,7 @@ interface VipListingsProps {
   favorites: string[];
   onToggleFavorite: (id: string) => void;
   onSelectListing: (listing: Listing) => void;
+  blockedSellerIds?: string[];
 }
 
 export const VipListings: React.FC<VipListingsProps> = ({
@@ -19,18 +20,29 @@ export const VipListings: React.FC<VipListingsProps> = ({
   lang,
   favorites,
   onToggleFavorite,
-  onSelectListing
+  onSelectListing,
+  blockedSellerIds
 }) => {
   const t = getTranslation(lang);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const vipAds = listings.filter(l => l.isVip || l.isTop);
+  const vipAds = React.useMemo(() => {
+    return listings.filter(l => 
+      (l.isVip || l.isTop) && 
+      l.status !== 'pending' && 
+      l.status !== 'rejected' &&
+      (!blockedSellerIds || (
+        !blockedSellerIds.includes(l.seller.id) &&
+        !blockedSellerIds.includes(l.userId || '')
+      ))
+    );
+  }, [listings, blockedSellerIds]);
 
   if (vipAds.length === 0) return null;
 
   const scroll = (direction: 'left' | 'right') => {
     if (scrollRef.current) {
-      const offset = direction === 'left' ? -340 : 340;
+      const offset = direction === 'left' ? -300 : 300;
       scrollRef.current.scrollBy({ left: offset, behavior: 'smooth' });
     }
   };
@@ -68,10 +80,10 @@ export const VipListings: React.FC<VipListingsProps> = ({
         </div>
       </div>
 
-      {/* Horizontal Scrollable Carousel without vertical scroll blocking */}
+      {/* Horizontal Scrollable Carousel */}
       <div
         ref={scrollRef}
-        className="flex gap-3.5 sm:gap-4 overflow-x-auto pb-2 scrollbar-none w-full max-w-full touch-auto transform-gpu"
+        className="flex gap-3.5 sm:gap-4 overflow-x-auto pb-2 scrollbar-none w-full max-w-full touch-auto"
         style={{
           scrollbarWidth: 'none',
           msOverflowStyle: 'none',
@@ -79,7 +91,7 @@ export const VipListings: React.FC<VipListingsProps> = ({
         }}
       >
         {vipAds.map((item) => (
-          <div key={item.id} className="min-w-[240px] sm:min-w-[280px] max-w-[280px] shrink-0">
+          <div key={item.id} className="w-[260px] sm:w-[280px] shrink-0">
             <ListingCard
               listing={item}
               currency={currency}

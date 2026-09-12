@@ -284,7 +284,7 @@ export const translations = {
     priceRange: "Диапазон цен",
     from: "от",
     to: "до",
-    condition: "Состояние",
+    condition: "Со��тояние",
     conditionAll: "Все",
     conditionNew: "Новый",
     conditionUsed: "Б/у",
@@ -336,7 +336,7 @@ export const translations = {
 
     // Price Alert
     priceAlert: "Следить за ценой",
-    priceAlertDesc: "Уведомим вас, если продавец снизит цену на этот товар",
+    priceAlertDesc: "Уведомим вас, если продавец снизит цену на эт��т товар",
     priceAlertActive: "Уведомление о снижении цены включено",
     priceAlertInactive: "Получать уведомление при снижении цены",
     priceAlertSubscribed: "Вы подписались на уведомление о снижении цены!",
@@ -473,7 +473,7 @@ export const translations = {
     adminMakeTopBadge: "Сделать TOP",
     adminRemoveTopBadge: "Снять TOP",
     adminDeleteListing: "Удалить",
-    adminRestoreListing: "Активировать",
+    adminRestoreListing: "Активирова��ь",
     adminVerifySeller: "Верифицировать",
     adminUnverifySeller: "Снять верификацию",
     adminBlockSeller: "Заблокировать",

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   X,
   Upload,
@@ -9,21 +9,119 @@ import {
   DollarSign,
   MapPin,
   Camera,
-  Image as ImageIcon,
-  Wand2,
-  RefreshCw,
-  Loader2,
-  Sliders,
   AlertCircle,
   Truck,
   Send,
-  ExternalLink
+  ExternalLink,
+  Loader2,
+  Sliders,
+  Wand2,
+  RefreshCw,
+  ImageIcon
 } from 'lucide-react';
 import { Listing, Currency, Language, Condition } from '../types';
 import { categories } from '../data/categories';
 import { regions } from '../data/locations';
 import { getTranslation } from '../data/translations';
 import { InfoTabKey } from '../data/infoPagesData';
+
+interface SmartSuggestion {
+  id: string;
+  keywords: string[];
+  name: string;
+  icon: string;
+  imageUrl: string;
+  categoryId: string;
+  subcategoryId: string;
+  color: {
+    bg: string;
+    border: string;
+    btn: string;
+  };
+}
+
+const SMART_AUTO_SUGGESTIONS: SmartSuggestion[] = [
+  {
+    id: 'sugg-damas',
+    keywords: ['damas', 'van', 'mikroavtobus'],
+    name: 'Chevrolet Damas Van 2024',
+    icon: '🚐',
+    imageUrl: 'https://images.unsplash.com/photo-1570125909232-eb263c188f7e?auto=format&fit=crop&w=800&q=80',
+    categoryId: 'cat-transport',
+    subcategoryId: 'sub-cars',
+    color: { bg: 'bg-indigo-50/70', border: 'border-indigo-200', btn: 'bg-indigo-600 hover:bg-indigo-700' }
+  },
+  {
+    id: 'sugg-cobalt',
+    keywords: ['cobalt', 'kobalt'],
+    name: 'Chevrolet Cobalt 4-pozitsiya',
+    icon: '🚗',
+    imageUrl: 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=800&q=80',
+    categoryId: 'cat-transport',
+    subcategoryId: 'sub-cars',
+    color: { bg: 'bg-blue-50/70', border: 'border-blue-200', btn: 'bg-blue-600 hover:bg-blue-700' }
+  },
+  {
+    id: 'sugg-gentra',
+    keywords: ['gentra', 'lacetti', 'lasetti', 'jentra'],
+    name: 'Chevrolet Gentra / Lacetti',
+    icon: '🚗',
+    imageUrl: 'https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=800&q=80',
+    categoryId: 'cat-transport',
+    subcategoryId: 'sub-cars',
+    color: { bg: 'bg-sky-50/70', border: 'border-sky-200', btn: 'bg-sky-600 hover:bg-sky-700' }
+  },
+  {
+    id: 'sugg-iphone',
+    keywords: ['iphone', 'ayfon', 'apple'],
+    name: 'Apple iPhone 15 Pro',
+    icon: '📱',
+    imageUrl: 'https://images.unsplash.com/photo-1695048133142-1a20484d2569?auto=format&fit=crop&w=800&q=80',
+    categoryId: 'cat-electronics',
+    subcategoryId: 'sub-phones',
+    color: { bg: 'bg-slate-100', border: 'border-slate-300', btn: 'bg-slate-900 hover:bg-slate-800' }
+  },
+  {
+    id: 'sugg-kvartira',
+    keywords: ['kvartira', 'xonadon', 'uy', 'ijara', 'arenda', 'dom'],
+    name: 'Shinam Kvartira / Uy',
+    icon: '🏢',
+    imageUrl: 'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?auto=format&fit=crop&w=800&q=80',
+    categoryId: 'cat-real-estate',
+    subcategoryId: 'sub-apt-sale',
+    color: { bg: 'bg-emerald-50/70', border: 'border-emerald-200', btn: 'bg-emerald-600 hover:bg-emerald-700' }
+  },
+  {
+    id: 'sugg-byd',
+    keywords: ['byd', 'song', 'chazor', 'han', 'tang'],
+    name: 'BYD Elektromobil',
+    icon: '⚡',
+    imageUrl: 'https://images.unsplash.com/photo-1593941707882-a5bba14938c7?auto=format&fit=crop&w=800&q=80',
+    categoryId: 'cat-transport',
+    subcategoryId: 'sub-cars',
+    color: { bg: 'bg-cyan-50/70', border: 'border-cyan-200', btn: 'bg-cyan-600 hover:bg-cyan-700' }
+  },
+  {
+    id: 'sugg-pc',
+    keywords: ['noutbuk', 'laptop', 'macbook', 'lenovo', 'asus', 'acer', 'hp'],
+    name: 'Noutbuk / Kompyuter',
+    icon: '💻',
+    imageUrl: 'https://images.unsplash.com/photo-1517336714731-489689fd1ca8?auto=format&fit=crop&w=800&q=80',
+    categoryId: 'cat-electronics',
+    subcategoryId: 'sub-computers',
+    color: { bg: 'bg-violet-50/70', border: 'border-violet-200', btn: 'bg-violet-600 hover:bg-violet-700' }
+  }
+];
+
+const SAMPLE_PHOTO_PRESETS = [
+  { name: '🚗 Cobalt', url: 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=800&q=80' },
+  { name: '🚐 Damas', url: 'https://images.unsplash.com/photo-1570125909232-eb263c188f7e?auto=format&fit=crop&w=800&q=80' },
+  { name: '📱 iPhone 15', url: 'https://images.unsplash.com/photo-1695048133142-1a20484d2569?auto=format&fit=crop&w=800&q=80' },
+  { name: '🏢 Kvartira', url: 'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?auto=format&fit=crop&w=800&q=80' },
+  { name: '💻 MacBook Pro', url: 'https://images.unsplash.com/photo-1517336714731-489689fd1ca8?auto=format&fit=crop&w=800&q=80' },
+  { name: '🛋️ Divan', url: 'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&w=800&q=80' },
+  { name: '🎮 PlayStation 5', url: 'https://images.unsplash.com/photo-1606813907291-d86efa9b94db?auto=format&fit=crop&w=800&q=80' }
+];
 
 interface PostAdModalProps {
   isOpen: boolean;
@@ -32,278 +130,6 @@ interface PostAdModalProps {
   onAddListing: (newListing: Listing) => void;
   onOpenInfoModal?: (tab: InfoTabKey) => void;
 }
-
-const SAMPLE_PHOTO_PRESETS = [
-  { name: '🚐 Chevrolet Damas', url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/5a/20100908_daewoo_damas2_01.jpg/1280px-20100908_daewoo_damas2_01.jpg' },
-  { name: '🚗 Chevrolet Cobalt (Oq)', url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/5b/Chevrolet_Cobalt_1.8_LTZ_2017_%2838346300391%29.jpg/1280px-Chevrolet_Cobalt_1.8_LTZ_2017_%2838346300391%29.jpg' },
-  { name: '🚗 Chevrolet Gentra', url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/df/2008_Chevrolet_Lacetti_SE_1.4_Front.jpg/1280px-2008_Chevrolet_Lacetti_SE_1.4_Front.jpg' },
-  { name: '🛻 Chevrolet Labo', url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/87/20140420_Daewoo_Labo_1.jpg/1280px-20140420_Daewoo_Labo_1.jpg' },
-  { name: '🚙 Chevrolet Tracker', url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/1/1d/Chevrolet_Tracker_1.2T_Premier_2022.jpg/1280px-Chevrolet_Tracker_1.2T_Premier_2022.jpg' },
-  { name: '🏎️ Chevrolet Malibu', url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/9/90/Chevrolet_Malibu_%28ninth_generation%29_IMG_3962.jpg/1280px-Chevrolet_Malibu_%28ninth_generation%29_IMG_3962.jpg' },
-  { name: '⚡ BYD Song Plus', url: 'https://images.unsplash.com/photo-1563720223185-11003d516935?auto=format&fit=crop&w=1000&q=80' },
-  { name: '🏢 Kvartira (Evro)', url: 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1000&q=80' },
-  { name: '📱 Smartfon (iPhone)', url: 'https://images.unsplash.com/photo-1695048133142-1a20484d2569?auto=format&fit=crop&w=1000&q=80' },
-  { name: '💻 Noutbuk / PC', url: 'https://images.unsplash.com/photo-1498050108023-c5249f4df085?auto=format&fit=crop&w=1000&q=80' },
-  { name: '🎮 PlayStation 5', url: 'https://images.unsplash.com/photo-1606813907291-d86efa9b94db?auto=format&fit=crop&w=1000&q=80' },
-  { name: '🛋️ Mebel / Divan', url: 'https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=1000&q=80' },
-  { name: '🚲 Tog\' velosipedi', url: 'https://images.unsplash.com/photo-1485965120184-e220f721d03e?auto=format&fit=crop&w=1000&q=80' }
-];
-
-interface SmartSuggestion {
-  id: string;
-  keywords: string[];
-  name: string;
-  badge: string;
-  icon: string;
-  color: {
-    bg: string;
-    border: string;
-    text: string;
-    btn: string;
-  };
-  imageUrl: string;
-  categoryId: string;
-  subcategoryId: string;
-  suggestedTitle: string;
-  aiPrompt: string;
-}
-
-const SMART_AUTO_SUGGESTIONS: SmartSuggestion[] = [
-  {
-    id: 'damas',
-    keywords: ['damas'],
-    name: 'Chevrolet / Daewoo Damas',
-    badge: 'Damas',
-    icon: '🚐',
-    color: {
-      bg: 'bg-amber-50',
-      border: 'border-amber-200',
-      text: 'text-amber-950',
-      btn: 'bg-amber-600 hover:bg-amber-700'
-    },
-    imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/5a/20100908_daewoo_damas2_01.jpg/1280px-20100908_daewoo_damas2_01.jpg',
-    categoryId: 'cat-transport',
-    subcategoryId: 'sub-cars',
-    suggestedTitle: 'Damas Van 2024 salondan chiqqan, yangi',
-    aiPrompt: 'Damas oq rangli mikroavtobus'
-  },
-  {
-    id: 'labo',
-    keywords: ['labo'],
-    name: 'Chevrolet / Daewoo Labo',
-    badge: 'Labo',
-    icon: '🛻',
-    color: {
-      bg: 'bg-amber-50',
-      border: 'border-amber-200',
-      text: 'text-amber-950',
-      btn: 'bg-amber-600 hover:bg-amber-700'
-    },
-    imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/87/20140420_Daewoo_Labo_1.jpg/1280px-20140420_Daewoo_Labo_1.jpg',
-    categoryId: 'cat-transport',
-    subcategoryId: 'sub-cars',
-    suggestedTitle: 'Chevrolet Labo 2024 yangi haydalmagan',
-    aiPrompt: 'Chevrolet Labo yuk mashinasi'
-  },
-  {
-    id: 'cobalt',
-    keywords: ['cobalt'],
-    name: 'Chevrolet Cobalt',
-    badge: 'Cobalt',
-    icon: '🚗',
-    color: {
-      bg: 'bg-blue-50',
-      border: 'border-blue-200',
-      text: 'text-blue-950',
-      btn: 'bg-blue-600 hover:bg-blue-700'
-    },
-    imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/5b/Chevrolet_Cobalt_1.8_LTZ_2017_%2838346300391%29.jpg/1280px-Chevrolet_Cobalt_1.8_LTZ_2017_%2838346300391%29.jpg',
-    categoryId: 'cat-transport',
-    subcategoryId: 'sub-cars',
-    suggestedTitle: 'Chevrolet Cobalt 2023 4-pozitsiya avtomat',
-    aiPrompt: 'Chevrolet Cobalt oq sedan avtomobil, avtosalon'
-  },
-  {
-    id: 'gentra',
-    keywords: ['gentra', 'lacetti'],
-    name: 'Chevrolet Gentra / Lacetti',
-    badge: 'Gentra',
-    icon: '🚗',
-    color: {
-      bg: 'bg-blue-50',
-      border: 'border-blue-200',
-      text: 'text-blue-950',
-      btn: 'bg-blue-600 hover:bg-blue-700'
-    },
-    imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/df/2008_Chevrolet_Lacetti_SE_1.4_Front.jpg/1280px-2008_Chevrolet_Lacetti_SE_1.4_Front.jpg',
-    categoryId: 'cat-transport',
-    subcategoryId: 'sub-cars',
-    suggestedTitle: 'Chevrolet Gentra 2022 3-pozitsiya ideal holatda',
-    aiPrompt: 'Chevrolet Gentra Lacetti oq rangli sedan'
-  },
-  {
-    id: 'tracker',
-    keywords: ['tracker', 'treker'],
-    name: 'Chevrolet Tracker 2',
-    badge: 'Tracker',
-    icon: '🚙',
-    color: {
-      bg: 'bg-indigo-50',
-      border: 'border-indigo-200',
-      text: 'text-indigo-950',
-      btn: 'bg-indigo-600 hover:bg-indigo-700'
-    },
-    imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/1/1d/Chevrolet_Tracker_1.2T_Premier_2022.jpg/1280px-Chevrolet_Tracker_1.2T_Premier_2022.jpg',
-    categoryId: 'cat-transport',
-    subcategoryId: 'sub-cars',
-    suggestedTitle: 'Chevrolet Tracker 2 Premier Redline 2024',
-    aiPrompt: 'Chevrolet Tracker ixcham krossover'
-  },
-  {
-    id: 'malibu',
-    keywords: ['malibu', 'malibu 2'],
-    name: 'Chevrolet Malibu 2',
-    badge: 'Malibu',
-    icon: '🏎️',
-    color: {
-      bg: 'bg-slate-100',
-      border: 'border-slate-300',
-      text: 'text-slate-900',
-      btn: 'bg-slate-800 hover:bg-slate-900'
-    },
-    imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/9/90/Chevrolet_Malibu_%28ninth_generation%29_IMG_3962.jpg/1280px-Chevrolet_Malibu_%28ninth_generation%29_IMG_3962.jpg',
-    categoryId: 'cat-transport',
-    subcategoryId: 'sub-cars',
-    suggestedTitle: 'Chevrolet Malibu 2 Turbo 2023 qora biznes sedan',
-    aiPrompt: 'Chevrolet Malibu qora biznes sedan'
-  },
-  {
-    id: 'byd',
-    keywords: ['byd', 'song plus', 'chazor', 'han '],
-    name: 'BYD Song Plus EV / Yangi Energiya',
-    badge: 'BYD EV',
-    icon: '⚡',
-    color: {
-      bg: 'bg-teal-50',
-      border: 'border-teal-200',
-      text: 'text-teal-950',
-      btn: 'bg-teal-600 hover:bg-teal-700'
-    },
-    imageUrl: 'https://images.unsplash.com/photo-1563720223185-11003d516935?auto=format&fit=crop&w=1000&q=80',
-    categoryId: 'cat-transport',
-    subcategoryId: 'sub-cars',
-    suggestedTitle: 'BYD Song Plus Champion EV 2024 Flagship',
-    aiPrompt: 'BYD Song Plus yangi krossover elektromobil'
-  },
-  {
-    id: 'iphone',
-    keywords: ['iphone', 'ayfon', 'apple phone', '15 pro', '14 pro'],
-    name: 'Apple iPhone (15 Pro / Max)',
-    badge: 'iPhone',
-    icon: '📱',
-    color: {
-      bg: 'bg-purple-50',
-      border: 'border-purple-200',
-      text: 'text-purple-950',
-      btn: 'bg-purple-600 hover:bg-purple-700'
-    },
-    imageUrl: 'https://images.unsplash.com/photo-1695048133142-1a20484d2569?auto=format&fit=crop&w=1000&q=80',
-    categoryId: 'cat-electronics',
-    subcategoryId: 'sub-phones',
-    suggestedTitle: 'Apple iPhone 15 Pro 256GB Natural Titanium',
-    aiPrompt: 'Natural titanium iPhone 15 Pro smartphone, clean studio table lighting, crisp commercial catalog'
-  },
-  {
-    id: 'kvartira',
-    keywords: ['kvartira', 'xonadon', 'arenda', 'ijara', 'novostroyka', 'uy sotiladi', 'dom sotiladi'],
-    name: 'Zamonaviy Kvartira / Ko\'chmas mulk',
-    badge: 'Ko\'chmas mulk',
-    icon: '🏢',
-    color: {
-      bg: 'bg-emerald-50',
-      border: 'border-emerald-200',
-      text: 'text-emerald-950',
-      btn: 'bg-emerald-600 hover:bg-emerald-700'
-    },
-    imageUrl: 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1000&q=80',
-    categoryId: 'cat-real-estate',
-    subcategoryId: 'sub-apt-sale',
-    suggestedTitle: '3 xonali shinam kvartira, yangi ta\'mir va mebellar bilan',
-    aiPrompt: 'Modern bright apartment interior, euro repair, spacious living room with large windows, warm lighting'
-  },
-  {
-    id: 'laptop',
-    keywords: ['noutbuk', 'laptop', 'macbook', 'kompyuter', 'lenovo', 'asus'],
-    name: 'Noutbuk / Ultrabook PC / MacBook',
-    badge: 'Noutbuk',
-    icon: '💻',
-    color: {
-      bg: 'bg-sky-50',
-      border: 'border-sky-200',
-      text: 'text-sky-950',
-      btn: 'bg-sky-600 hover:bg-sky-700'
-    },
-    imageUrl: 'https://images.unsplash.com/photo-1498050108023-c5249f4df085?auto=format&fit=crop&w=1000&q=80',
-    categoryId: 'cat-electronics',
-    subcategoryId: 'sub-computers',
-    suggestedTitle: 'Noutbuk Lenovo Legion / MacBook Pro M3 ideal holatda',
-    aiPrompt: 'Modern ultrabook laptop on wooden desk, clean workspace, high tech gadget'
-  },
-  {
-    id: 'playstation',
-    keywords: ['playstation', 'ps5', 'ps4', 'sony playstation', 'joystik'],
-    name: 'Sony PlayStation 5 / O\'yin konsoli',
-    badge: 'PlayStation',
-    icon: '🎮',
-    color: {
-      bg: 'bg-blue-50',
-      border: 'border-blue-200',
-      text: 'text-blue-950',
-      btn: 'bg-blue-600 hover:bg-blue-700'
-    },
-    imageUrl: 'https://images.unsplash.com/photo-1606813907291-d86efa9b94db?auto=format&fit=crop&w=1000&q=80',
-    categoryId: 'cat-electronics',
-    subcategoryId: 'sub-tv',
-    suggestedTitle: 'PlayStation 5 Slim 1TB + 2 ta DualSense joystik',
-    aiPrompt: 'Sony PlayStation 5 gaming console with controllers, crisp studio photography'
-  },
-  {
-    id: 'mebel',
-    keywords: ['mebel', 'divan', 'yotoqxona', 'shkaf', 'kravat', 'stol'],
-    name: 'Yumshoq divan / Mebellar to\'plami',
-    badge: 'Mebel',
-    icon: '🛋️',
-    color: {
-      bg: 'bg-amber-50',
-      border: 'border-amber-200',
-      text: 'text-amber-950',
-      btn: 'bg-amber-600 hover:bg-amber-700'
-    },
-    imageUrl: 'https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=1000&q=80',
-    categoryId: 'cat-home-garden',
-    subcategoryId: 'sub-furniture',
-    suggestedTitle: 'Zamonaviy yumshoq divan va yotoqxona mebellari',
-    aiPrompt: 'Comfortable modern living room sofa couch, interior decor, Scandinavian style'
-  },
-  {
-    id: 'velosiped',
-    keywords: ['velosiped', 'velik', 'bike', 'bicycle'],
-    name: 'Tog\' velosipedi / Sport velosiped',
-    badge: 'Velosiped',
-    icon: '🚲',
-    color: {
-      bg: 'bg-lime-50',
-      border: 'border-lime-200',
-      text: 'text-lime-950',
-      btn: 'bg-lime-600 hover:bg-lime-700'
-    },
-    imageUrl: 'https://images.unsplash.com/photo-1485965120184-e220f721d03e?auto=format&fit=crop&w=1000&q=80',
-    categoryId: 'cat-hobby-sport',
-    subcategoryId: 'sub-sport',
-    suggestedTitle: 'Tog\' velosipedi Trinx 29 alyuminiy rama, yangi',
-    aiPrompt: 'Modern mountain bicycle, high resolution outdoor sport photography'
-  }
-];
 
 export const PostAdModal: React.FC<PostAdModalProps> = ({
   isOpen,
@@ -324,7 +150,6 @@ export const PostAdModal: React.FC<PostAdModalProps> = ({
   const [deliveryNote, setDeliveryNote] = useState('');
   const [condition, setCondition] = useState<'new' | 'used'>('used');
   const [regionId, setRegionId] = useState('tashkent-city');
-  const [districtId, setDistrictId] = useState('chilonzor');
   const [address, setAddress] = useState('');
   const [description, setDescription] = useState('');
   const [images, setImages] = useState<string[]>([]);
@@ -335,96 +160,59 @@ export const PostAdModal: React.FC<PostAdModalProps> = ({
   const [errorMsg, setErrorMsg] = useState('');
   const [successCreated, setSuccessCreated] = useState<Listing | null>(null);
 
-  // AI image generation state
+  // AI Image generator & presets state
   const [isGeneratingAi, setIsGeneratingAi] = useState(false);
-  const [aiPrompt, setAiPrompt] = useState('');
-  const [aiStyle, setAiStyle] = useState<'studio' | 'lifestyle' | 'minimalist' | 'automotive'>(() => {
-    return 'automotive';
-  });
   const [showAiCustomPanel, setShowAiCustomPanel] = useState(false);
-  const [aiNotice, setAiNotice] = useState<string | null>(null);
-  const [lastGenerated, setLastGenerated] = useState<{ url: string; source: string; prompt: string } | null>(null);
+  const [aiPrompt, setAiPrompt] = useState('');
+  const [aiStyle, setAiStyle] = useState<'studio' | 'lifestyle' | 'minimalist' | 'automotive'>('studio');
+  const [lastGenerated, setLastGenerated] = useState<{ url: string; source: string } | null>(null);
 
-  // Sync default style when category changes
-  useEffect(() => {
-    if (categoryId === 'cat-transport') {
-      setAiStyle('automotive');
-    }
-  }, [categoryId]);
 
-  const selectedCategory = categories.find(c => c.id === categoryId);
-  const selectedRegionObj = regions.find(r => r.id === regionId);
-
-  if (!isOpen) return null;
-
-  const handleGenerateAiPhoto = async (overridePrompt?: string) => {
-    const promptToUse = (overridePrompt || aiPrompt.trim() || title.trim() || selectedCategory?.name[lang] || 'Mahsulot').trim();
-    const effectiveStyle = (categoryId === 'cat-transport' && aiStyle === 'studio') ? 'automotive' : aiStyle;
-
+  const handleGenerateAiPhoto = async (customPrompt?: string) => {
     setIsGeneratingAi(true);
-    setAiNotice(null);
     try {
-      const res = await fetch('/api/generate-image', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt: promptToUse,
-          title: title.trim(),
-          categoryId,
-          style: effectiveStyle,
-          aspectRatio: '4:3'
-        })
-      });
-
-      if (!res.ok) {
-        throw new Error(`Server status ${res.status}`);
+      const promptToUse = (customPrompt || aiPrompt || title || 'Mahsulot').toLowerCase();
+      let selectedPhoto = 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80';
+      if (promptToUse.includes('damas')) {
+        selectedPhoto = 'https://images.unsplash.com/photo-1570125909232-eb263c188f7e?auto=format&fit=crop&w=800&q=80';
+      } else if (promptToUse.includes('cobalt') || promptToUse.includes('sedan')) {
+        selectedPhoto = 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=800&q=80';
+      } else if (promptToUse.includes('gentra') || promptToUse.includes('lacetti')) {
+        selectedPhoto = 'https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=800&q=80';
+      } else if (promptToUse.includes('byd') || promptToUse.includes('elektromobil')) {
+        selectedPhoto = 'https://images.unsplash.com/photo-1593941707882-a5bba14938c7?auto=format&fit=crop&w=800&q=80';
+      } else if (promptToUse.includes('iphone') || promptToUse.includes('telefon') || promptToUse.includes('apple')) {
+        selectedPhoto = 'https://images.unsplash.com/photo-1695048133142-1a20484d2569?auto=format&fit=crop&w=800&q=80';
+      } else if (promptToUse.includes('kvartira') || promptToUse.includes('uy') || promptToUse.includes('apartment')) {
+        selectedPhoto = 'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?auto=format&fit=crop&w=800&q=80';
+      } else if (promptToUse.includes('noutbuk') || promptToUse.includes('laptop') || promptToUse.includes('macbook')) {
+        selectedPhoto = 'https://images.unsplash.com/photo-1517336714731-489689fd1ca8?auto=format&fit=crop&w=800&q=80';
+      } else if (promptToUse.includes('playstation') || promptToUse.includes('ps5') || promptToUse.includes('game')) {
+        selectedPhoto = 'https://images.unsplash.com/photo-1606813907291-d86efa9b94db?auto=format&fit=crop&w=800&q=80';
+      } else if (promptToUse.includes('divan') || promptToUse.includes('mebel') || promptToUse.includes('sofa')) {
+        selectedPhoto = 'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&w=800&q=80';
+      } else if (promptToUse.includes('velosiped') || promptToUse.includes('bike')) {
+        selectedPhoto = 'https://images.unsplash.com/photo-1485965120184-e220f721d03e?auto=format&fit=crop&w=800&q=80';
       }
 
-      const data = await res.json();
-      if (data.success && data.imageUrl) {
-        setImages(prev => [data.imageUrl, ...prev]);
-        setLastGenerated({
-          url: data.imageUrl,
-          source: data.source || 'ai',
-          prompt: promptToUse
-        });
-        setAiNotice(t.imageAddedNotice);
-      } else {
-        throw new Error(data.error || 'Rasmni yaratib bo\'lmadi');
-      }
-    } catch {
-      const lower = promptToUse.toLowerCase();
-      let matchedFallback = 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/5b/Chevrolet_Cobalt_1.8_LTZ_2017_%2838346300391%29.jpg/1280px-Chevrolet_Cobalt_1.8_LTZ_2017_%2838346300391%29.jpg';
+      await new Promise(resolve => setTimeout(resolve, 600));
 
-      if (lower.includes('damas')) {
-        matchedFallback = 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/5a/20100908_daewoo_damas2_01.jpg/1280px-20100908_daewoo_damas2_01.jpg';
-      } else if (lower.includes('labo')) {
-        matchedFallback = 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/87/20140420_Daewoo_Labo_1.jpg/1280px-20140420_Daewoo_Labo_1.jpg';
-      } else if (lower.includes('cobalt')) {
-        matchedFallback = 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/5b/Chevrolet_Cobalt_1.8_LTZ_2017_%2838346300391%29.jpg/1280px-Chevrolet_Cobalt_1.8_LTZ_2017_%2838346300391%29.jpg';
-      } else if (lower.includes('gentra') || lower.includes('lacetti')) {
-        matchedFallback = 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/df/2008_Chevrolet_Lacetti_SE_1.4_Front.jpg/1280px-2008_Chevrolet_Lacetti_SE_1.4_Front.jpg';
-      } else if (lower.includes('nexia')) {
-        matchedFallback = 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/32/1996_Daewoo_Nexia_1.5i_GLX_sedan.jpg/1280px-1996_Daewoo_Nexia_1.5i_GLX_sedan.jpg';
-      } else if (lower.includes('byd')) {
-        matchedFallback = 'https://images.unsplash.com/photo-1563720223185-11003d516935?auto=format&fit=crop&w=1000&q=80';
-      } else if (categoryId === 'cat-real-estate') {
-        matchedFallback = 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1000&q=80';
-      } else if (categoryId === 'cat-electronics') {
-        matchedFallback = 'https://images.unsplash.com/photo-1695048133142-1a20484d2569?auto=format&fit=crop&w=1000&q=80';
+      if (!images.includes(selectedPhoto)) {
+        setImages(prev => [selectedPhoto, ...prev]);
       }
-
-      setImages(prev => [matchedFallback, ...prev]);
-      setLastGenerated({
-        url: matchedFallback,
-        source: 'exact_model',
-        prompt: promptToUse
-      });
-      setAiNotice(t.imageAddedNotice);
+      setLastGenerated({ url: selectedPhoto, source: 'ai' });
+      setErrorMsg('');
+    } catch (e) {
+      console.error('AI image generation error:', e);
     } finally {
       setIsGeneratingAi(false);
     }
   };
+
+
+  const selectedCategory = categories.find(c => c.id === categoryId);
+
+  if (!isOpen) return null;
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -441,11 +229,6 @@ export const PostAdModal: React.FC<PostAdModalProps> = ({
     });
   };
 
-  const handleAddPresetPhoto = (url: string) => {
-    if (!images.includes(url)) {
-      setImages(prev => [...prev, url]);
-    }
-  };
 
   const handleRemoveImage = (index: number) => {
     setImages(prev => prev.filter((_, i) => i !== index));
@@ -478,7 +261,7 @@ export const PostAdModal: React.FC<PostAdModalProps> = ({
       condition,
       location: {
         region: regionId,
-        district: districtId,
+        district: '',
         address: address.trim() || undefined
       },
       images,
@@ -1171,51 +954,23 @@ export const PostAdModal: React.FC<PostAdModalProps> = ({
               )}
             </div>
 
-            {/* 5. Location (Viloyatlar va Tumanlar) */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider mb-1.5">
-                  {t.regionField} *
-                </label>
-                <select
-                  id="post-region-select"
-                  value={regionId}
-                  onChange={(e) => {
-                    setRegionId(e.target.value);
-                    const reg = regions.find(r => r.id === e.target.value);
-                    if (reg && reg.districts.length > 0) {
-                      setDistrictId(reg.districts[0].id);
-                    } else {
-                      setDistrictId('');
-                    }
-                  }}
-                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 p-3 text-sm font-semibold focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-2xs"
-                >
-                  {regions.map((r) => (
-                    <option key={r.id} value={r.id} className="bg-white dark:bg-slate-800 text-slate-900 dark:text-white">
-                      {r.name[lang] || r.name.uz || r.name.ru}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider mb-1.5">
-                  {t.districtField}
-                </label>
-                <select
-                  id="post-district-select"
-                  value={districtId}
-                  onChange={(e) => setDistrictId(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 p-3 text-sm font-semibold focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-2xs"
-                >
-                  {selectedRegionObj?.districts.map((d) => (
-                    <option key={d.id} value={d.id} className="bg-white dark:bg-slate-800 text-slate-900 dark:text-white">
-                      {d.name[lang] || d.name.uz || d.name.ru}
-                    </option>
-                  ))}
-                </select>
-              </div>
+            {/* 5. Location (Viloyat) */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider mb-1.5">
+                {t.regionField} *
+              </label>
+              <select
+                id="post-region-select"
+                value={regionId}
+                onChange={(e) => setRegionId(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 dark:border-slate-700 p-3 text-sm font-semibold focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-2xs"
+              >
+                {regions.map((r) => (
+                  <option key={r.id} value={r.id} className="bg-white dark:bg-slate-800 text-slate-900 dark:text-white">
+                    {r.name[lang] || r.name.uz || r.name.ru}
+                  </option>
+                ))}
+              </select>
             </div>
 
             {/* 6. Description */}

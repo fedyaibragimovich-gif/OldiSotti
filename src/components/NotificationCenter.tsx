@@ -65,30 +65,92 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ lang = '
     if (messagesButton) { (messagesButton as HTMLButtonElement).click(); setOpen(false); }
   };
 
+  const containerRef = React.useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+    if (open) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [open]);
+
   const visibleCount = visibleNotifications.length;
 
-  return <>
-    <button type="button" onClick={() => { setOpen(v => !v); requestBrowserNotifications(); }} aria-label={t.title} title={t.title}
-      className="fixed right-3 top-20 z-[45] flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white/95 text-slate-600 shadow-lg backdrop-blur-md transition hover:text-indigo-600 dark:border-slate-700 dark:bg-slate-900/95 dark:text-slate-300 dark:hover:text-indigo-400">
-      <Bell size={19} />
-      {visibleCount > 0 && <span className="absolute -right-1 -top-1 min-w-5 rounded-full bg-rose-500 px-1 text-center text-[10px] font-black leading-5 text-white">{visibleCount > 9 ? '9+' : visibleCount}</span>}
-    </button>
+  return (
+    <div ref={containerRef} className="relative">
+      <button
+        type="button"
+        onClick={() => { setOpen(v => !v); requestBrowserNotifications(); }}
+        aria-label={t.title}
+        title={t.title}
+        className="relative flex items-center justify-center rounded-xl p-2 sm:px-2.5 sm:py-1.5 text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200/70 dark:hover:bg-slate-700 border border-slate-200/80 dark:border-slate-700 transition-colors cursor-pointer shadow-2xs"
+      >
+        <Bell size={16} className={visibleCount > 0 ? "text-indigo-600 dark:text-indigo-400" : "text-slate-600 dark:text-slate-400"} />
+        {visibleCount > 0 && (
+          <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold leading-none text-white shadow-xs animate-in zoom-in-50">
+            {visibleCount > 9 ? '9+' : visibleCount}
+          </span>
+        )}
+      </button>
 
-    {open && <div className="fixed right-3 top-[7.6rem] z-[46] w-[min(380px,calc(100vw-24px))] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
-      <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3 dark:border-slate-800">
-        <div className="flex items-center gap-2 font-black text-sm text-slate-900 dark:text-white"><Bell size={16} />{t.title}</div>
-        <div className="flex items-center gap-1">
-          {visibleCount > 0 && <button type="button" onClick={markAllRead} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-indigo-600 dark:hover:bg-slate-800" title={t.markAll}><CheckCheck size={16} /></button>}
-          <button type="button" onClick={() => setOpen(false)} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"><X size={16} /></button>
+      {open && (
+        <div className="absolute right-0 top-full mt-2 z-50 w-[min(380px,calc(100vw-24px))] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900 animate-in fade-in zoom-in-95 duration-150">
+          <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3 dark:border-slate-800">
+            <div className="flex items-center gap-2 font-black text-sm text-slate-900 dark:text-white">
+              <Bell size={16} className="text-indigo-600 dark:text-indigo-400" />
+              {t.title}
+            </div>
+            <div className="flex items-center gap-1">
+              {visibleCount > 0 && (
+                <button
+                  type="button"
+                  onClick={markAllRead}
+                  className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-indigo-600 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                  title={t.markAll}
+                >
+                  <CheckCheck size={16} />
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+          </div>
+          <div className="max-h-[55vh] overflow-y-auto p-2">
+            {visibleNotifications.length === 0 ? (
+              <div className="px-4 py-8 text-center text-xs text-slate-400">{t.empty}</div>
+            ) : (
+              visibleNotifications.map(item => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => item.type === 'message' ? openChat(item) : markNotificationRead(item.id)}
+                  className="flex w-full gap-3 rounded-xl p-3 text-left hover:bg-slate-50 dark:hover:bg-slate-800/70 transition-colors cursor-pointer"
+                >
+                  <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 dark:bg-indigo-950/60 dark:text-indigo-400">
+                    <MessageSquare size={15} />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-xs font-bold text-slate-900 dark:text-white">{item.title}</div>
+                    <div className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400 line-clamp-2">{item.message}</div>
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
         </div>
-      </div>
-      <div className="max-h-[55vh] overflow-y-auto p-2">
-        {visibleNotifications.length === 0 ? <div className="px-4 py-8 text-center text-xs text-slate-400">{t.empty}</div> : visibleNotifications.map(item => <button key={item.id} type="button" onClick={() => item.type === 'message' ? openChat(item) : markNotificationRead(item.id)}
-          className="flex w-full gap-3 rounded-xl p-3 text-left hover:bg-slate-50 dark:hover:bg-slate-800/70">
-          <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 dark:bg-indigo-950/60 dark:text-indigo-400"><MessageSquare size={15} /></div>
-          <div className="min-w-0"><div className="text-xs font-bold text-slate-900 dark:text-white">{item.title}</div><div className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400 line-clamp-2">{item.message}</div></div>
-        </button>)}
-      </div>
-    </div>}
-  </>;
+      )}
+    </div>
+  );
 };

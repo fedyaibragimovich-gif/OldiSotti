@@ -2,7 +2,10 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     function isAdmin() {
-      return request.auth != null && request.auth.uid == 'Q81AQDKw7GXYeNgdrnp2qvYgyS02';
+      return request.auth != null && (
+        request.auth.uid == 'Q81AQDKw7GXYeNgdrnp2qvYgyS02' ||
+        (request.auth.token.email != null && request.auth.token.email.lower() == 'fedya.ibragimovich@gmail.com')
+      );
     }
     function signedIn() { return request.auth != null; }
     function isConversationParticipant() {
@@ -113,7 +116,7 @@ service cloud.firestore {
 
     match /notifications/{notificationId} {
       allow read: if isAdmin() || (signedIn() && resource.data.recipientId == request.auth.uid);
-      allow create: if signedIn() &&
+      allow create: if isAdmin() || (signedIn() &&
         request.resource.data.type == 'message' &&
         request.resource.data.recipientId is string &&
         request.resource.data.recipientId != request.auth.uid &&

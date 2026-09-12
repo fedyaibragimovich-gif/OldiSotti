@@ -9,8 +9,8 @@ interface SearchBannerProps {
   searchQuery: string;
   onSearchChange: (query: string) => void;
   selectedRegion: string;
-  selectedDistrict: string;
-  onLocationChange: (regionId: string, districtId: string) => void;
+  selectedDistrict?: string;
+  onLocationChange: (regionId: string, districtId?: string) => void;
   onSearchSubmit: () => void;
 }
 
@@ -19,13 +19,11 @@ export const SearchBanner: React.FC<SearchBannerProps> = ({
   searchQuery,
   onSearchChange,
   selectedRegion,
-  selectedDistrict,
   onLocationChange,
   onSearchSubmit
 }) => {
   const t = getTranslation(lang);
   const [locationDropdownOpen, setLocationDropdownOpen] = useState(false);
-  const [tempRegion, setTempRegion] = useState(selectedRegion);
   const [isSuggestionsOpen, setIsSuggestionsOpen] = useState(false);
   const searchContainerRef = useRef<HTMLDivElement>(null);
   const locationContainerRef = useRef<HTMLDivElement>(null);
@@ -92,15 +90,7 @@ export const SearchBanner: React.FC<SearchBannerProps> = ({
     if (!selectedRegion) return t.allUzbekistan;
     const reg = regions.find(r => r.id === selectedRegion);
     if (!reg) return t.allUzbekistan;
-    const regName = reg.name[lang] || reg.name.uz || reg.name.ru;
-    if (selectedDistrict) {
-      const dist = reg.districts.find(d => d.id === selectedDistrict);
-      if (dist) {
-        const distName = dist.name[lang] || dist.name.uz || dist.name.ru;
-        return `${distName}, ${regName}`;
-      }
-    }
-    return regName;
+    return reg.name[lang] || reg.name.uz || reg.name.ru;
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -285,59 +275,29 @@ export const SearchBanner: React.FC<SearchBannerProps> = ({
                 </button>
 
                 {/* Regions List */}
-                <div className="mt-2 max-h-60 overflow-y-auto space-y-1 pr-1">
+                <div className="mt-2 max-h-64 overflow-y-auto space-y-1 pr-1">
                   {regions.map((reg) => {
                     const isRegSelected = selectedRegion === reg.id;
                     const regDisplayName = reg.name[lang] || reg.name.uz || reg.name.ru;
                     return (
-                      <div key={reg.id} className="border-b border-slate-50 dark:border-slate-800 last:border-0 pb-1">
-                        <button
-                          onClick={() => {
-                            if (tempRegion === reg.id) {
-                              setTempRegion('');
-                            } else {
-                              setTempRegion(reg.id);
-                            }
-                            onLocationChange(reg.id, '');
-                            if (reg.districts.length === 0) {
-                              setLocationDropdownOpen(false);
-                            }
-                          }}
-                          className={`flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-xs sm:text-sm font-semibold transition-colors cursor-pointer text-left ${
-                            isRegSelected ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 font-bold' : 'hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200'
-                          }`}
-                        >
-                          <span className="truncate pr-2">{regDisplayName}</span>
-                          <span className="text-[11px] font-medium text-slate-400 dark:text-slate-400 shrink-0">
-                            {reg.districts.length > 0 ? `${reg.districts.length} ${lang === 'oz' ? 'туман' : lang === 'ru' ? 'р-н.' : 'tuman'}` : ''}
-                          </span>
-                        </button>
-
-                        {/* Districts sub-list if region is active */}
-                        {tempRegion === reg.id && reg.districts.length > 0 && (
-                          <div className="ml-3 my-1 pl-2 border-l-2 border-indigo-200 dark:border-indigo-800 grid grid-cols-2 gap-1 py-1">
-                            {reg.districts.map((dist) => {
-                              const distDisplayName = dist.name[lang] || dist.name.uz || dist.name.ru;
-                              return (
-                                <button
-                                  key={dist.id}
-                                  onClick={() => {
-                                    onLocationChange(reg.id, dist.id);
-                                    setLocationDropdownOpen(false);
-                                  }}
-                                  className={`truncate text-left px-2 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-                                    selectedDistrict === dist.id
-                                      ? 'bg-indigo-600 text-white font-bold shadow-xs'
-                                      : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'
-                                  }`}
-                                >
-                                  {distDisplayName}
-                                </button>
-                              );
-                            })}
-                          </div>
+                      <button
+                        key={reg.id}
+                        type="button"
+                        onClick={() => {
+                          onLocationChange(reg.id, '');
+                          setLocationDropdownOpen(false);
+                        }}
+                        className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-xs sm:text-sm font-semibold transition-colors cursor-pointer text-left ${
+                          isRegSelected
+                            ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 font-bold'
+                            : 'hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200'
+                        }`}
+                      >
+                        <span className="truncate pr-2">{regDisplayName}</span>
+                        {isRegSelected && (
+                          <Check size={16} className="text-indigo-600 dark:text-indigo-400 shrink-0" />
                         )}
-                      </div>
+                      </button>
                     );
                   })}
                 </div>

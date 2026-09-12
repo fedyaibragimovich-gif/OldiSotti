@@ -15,6 +15,7 @@ import {
   Eye,
   Calendar,
   AlertTriangle,
+  Ban,
   Copy,
   ExternalLink,
   Truck,
@@ -26,7 +27,7 @@ import {
   Maximize2,
   RotateCcw
 } from 'lucide-react';
-import { Listing, Currency, Language } from '../types';
+import { Listing, Currency, Language, ModerationReport } from '../types';
 import { formatPrice, formatPriceSecondary, maskPhoneNumber } from '../utils/formatters';
 import { getTranslation } from '../data/translations';
 import { regions } from '../data/locations';
@@ -34,6 +35,7 @@ import { categories } from '../data/categories';
 import { InfoTabKey } from '../data/infoPagesData';
 import { PriceHistoryChart } from './PriceHistoryChart';
 import { SimilarListingsSection } from './SimilarListingsSection';
+import { auth, saveReportToDb, blockSellerInDb } from '../lib/firebase';
 
 interface ListingDetailModalProps {
   listing: Listing | null;
@@ -220,9 +222,7 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
   const cat = categories.find(c => c.id === listing.categoryId);
   const reg = regions.find(r => r.id === listing.location.region);
   const regionName = reg ? (reg.name[lang] || reg.name.uz || reg.name.ru) : listing.location.region;
-  const dist = reg?.districts.find(d => d.id === listing.location.district);
-  const districtName = dist ? (dist.name[lang] || dist.name.uz || dist.name.ru) : '';
-  const displayLocation = districtName ? `${regionName}, ${districtName}` : regionName;
+  const displayLocation = regionName;
 
   const handleCopyPhone = () => {
     navigator.clipboard?.writeText(listing.seller.phone);
@@ -234,6 +234,75 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
     navigator.clipboard?.writeText(window.location.href);
     setCopiedToast(t.linkCopied);
     setTimeout(() => setCopiedToast(null), 2500);
+  };
+
+  const sellerUid = listing.userId || (listing.seller.id !== 'user-self' ? listing.seller.id : '');
+
+  const handleReport = async () => {
+    if (!auth.currentUser) {
+      setCopiedToast('Shikoyat yuborish uchun avval tizimga kiring.');
+      setTimeout(() => setCopiedToast(null), 3000);
+      return;
+    }
+    const raw = window.prompt('Sababni kiriting: spam, price, prohibited, fraud yoki other', 'fraud');
+    if (!raw) return;
+    const normalized = raw.trim().toLowerCase();
+    const reason: ModerationReport['reason'] = ['spam', 'price', 'prohibited', 'fraud', 'other'].includes(normalized) ? (normalized as ModerationReport['reason']) : 'other';
+    const comment = window.prompt('Qo‘shimcha izoh (ixtiyoriy):', '') || undefined;
+    const reportKey = `report-${auth.currentUser.uid}-${listing.id}`;
+    if (localStorage.getItem(`oldisotti_reported_${listing.id}`)) {
+      setCopiedToast('Bu e’lon bo‘yicha siz allaqachon shikoyat yuborgansiz.');
+      setTimeout(() => setCopiedToast(null), 3000);
+      return;
+    }
+    try {
+      await saveReportToDb({
+        id: reportKey,
+        listingId: listing.id,
+        listingTitle: listing.title,
+        reason,
+        comment,
+        reporterId: auth.currentUser.uid,
+        createdAt: new Date().toISOString(),
+        status: 'pending'
+      });
+      localStorage.setItem(`oldisotti_reported_${listing.id}`, '1');
+      setCopiedToast('Shikoyatingiz qabul qilindi. Rahmat!');
+      setTimeout(() => setCopiedToast(null), 3000);
+    } catch {
+      setCopiedToast('Shikoyat yuborishda xatolik yuz berdi.');
+      setTimeout(() => setCopiedToast(null), 3000);
+    }
+  };
+
+  const handleBlockSeller = async () => {
+    if (!auth.currentUser) {
+      setCopiedToast('Sotuvchini bloklash uchun avval tizimga kiring.');
+      setTimeout(() => setCopiedToast(null), 3000);
+      return;
+    }
+    if (!sellerUid || sellerUid === auth.currentUser.uid) {
+      setCopiedToast('O‘z profilingizni bloklay olmaysiz.');
+      setTimeout(() => setCopiedToast(null), 3000);
+      return;
+    }
+    const ok = window.confirm(`${listing.seller.name} sotuvchisini bloklaysizmi? Uning e’lonlari sizga boshqa ko‘rinmaydi.`);
+    if (!ok) return;
+    try {
+      await blockSellerInDb(sellerUid);
+      const current = JSON.parse(localStorage.getItem('olx_blocked_sellers') || '[]');
+      const next = Array.isArray(current) ? Array.from(new Set([...current, listing.seller.id, sellerUid])) : [listing.seller.id, sellerUid];
+      localStorage.setItem('olx_blocked_sellers', JSON.stringify(next));
+      window.dispatchEvent(new Event('olx_blocked_sellers_updated'));
+      setCopiedToast('Sotuvchi bloklandi.');
+      setTimeout(() => {
+        setCopiedToast(null);
+        onClose();
+      }, 1200);
+    } catch {
+      setCopiedToast('Sotuvchini bloklashda xatolik yuz berdi.');
+      setTimeout(() => setCopiedToast(null), 3000);
+    }
   };
 
   return (
@@ -447,7 +516,7 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
                         <MapPin size={22} />
                       </div>
                       <span className="mt-1 bg-white/95 dark:bg-slate-900 px-2.5 py-0.5 rounded shadow text-[11px] font-bold text-slate-800 dark:text-slate-200">
-                        {districtName || regionName}
+                        {regionName}
                       </span>
                     </div>
                   </div>
@@ -702,6 +771,26 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
                       @oldisotti_uz
                     </span>
                   </a>
+
+                  {/* Moderation Actions: Report & Block Seller */}
+                  <div className="flex items-center justify-between pt-2.5 px-1 border-t border-slate-100 dark:border-slate-800 text-xs text-slate-400">
+                    <button
+                      type="button"
+                      onClick={handleReport}
+                      className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors cursor-pointer"
+                    >
+                      <AlertTriangle size={14} className="text-amber-500 shrink-0" />
+                      <span>Shikoyat qilish</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleBlockSeller}
+                      className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 transition-colors cursor-pointer"
+                    >
+                      <Ban size={14} className="text-slate-400 shrink-0" />
+                      <span>Sotuvchini bloklash</span>
+                    </button>
+                  </div>
                 </div>
               </div>
 
