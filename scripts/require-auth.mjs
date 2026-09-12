@@ -11,9 +11,9 @@ if (!s.includes("import { auth } from '../lib/firebase';")) {
 }
 
 const marker = "  const handleSubmit = (e: React.FormEvent) => {\n    e.preventDefault();\n";
-const replacement = "  const handleSubmit = (e: React.FormEvent) => {\n    e.preventDefault();\n    if (!auth.currentUser) {\n      setErrorMsg('E\\'lon joylash uchun avval akkauntga kiring.');\n      return;\n    }\n";
+const replacement = "  const handleSubmit = (e: React.FormEvent) => {\n    e.preventDefault();\n    const currentUser = auth.currentUser;\n    if (!currentUser || currentUser.isAnonymous) {\n      setErrorMsg('E\\'lon joylash uchun avval akkauntingizga kiring.');\n      return;\n    }\n";
 
-if (s.includes(marker) && !s.includes("E\\'lon joylash uchun avval akkauntga kiring.")) {
+if (s.includes(marker) && !s.includes("currentUser.isAnonymous")) {
   s = s.replace(marker, replacement);
 }
 
