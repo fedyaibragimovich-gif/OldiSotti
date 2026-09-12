@@ -16,6 +16,11 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
       - name: Patch Firestore listing writes
         shell: python
         run: |
@@ -82,7 +87,7 @@ jobs:
 
       - name: Verify
         run: |
-          npm ci
+          npm install --no-audit --no-fund
           npm run lint
           npm run build
 
