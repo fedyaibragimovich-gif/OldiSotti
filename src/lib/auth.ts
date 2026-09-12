@@ -4,6 +4,7 @@ import {
   signInWithEmailAndPassword,
   signInWithPopup,
   signInWithRedirect,
+  getRedirectResult,
   GoogleAuthProvider,
   signOut,
   sendPasswordResetEmail,
@@ -22,10 +23,41 @@ export const isAdminUser = (user: User | null): boolean => {
   return Boolean(user.email && user.emailVerified && ADMIN_EMAILS.includes(user.email.toLowerCase()));
 };
 
-export const subscribeToAuth = (callback: (user: User | null) => void) => onAuthStateChanged(auth, callback);
-
 const persistAuthSession = async () => {
   await setPersistence(auth, browserLocalPersistence);
+};
+
+let redirectRestorePromise: Promise<void> | null = null;
+
+const restoreRedirectSession = () => {
+  if (!redirectRestorePromise) {
+    redirectRestorePromise = (async () => {
+      await persistAuthSession();
+      try {
+        await getRedirectResult(auth);
+      } catch (error) {
+        console.warn('Google redirect sign-in restore failed:', error);
+      }
+      await auth.authStateReady();
+    })();
+  }
+  return redirectRestorePromise;
+};
+
+export const subscribeToAuth = (callback: (user: User | null) => void) => {
+  let active = true;
+  let unsubscribe = () => {};
+
+  void restoreRedirectSession().finally(() => {
+    if (!active) return;
+    callback(auth.currentUser);
+    unsubscribe = onAuthStateChanged(auth, callback);
+  });
+
+  return () => {
+    active = false;
+    unsubscribe();
+  };
 };
 
 export const loginWithEmail = async (email: string, password: string) => {
