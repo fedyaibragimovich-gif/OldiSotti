@@ -230,7 +230,6 @@ export const SearchBanner: React.FC<SearchBannerProps> = ({
               id="location-picker-btn"
               type="button"
               onClick={() => {
-                setTempRegion(selectedRegion);
                 setLocationDropdownOpen(!locationDropdownOpen);
               }}
               className="flex w-full items-center justify-between gap-2 px-3 py-3 text-sm text-left font-medium text-slate-700 dark:text-slate-200 bg-slate-50 dark:bg-slate-800/80 md:bg-transparent md:dark:bg-transparent rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer relative z-40"

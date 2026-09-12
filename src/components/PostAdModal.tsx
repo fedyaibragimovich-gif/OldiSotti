@@ -210,6 +210,14 @@ export const PostAdModal: React.FC<PostAdModalProps> = ({
   };
 
 
+  const handleAddPresetPhoto = (url: string) => {
+    if (!images.includes(url)) {
+      setImages(prev => [url, ...prev]);
+    }
+    setLastGenerated({ url, source: 'preset' });
+    setErrorMsg('');
+  };
+
   const selectedCategory = categories.find(c => c.id === categoryId);
 
   if (!isOpen) return null;
