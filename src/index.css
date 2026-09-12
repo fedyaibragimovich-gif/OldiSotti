@@ -39,6 +39,33 @@
     max-width: 100%;
     min-height: 100vh;
   }
+
+  /* Clear tactile feedback for every interactive button, especially on mobile. */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]) {
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    transition: transform 120ms ease, filter 120ms ease, opacity 120ms ease, box-shadow 120ms ease;
+  }
+
+  button:not(:disabled):active,
+  [role="button"]:not([aria-disabled="true"]):active {
+    transform: translateY(1px) scale(0.97);
+    filter: brightness(0.92);
+  }
+
+  button:not(:disabled):focus-visible,
+  [role="button"]:not([aria-disabled="true"]):focus-visible {
+    outline: 2px solid #6366f1;
+    outline-offset: 2px;
+  }
+
+  button:disabled,
+  [aria-disabled="true"] {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
 }
 
 /* Hardware accelerated smooth scroll optimization for silky 60/120fps scrolling */
