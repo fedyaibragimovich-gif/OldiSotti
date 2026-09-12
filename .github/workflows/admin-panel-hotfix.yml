@@ -12,16 +12,17 @@ jobs:
   hotfix:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-      - name: Patch Firestore writes and admin state handling
+
+      - name: Patch Firestore listing writes
         shell: python
         run: |
           from pathlib import Path
 
-          firebase = Path('src/lib/firebase.ts')
-          text = firebase.read_text()
+          p = Path('src/lib/firebase.ts')
+          text = p.read_text()
 
           anchor = """function isCurrentAdmin(): boolean {
             const user = auth.currentUser;
@@ -30,9 +31,9 @@ jobs:
             return Boolean(user.emailVerified && user.email?.toLowerCase() === ADMIN_EMAIL);
           }
           """
+
           helper = anchor + """
-          // Firestore rejects `undefined`, including values nested inside maps such as location.address.
-          // Keep optional fields omitted instead of allowing one legacy/incomplete listing to break admin writes.
+          // Firestore does not accept undefined values, including nested optional fields.
           function stripUndefinedDeep<T>(value: T): T {
             if (Array.isArray(value)) {
               return value
@@ -49,128 +50,47 @@ jobs:
             return value;
           }
           """
+
           if 'function stripUndefinedDeep' not in text:
             if anchor not in text:
               raise SystemExit('isCurrentAdmin anchor not found')
             text = text.replace(anchor, helper, 1)
 
-          text = text.replace(
-            "fallbackListings.forEach((listing) => batch.set(doc(db, LISTINGS_COLLECTION, listing.id), listing));",
-            "fallbackListings.forEach((listing) => batch.set(doc(db, LISTINGS_COLLECTION, listing.id), stripUndefinedDeep(listing)));"
-          )
-          text = text.replace('await setDoc(listingRef, safeListing);', 'await setDoc(listingRef, stripUndefinedDeep(safeListing));')
-          text = text.replace('await setDoc(listingRef, data);', 'await setDoc(listingRef, stripUndefinedDeep(data));')
-          text = text.replace(
-            "await updateDoc(doc(db, LISTINGS_COLLECTION, listingId), updates);",
-            "await updateDoc(doc(db, LISTINGS_COLLECTION, listingId), stripUndefinedDeep(updates));"
-          )
-          firebase.write_text(text)
+          replacements = [
+            (
+              "fallbackListings.forEach((listing) => batch.set(doc(db, LISTINGS_COLLECTION, listing.id), listing));",
+              "fallbackListings.forEach((listing) => batch.set(doc(db, LISTINGS_COLLECTION, listing.id), stripUndefinedDeep(listing)));"
+            ),
+            (
+              "await setDoc(listingRef, safeListing);",
+              "await setDoc(listingRef, stripUndefinedDeep(safeListing));"
+            ),
+            (
+              "await setDoc(listingRef, data);",
+              "await setDoc(listingRef, stripUndefinedDeep(data));"
+            ),
+            (
+              "await updateDoc(doc(db, LISTINGS_COLLECTION, listingId), updates);",
+              "await updateDoc(doc(db, LISTINGS_COLLECTION, listingId), stripUndefinedDeep(updates));"
+            )
+          ]
 
-          app = Path('src/App.tsx')
-          text = app.read_text()
-          old = """  const handleUpdateListing = async (updated: Listing) => {
-            setListings((prev) =>
-              prev.map((item) => (item.id === updated.id ? updated : item))
-            );
-            if (selectedListing && selectedListing.id === updated.id) {
-              setSelectedListing(updated);
-            }
-            try {
-              await saveListingToDb(updated);
-              if (updated.userId && (updated.status === 'active' || updated.status === 'rejected')) {
-                const notif: AppNotification = {
-                  id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-                  type: 'status',
-                  title: updated.status === 'active' ? \"E'lon tasdiqlandi\" : \"E'lon rad etildi\",
-                  message: updated.status === 'active'
-                    ? `\"${updated.title}\" e'loningiz muvaffaqiyatli moderatsiyadan o'tdi va e'lonlar ro'yxatiga chiqarildi.`
-                    : `\"${updated.title}\" e'loningiz rad etildi. Sababi: ${updated.rejectionReason || \"Moderatsiya qoidalariga to'g'ri kelmadi\"}`,
-                  createdAt: new Date().toISOString(),
-                  read: false,
-                  recipientId: updated.userId,
-                  listingId: updated.id
-                };
-                await saveNotificationToDb(notif).catch((err) => console.warn('Could not save notification:', err));
-              }
-            } catch (e) {
-              console.warn('Failed to update listing in Firestore:', e);
-              throw e;
-            }
-          };
-          """
-          new = """  const handleUpdateListing = async (updated: Listing) => {
-            // Persist first. The admin UI must never show a successful state when Firestore rejected the write.
-            try {
-              await saveListingToDb(updated);
-            } catch (e) {
-              console.warn('Failed to update listing in Firestore:', e);
-              throw e;
-            }
+          for old, new in replacements:
+            text = text.replace(old, new)
 
-            setListings((prev) =>
-              prev.map((item) => (item.id === updated.id ? updated : item))
-            );
-            if (selectedListing && selectedListing.id === updated.id) {
-              setSelectedListing(updated);
-            }
+          p.write_text(text)
 
-            // Notification failure must not turn an already-successful moderation action into an error.
-            if (updated.userId && (updated.status === 'active' || updated.status === 'rejected')) {
-              const notif: AppNotification = {
-                id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-                type: 'status',
-                title: updated.status === 'active' ? \"E'lon tasdiqlandi\" : \"E'lon rad etildi\",
-                message: updated.status === 'active'
-                  ? `\"${updated.title}\" e'loningiz muvaffaqiyatli moderatsiyadan o'tdi va e'lonlar ro'yxatiga chiqarildi.`
-                  : `\"${updated.title}\" e'loningiz rad etildi. Sababi: ${updated.rejectionReason || \"Moderatsiya qoidalariga to'g'ri kelmadi\"}`,
-                createdAt: new Date().toISOString(),
-                read: false,
-                recipientId: updated.userId,
-                listingId: updated.id
-              };
-              await saveNotificationToDb(notif).catch((err) => console.warn('Could not save notification:', err));
-            }
-          };
-          """
-          if old not in text:
-            raise SystemExit('handleUpdateListing block not found')
-          text = text.replace(old, new, 1)
-
-          old_delete = """  const handleDeleteListing = async (id: string) => {
-            setListings((prev) => prev.filter((item) => item.id !== id));
-            try {
-              await deleteListingFromDb(id);
-            } catch (e) {
-              console.warn('Failed to delete from Firestore:', e);
-            }
-          };
-          """
-          new_delete = """  const handleDeleteListing = async (id: string) => {
-            try {
-              await deleteListingFromDb(id);
-              setListings((prev) => prev.filter((item) => item.id !== id));
-            } catch (e) {
-              console.warn('Failed to delete from Firestore:', e);
-              throw e;
-            }
-          };
-          """
-          if old_delete in text:
-            text = text.replace(old_delete, new_delete, 1)
-
-          app.write_text(text)
       - name: Verify
         run: |
           npm ci
-          npm run typecheck
+          npm run lint
           npm run build
+
       - name: Commit hotfix
         run: |
           git config user.name "OldiSotti CI"
           git config user.email "actions@users.noreply.github.com"
-          git add src/lib/firebase.ts src/App.tsx
+          git add src/lib/firebase.ts
           git diff --cached --quiet && exit 0
-          git commit -m "fix: harden admin listing writes"
+          git commit -m "fix: sanitize Firestore listing writes"
           git push origin HEAD:main
-
-# trigger: 2026-09-12T23:29+05:00
