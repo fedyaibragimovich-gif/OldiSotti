@@ -1,6 +1,9 @@
+import { verifyFirebaseUser } from '../_shared';
+
 type VercelRequest = {
   method?: string;
   body?: unknown;
+  headers?: Record<string, string | string[] | undefined>;
 };
 
 type VercelResponse = {
@@ -11,6 +14,11 @@ type VercelResponse = {
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ success: false, error: 'Method not allowed' });
+  }
+
+  const currentUser = await verifyFirebaseUser(req);
+  if (!currentUser) {
+    return res.status(401).json({ success: false, error: 'Authentication required' });
   }
 
   const token = process.env.TELEGRAM_BOT_TOKEN;
@@ -29,9 +37,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ success: false, error: 'sellerTelegram and messageText are required' });
   }
 
-  // Telegram bots cannot initiate a private chat by @username alone.
-  // A numeric chat ID is required for server-side delivery. For usernames,
-  // return a safe deep-link instead of pretending the message was delivered.
   const normalizedChatId = sellerTelegram.replace(/^@/, '');
   const isNumericChatId = /^-?\d+$/.test(normalizedChatId);
 

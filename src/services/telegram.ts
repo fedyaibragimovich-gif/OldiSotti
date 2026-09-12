@@ -1,4 +1,5 @@
 import { Listing } from '../types';
+import { auth } from '../lib/firebase';
 
 export interface TelegramPostResponse {
   success: boolean;
@@ -21,6 +22,16 @@ export interface TelegramConnectionResponse {
   message?: string;
 }
 
+async function getAuthHeaders(): Promise<Record<string, string> | null> {
+  const user = auth.currentUser;
+  if (!user || user.isAnonymous) return null;
+  const token = await user.getIdToken();
+  return {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${token}`
+  };
+}
+
 export function formatTelegramPostPreview(listing: Listing, appUrl?: string): string {
   const baseUrl = appUrl || (typeof window !== 'undefined' ? window.location.origin : 'https://oldisotti.uz');
   return `<a href="${baseUrl}/?listing=${encodeURIComponent(listing.id)}">OldiSotti'da e'lonni ko'rish</a>`;
@@ -38,10 +49,12 @@ export async function postListingToTelegram(
   options?: { appUrl?: string; channelId?: string; botToken?: string }
 ): Promise<TelegramPostResponse> {
   try {
+    const headers = await getAuthHeaders();
+    if (!headers) return { success: false, error: 'Telegramga yuborish uchun akkauntga kiring.' };
     const baseUrl = options?.appUrl || (typeof window !== 'undefined' ? window.location.origin : 'https://oldisotti.uz');
     const res = await fetch('/api/telegram/post-listing', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({ listing, appUrl: baseUrl, channelId: options?.channelId })
     });
     const data = await res.json().catch(() => ({}));
@@ -57,9 +70,11 @@ export async function postListingToTelegram(
 
 export async function testTelegramConnection(_botToken?: string, channelId?: string): Promise<TelegramConnectionResponse> {
   try {
+    const headers = await getAuthHeaders();
+    if (!headers) return { success: false, error: 'Telegram sozlamalarini tekshirish uchun akkauntga kiring.' };
     const res = await fetch('/api/telegram/test-connection', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({ channelId })
     });
     return (await res.json().catch(() => ({}))) as TelegramConnectionResponse;
@@ -70,13 +85,15 @@ export async function testTelegramConnection(_botToken?: string, channelId?: str
 
 export async function notifySellerOnTelegram(params: { sellerTelegram?: string; listingTitle: string; buyerName: string; messageText: string; listingId: string }): Promise<boolean> {
   try {
+    const headers = await getAuthHeaders();
+    if (!headers) return false;
     const res = await fetch('/api/telegram/send-notification', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(params)
     });
-    const data = await res.json();
-    return Boolean(data.success);
+    const data = await res.json().catch(() => ({}));
+    return Boolean(res.ok && data.success);
   } catch (err) {
     console.warn('Telegram seller notification error:', err);
     return false;

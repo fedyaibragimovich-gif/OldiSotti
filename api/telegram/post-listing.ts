@@ -1,6 +1,9 @@
+import { isVerifiedAdmin, verifyFirebaseUser } from '../_shared';
+
 type VercelRequest = {
   method?: string;
   body?: unknown;
+  headers?: Record<string, string | string[] | undefined>;
 };
 
 type VercelResponse = {
@@ -21,8 +24,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ success: false, error: 'Method not allowed' });
   }
 
+  const currentUser = await verifyFirebaseUser(req);
+  if (!currentUser) {
+    return res.status(401).json({ success: false, error: 'Authentication required' });
+  }
+  if (!isVerifiedAdmin(currentUser)) {
+    return res.status(403).json({ success: false, error: 'Admin access required' });
+  }
+
   const body = (req.body || {}) as Record<string, any>;
-  // Never accept a bot token from the client. Secrets must stay server-side.
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const channelId = process.env.TELEGRAM_CHANNEL_ID || String(body.channelId || '').trim() || '@OSot_uz';
 
@@ -44,7 +54,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(409).json({ success: false, error: 'Only active listings can be published to Telegram' });
   }
 
-  // Public channel posts intentionally contain only a link to the listing.
   const message = `<a href="${escapeHtml(url)}">OldiSotti'da e'lonni ko'rish</a>`;
 
   try {

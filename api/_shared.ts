@@ -30,6 +30,16 @@ export interface TelegramConnectionResponse {
   message?: string;
 }
 
+const FIREBASE_API_KEY = process.env.FIREBASE_API_KEY || process.env.VITE_FIREBASE_API_KEY || 'AIzaSyAITdHp6PssWTS-LWTpjQ49faSn1ozXoOU';
+const ADMIN_UID = 'Q81AQDKw7GXYeNgdrnp2qvYgyS02';
+const ADMIN_EMAILS = new Set(['fedya.ibragimovich@gmail.com']);
+
+export interface VerifiedFirebaseUser {
+  localId: string;
+  email?: string;
+  emailVerified?: boolean;
+}
+
 export function escapeTelegramHtml(text: string): string {
   if (!text) return '';
   return text
@@ -56,6 +66,10 @@ export async function parseJsonBody(req: any): Promise<any> {
     }
     req.on('data', (chunk: any) => {
       data += chunk;
+      if (data.length > 10 * 1024 * 1024) {
+        data = '';
+        req.destroy?.();
+      }
     });
     req.on('end', () => {
       try {
@@ -68,8 +82,45 @@ export async function parseJsonBody(req: any): Promise<any> {
   });
 }
 
+export function extractBearerToken(req: any): string | null {
+  const header = req.headers?.authorization || req.headers?.Authorization;
+  if (typeof header !== 'string' || !header.startsWith('Bearer ')) return null;
+  return header.slice(7).trim() || null;
+}
+
+export async function verifyFirebaseUser(req: any): Promise<VerifiedFirebaseUser | null> {
+  const idToken = extractBearerToken(req);
+  if (!idToken) return null;
+
+  try {
+    const response = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(FIREBASE_API_KEY)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ idToken })
+    });
+    if (!response.ok) return null;
+    const data = await response.json() as any;
+    const user = Array.isArray(data.users) ? data.users[0] : null;
+    if (!user?.localId) return null;
+    return {
+      localId: String(user.localId),
+      email: typeof user.email === 'string' ? user.email : undefined,
+      emailVerified: Boolean(user.emailVerified)
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function isVerifiedAdmin(user: VerifiedFirebaseUser | null): boolean {
+  if (!user) return false;
+  if (user.localId === ADMIN_UID) return true;
+  const email = user.email?.toLowerCase();
+  return Boolean(email && user.emailVerified && ADMIN_EMAILS.has(email));
+}
+
 export function setCorsHeaders(res: any) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 }

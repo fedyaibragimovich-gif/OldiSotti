@@ -1,5 +1,8 @@
+import { isVerifiedAdmin, verifyFirebaseUser } from '../_shared';
+
 type VercelRequest = {
   method?: string;
+  headers?: Record<string, string | string[] | undefined>;
 };
 
 type VercelResponse = {
@@ -10,6 +13,14 @@ type VercelResponse = {
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET' && req.method !== 'POST') {
     return res.status(405).json({ success: false, error: 'Method not allowed' });
+  }
+
+  const currentUser = await verifyFirebaseUser(req);
+  if (!currentUser) {
+    return res.status(401).json({ success: false, error: 'Authentication required' });
+  }
+  if (!isVerifiedAdmin(currentUser)) {
+    return res.status(403).json({ success: false, error: 'Admin access required' });
   }
 
   const token = process.env.TELEGRAM_BOT_TOKEN;
