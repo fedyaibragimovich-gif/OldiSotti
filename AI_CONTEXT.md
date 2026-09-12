@@ -60,6 +60,8 @@ Current expectations:
 
 - At least one image is required.
 - Maximum 4 images.
+- Each selected source image may be up to 10 MB.
+- Source images are compressed client-side to JPEG (max side 1280 px, quality about 0.72) before being stored as data URLs.
 - Current Firestore image payload guard is about 700,000 characters total because images are still stored as data URLs.
 - Uploaded-image delete control must be visible on mobile without hover.
 - Demo contact-name/phone/Telegram defaults must not be present in production.
@@ -168,7 +170,7 @@ A GitHub Actions workflow exists for Firebase rules deployment and requires the 
 
 ## Images / storage
 
-Current local uploads are still serialized as data URLs into listing documents. This is a temporary limitation and risks the Firestore 1 MiB document limit.
+Current local uploads are still serialized as compressed data URLs into listing documents. This is a temporary limitation and risks the Firestore 1 MiB document limit. The UI accepts source images up to 10 MB each, but client-side compression and the ~700k total serialized-image guard remain necessary until storage is migrated.
 
 Long-term priority: migrate listing images to Firebase Storage or another object-storage service, storing only URLs in Firestore.
 
@@ -177,6 +179,7 @@ Long-term priority: migrate listing images to Firebase Storage or another object
 - `scripts/require-auth.mjs`
   - enforces auth on posting
   - strips demo contact defaults
+  - accepts source images up to 10 MB and compresses them before storage
   - limits image count/payload
   - disables direct browser VIP
   - ensures seller verification is not client-trusted
@@ -215,6 +218,7 @@ When changing source code, verify the prebuild scripts do not overwrite or re-pa
 - Moderation report subscription restricted to admins.
 - Security headers added in `vercel.json`.
 - OpenStreetMap/Leaflet location picker, listing map, and nearby sorting added.
+- Source image upload limit increased to 10 MB per image with browser-side compression.
 
 ## Before every new task
 
