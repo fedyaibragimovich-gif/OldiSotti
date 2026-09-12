@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ShieldCheck, ArrowLeftRight, HelpCircle, Megaphone, Send } from 'lucide-react';
 import { Language } from '../types';
 import { getTranslation } from '../data/translations';
 import { InfoTabKey } from '../data/infoPagesData';
 import { HelpFaqModal } from './HelpFaqModal';
+import { subscribeToAuth, isAdminUser } from '../lib/auth';
+import type { User as FirebaseUser } from 'firebase/auth';
 
 interface FooterProps {
   lang: Language;
@@ -15,6 +17,11 @@ interface FooterProps {
 export const Footer: React.FC<FooterProps> = ({ lang, onOpenInfoModal, onOpenAdmin }) => {
   const t = getTranslation(lang);
   const [isHelpFaqOpen, setIsHelpFaqOpen] = useState(false);
+  const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
+
+  useEffect(() => subscribeToAuth(setCurrentUser), []);
+
+  const authorized = isAdminUser(currentUser);
 
   return (
     <>
@@ -61,7 +68,7 @@ export const Footer: React.FC<FooterProps> = ({ lang, onOpenInfoModal, onOpenAdm
               <button id="footer-terms-btn" type="button" onClick={() => onOpenInfoModal?.('terms')} className="hover:text-slate-200 transition-colors cursor-pointer">Shartlar</button>
               <button id="footer-privacy-btn" type="button" onClick={() => onOpenInfoModal?.('privacy')} className="hover:text-slate-200 transition-colors cursor-pointer">Maxfiylik</button>
               <a id="footer-channel-btn" href="https://t.me/OSot_uz" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 hover:text-sky-300 transition-colors">Kanal</a>
-              {onOpenAdmin && <button id="footer-admin-btn" type="button" onClick={onOpenAdmin} className="inline-flex items-center gap-1 text-indigo-400 hover:text-indigo-300 transition-colors font-bold"><ShieldCheck size={11} />Admin</button>}
+              {onOpenAdmin && authorized && <button id="footer-admin-btn" type="button" onClick={onOpenAdmin} className="inline-flex items-center gap-1 text-indigo-400 hover:text-indigo-300 transition-colors font-bold"><ShieldCheck size={11} />Admin</button>}
             </div>
 
             <span className="text-[9px] text-slate-600 whitespace-nowrap">{t.copyright}</span>
