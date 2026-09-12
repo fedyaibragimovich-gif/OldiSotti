@@ -1,4 +1,4 @@
-import { verifyFirebaseUser } from '../_shared';
+import { verifyFirebaseUser } from '../_shared.js';
 
 type VercelRequest = {
   method?: string;
@@ -59,29 +59,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const telegramResponse = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: normalizedChatId,
-        text,
-        disable_web_page_preview: true
-      })
+      body: JSON.stringify({ chat_id: normalizedChatId, text, disable_web_page_preview: true })
     });
-
     const telegramData = await telegramResponse.json().catch(() => ({})) as { ok?: boolean; description?: string };
-
     if (!telegramResponse.ok || !telegramData.ok) {
-      return res.status(502).json({
-        success: false,
-        configured: true,
-        error: telegramData.description || 'Telegram notification failed'
-      });
+      return res.status(502).json({ success: false, configured: true, error: telegramData.description || 'Telegram notification failed' });
     }
-
     return res.status(200).json({ success: true, configured: true });
   } catch (error: any) {
-    return res.status(502).json({
-      success: false,
-      configured: true,
-      error: error?.message || 'Telegram notification failed'
-    });
+    return res.status(502).json({ success: false, configured: true, error: error?.message || 'Telegram notification failed' });
   }
 }
