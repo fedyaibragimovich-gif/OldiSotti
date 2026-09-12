@@ -17,7 +17,7 @@ import {
 import { Language } from '../types';
 import { getTranslation } from '../data/translations';
 import { useVirtualKeyboard } from '../hooks/useVirtualKeyboard';
-import { subscribeToAuth, isAdminUser, loginWithEmail, registerWithEmail, loginWithGoogle, logoutUser } from '../lib/auth';
+import { subscribeToAuth, isAdminUser, loginWithEmail, registerWithEmail, loginWithGoogle, logoutUser, resetPassword } from '../lib/auth';
 import type { User as FirebaseUser } from 'firebase/auth';
 
 interface BottomNavProps {
@@ -50,7 +50,9 @@ export const BottomNav: React.FC<BottomNavProps> = React.memo(({
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [authLoading, setAuthLoading] = useState(false);
+  const [forgotLoading, setForgotLoading] = useState(false);
   const [authError, setAuthError] = useState('');
+  const [forgotMessage, setForgotMessage] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const profileRef = useRef<HTMLDivElement>(null);
@@ -86,6 +88,7 @@ export const BottomNav: React.FC<BottomNavProps> = React.memo(({
   const openAuth = (mode: 'login' | 'register') => {
     setAuthMode(mode);
     setAuthError('');
+    setForgotMessage('');
     setEmail('');
     setPassword('');
     setProfileModalOpen(false);
@@ -96,6 +99,7 @@ export const BottomNav: React.FC<BottomNavProps> = React.memo(({
     e.preventDefault();
     setAuthLoading(true);
     setAuthError('');
+    setForgotMessage('');
     try {
       if (authMode === 'login') await loginWithEmail(email.trim(), password);
       else await registerWithEmail(email.trim(), password);
@@ -109,9 +113,32 @@ export const BottomNav: React.FC<BottomNavProps> = React.memo(({
     }
   };
 
+  const handleForgotPassword = async () => {
+    const normalizedEmail = email.trim();
+    setAuthError('');
+    setForgotMessage('');
+    if (!normalizedEmail || !/^\S+@\S+\.\S+$/.test(normalizedEmail)) {
+      setAuthError('Avval to‘g‘ri email manzilingizni kiriting.');
+      return;
+    }
+    setForgotLoading(true);
+    try {
+      await resetPassword(normalizedEmail);
+      setForgotMessage('Parolni tiklash havolasi emailingizga yuborildi. Emailingizni tekshiring.');
+    } catch (error: any) {
+      const code = error?.code || '';
+      if (code.includes('too-many-requests')) setAuthError('Juda ko‘p urinish bo‘ldi. Birozdan keyin qayta urinib ko‘ring.');
+      else if (code.includes('invalid-email')) setAuthError('Email manzilini tekshiring.');
+      else setAuthError('Parolni tiklashda xatolik yuz berdi. Qayta urinib ko‘ring.');
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
   const handleGoogle = async () => {
     setAuthLoading(true);
     setAuthError('');
+    setForgotMessage('');
     try {
       await loginWithGoogle();
       setAuthModalOpen(false);
@@ -150,20 +177,26 @@ export const BottomNav: React.FC<BottomNavProps> = React.memo(({
             <form onSubmit={submitAuth} className="space-y-3">
               <div className="relative">
                 <Mail size={17} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input value={email} onChange={e => setEmail(e.target.value)} type="email" autoComplete="email" required placeholder="Email" className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 pl-10 pr-3 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500" />
+                <input value={email} onChange={e => { setEmail(e.target.value); setForgotMessage(''); }} type="email" autoComplete="email" required placeholder="Email" className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 pl-10 pr-3 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500" />
               </div>
               <div className="relative">
                 <Lock size={17} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input value={password} onChange={e => setPassword(e.target.value)} type="password" autoComplete={authMode === 'login' ? 'current-password' : 'new-password'} required minLength={6} placeholder="Parol" className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 pl-10 pr-3 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500" />
               </div>
+              {authMode === 'login' && (
+                <button disabled={authLoading || forgotLoading} type="button" onClick={handleForgotPassword} className="w-full text-right text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline disabled:opacity-60 cursor-pointer">
+                  {forgotLoading ? 'Yuborilmoqda…' : 'Parolni unutdingizmi?'}
+                </button>
+              )}
               {authError && <div className="rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900 p-3 text-xs font-semibold text-rose-700 dark:text-rose-300">{authError}</div>}
-              <button disabled={authLoading} type="submit" className="w-full rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white py-3 font-bold text-sm cursor-pointer">{authLoading ? 'Kutilmoqda…' : (authMode === 'login' ? navLabels.login : navLabels.register)}</button>
+              {forgotMessage && <div className="rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900 p-3 text-xs font-semibold text-emerald-700 dark:text-emerald-300">{forgotMessage}</div>}
+              <button disabled={authLoading || forgotLoading} type="submit" className="w-full rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white py-3 font-bold text-sm cursor-pointer">{authLoading ? 'Kutilmoqda…' : (authMode === 'login' ? navLabels.login : navLabels.register)}</button>
             </form>
 
             <div className="flex items-center gap-3 my-4"><div className="h-px flex-1 bg-slate-200 dark:bg-slate-700" /><span className="text-[11px] text-slate-400">yoki</span><div className="h-px flex-1 bg-slate-200 dark:bg-slate-700" /></div>
-            <button disabled={authLoading} type="button" onClick={handleGoogle} className="w-full flex items-center justify-center gap-2 rounded-xl border border-slate-200 dark:border-slate-700 py-3 text-sm font-bold hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-60 cursor-pointer"><Chrome size={17} /> Google bilan davom etish</button>
+            <button disabled={authLoading || forgotLoading} type="button" onClick={handleGoogle} className="w-full flex items-center justify-center gap-2 rounded-xl border border-slate-200 dark:border-slate-700 py-3 text-sm font-bold hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-60 cursor-pointer"><Chrome size={17} /> Google bilan davom etish</button>
 
-            <button type="button" onClick={() => { setAuthMode(authMode === 'login' ? 'register' : 'login'); setAuthError(''); }} className="w-full mt-4 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer">
+            <button type="button" onClick={() => { setAuthMode(authMode === 'login' ? 'register' : 'login'); setAuthError(''); setForgotMessage(''); }} className="w-full mt-4 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer">
               {authMode === 'login' ? navLabels.register : navLabels.login}
             </button>
           </div>
