@@ -1,0 +1,44 @@
+name: Fix TypeScript validation errors
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Apply minimal fixes
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          search = Path('src/components/SearchBanner.tsx')
+          text = search.read_text()
+          text2 = text.replace('                setTempRegion(selectedRegion);\n', '')
+          if text2 != text:
+              search.write_text(text2)
+          modal = Path('src/components/PostAdModal.tsx')
+          text = modal.read_text()
+          marker = "  const selectedCategory = categories.find(c => c.id === categoryId);"
+          function = """  const handleAddPresetPhoto = (url: string) => {\n    if (!images.includes(url)) {\n      setImages(prev => [url, ...prev]);\n    }\n    setLastGenerated({ url, source: 'preset' });\n    setErrorMsg('');\n  };\n\n"""
+          if 'const handleAddPresetPhoto = ' not in text:
+              if marker not in text:
+                  raise SystemExit('PostAdModal insertion marker not found')
+              text = text.replace(marker, function + marker, 1)
+              modal.write_text(text)
+          PY
+      - name: Commit fixes
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/components/SearchBanner.tsx src/components/PostAdModal.tsx
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "fix: resolve TypeScript validation errors"
+          git push
