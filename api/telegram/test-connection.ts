@@ -1,4 +1,4 @@
-import { isVerifiedAdmin, verifyFirebaseUser } from '../_shared';
+import { isVerifiedAdmin, verifyFirebaseUser } from '../_shared.js';
 
 type VercelRequest = {
   method?: string;
@@ -81,11 +81,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           : undefined
       }
     });
-  } catch {
+  } catch (error: any) {
     return res.status(502).json({
       success: false,
       configured: true,
-      error: 'Telegram connection failed'
+      error: error?.message || 'Telegram connection failed'
     });
   }
 }
