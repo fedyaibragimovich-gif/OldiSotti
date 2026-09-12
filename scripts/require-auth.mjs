@@ -23,10 +23,87 @@ if (s.includes(marker)) {
   s = s.replace(marker, replacement);
 }
 
+// Accept source images up to 10 MB each, but compress them in-browser before storing
+// as data URLs. This keeps the current Firestore-document storage approach below its
+// strict document-size ceiling until image storage is migrated to Firebase Storage.
+const oldUploadHandler = `  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    Array.from(files).forEach((file: File) => {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        if (event.target?.result) {
+          setImages(prev => [...prev, event.target!.result as string]);
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+  };`;
+
+const newUploadHandler = `  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFiles = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (selectedFiles.length === 0) return;
+
+    const MAX_SOURCE_BYTES = 10 * 1024 * 1024;
+    const MAX_IMAGES = 4;
+    const MAX_SIDE = 1280;
+    const JPEG_QUALITY = 0.72;
+
+    const oversized = selectedFiles.find((file) => file.size > MAX_SOURCE_BYTES);
+    if (oversized) {
+      setErrorMsg(\`Har bir rasm maksimal 10 MB bo'lishi mumkin. "\${oversized.name}" juda katta.\`);
+      return;
+    }
+
+    if (images.length + selectedFiles.length > MAX_IMAGES) {
+      setErrorMsg(\`Ko'pi bilan \${MAX_IMAGES} ta rasm yuklash mumkin.\`);
+      return;
+    }
+
+    const compressImage = (file: File): Promise<string> => new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error('Rasmni o\\'qib bo\\'lmadi'));
+      reader.onload = () => {
+        const img = new Image();
+        img.onerror = () => reject(new Error('Rasm formati qo\\'llab-quvvatlanmadi'));
+        img.onload = () => {
+          const scale = Math.min(1, MAX_SIDE / Math.max(img.width, img.height));
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.max(1, Math.round(img.width * scale));
+          canvas.height = Math.max(1, Math.round(img.height * scale));
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            reject(new Error('Rasmni qayta ishlash imkoni bo\\'lmadi'));
+            return;
+          }
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          resolve(canvas.toDataURL('image/jpeg', JPEG_QUALITY));
+        };
+        img.src = String(reader.result);
+      };
+      reader.readAsDataURL(file);
+    });
+
+    try {
+      const compressed = await Promise.all(selectedFiles.map(compressImage));
+      setImages(prev => [...prev, ...compressed].slice(0, MAX_IMAGES));
+      setErrorMsg('');
+    } catch (error) {
+      console.error('Image compression failed:', error);
+      setErrorMsg('Rasmni qayta ishlashda xatolik yuz berdi. Boshqa rasm bilan urinib ko\\'ring.');
+    }
+  };`;
+
+if (s.includes(oldUploadHandler)) {
+  s = s.replace(oldUploadHandler, newUploadHandler);
+}
+
 // Firestore documents have a strict size limit. Prevent large base64 image payloads
 // from creating listings that only appear successful locally but fail in the cloud.
 const imageValidationMarker = "    if (images.length === 0) {\n      setErrorMsg('Kamida bitta fotosurat yuklang');\n      return;\n    }\n";
-const imageValidationReplacement = `${imageValidationMarker}\n    const totalImagePayload = images.reduce((sum, image) => sum + image.length, 0);\n    if (images.length > 4) {\n      setErrorMsg('Ko\\'pi bilan 4 ta rasm yuklash mumkin.');\n      return;\n    }\n    if (totalImagePayload > 700000) {\n      setErrorMsg('Rasmlar hajmi juda katta. Rasmlarni kichraytirib, qayta yuklang.');\n      return;\n    }\n`;
+const imageValidationReplacement = `${imageValidationMarker}\n    const totalImagePayload = images.reduce((sum, image) => sum + image.length, 0);\n    if (images.length > 4) {\n      setErrorMsg('Ko\\'pi bilan 4 ta rasm yuklash mumkin.');\n      return;\n    }\n    if (totalImagePayload > 700000) {\n      setErrorMsg('Rasmlar siqilgandan keyin ham umumiy hajm juda katta. Kamroq rasm yuklang yoki kichikroq rasmlarni tanlang.');\n      return;\n    }\n`;
 if (s.includes(imageValidationMarker) && !s.includes('totalImagePayload')) {
   s = s.replace(imageValidationMarker, imageValidationReplacement);
 }
