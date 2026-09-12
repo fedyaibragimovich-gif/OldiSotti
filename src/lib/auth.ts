@@ -46,12 +46,12 @@ const restoreRedirectSession = () => {
 
 export const subscribeToAuth = (callback: (user: User | null) => void) => {
   let active = true;
-  let unsubscribe = () => {};
+  const unsubscribe = onAuthStateChanged(auth, (user) => {
+    if (active) callback(user);
+  });
 
-  void restoreRedirectSession().finally(() => {
-    if (!active) return;
-    callback(auth.currentUser);
-    unsubscribe = onAuthStateChanged(auth, callback);
+  void restoreRedirectSession().then(() => {
+    if (active) callback(auth.currentUser);
   });
 
   return () => {
@@ -85,29 +85,27 @@ export const resetPassword = (email: string) => {
   );
 };
 
-const isMobileBrowser = () => {
-  if (typeof navigator === 'undefined') return false;
-  return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
-};
-
 export const loginWithGoogle = async () => {
   await persistAuthSession();
 
   const provider = new GoogleAuthProvider();
   provider.setCustomParameters({ prompt: 'select_account' });
 
-  if (isMobileBrowser()) {
-    await signInWithRedirect(auth, provider);
-    return;
-  }
-
   try {
-    await signInWithPopup(auth, provider);
+    const result = await signInWithPopup(auth, provider);
+    await auth.authStateReady();
+    return result;
   } catch (error: any) {
-    if (error?.code === 'auth/popup-blocked' || error?.code === 'auth/operation-not-supported-in-this-environment') {
+    const fallbackToRedirect =
+      error?.code === 'auth/popup-blocked' ||
+      error?.code === 'auth/operation-not-supported-in-this-environment' ||
+      error?.code === 'auth/web-storage-unsupported';
+
+    if (fallbackToRedirect) {
       await signInWithRedirect(auth, provider);
-      return;
+      return null;
     }
+
     throw error;
   }
 };
