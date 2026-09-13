@@ -27,6 +27,7 @@ async function startServer() {
     ['/api/telegram/send-notification', await import('./api/telegram/send-notification')],
     ['/api/payments/click-link', await import('./api/payments/click-link')],
     ['/api/payments/payme-link', await import('./api/payments/payme-link')],
+    ['/api/support-chat', await import('./api/support-chat')],
     ['/api/ai-product-image', await import('./api/ai-product-image')]
   ] as const;
   for (const [route, module] of routes) {
