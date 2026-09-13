@@ -53,6 +53,7 @@ import { MyAdsModal } from './components/MyAdsModal';
 import { FaqSection } from './components/FaqSection';
 import { Footer } from './components/Footer';
 import { PopularBrandsBar } from './components/PopularBrandsBar';
+import { SupportAssistant } from './components/SupportAssistant';
 import { BottomNav } from './components/BottomNav';
 import { ScrollToTop } from './components/ScrollToTop';
 import { SafePurchasesSection } from './components/SafePurchasesSection';
@@ -1194,6 +1195,8 @@ export default function App() {
 
       {/* 11. Smooth Scroll To Top Button */}
       <ScrollToTop />
+
+      <SupportAssistant lang={lang} onHelp={() => handleOpenInfoModal('help')} />
 
       {/* 12. Bottom Navigation Bar with Center Post Ad button */}
       <BottomNav

@@ -35,6 +35,9 @@ jobs:
       - name: Security rules tests
         run: npm run test:rules
 
+      - name: Support API tests
+        run: node --import tsx --test tests/support-chat.test.mjs
+
       - name: Typecheck
         run: npm run lint
 
