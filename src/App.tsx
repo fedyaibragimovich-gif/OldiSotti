@@ -570,7 +570,10 @@ export default function App() {
       throw e;
     }
 
-    setListings((prev) => [finalizedListing, ...prev]);
+    // The realtime snapshot may arrive before the save promise resolves.
+    setListings((prev) => prev.some((item) => item.id === finalizedListing.id)
+      ? prev
+      : [finalizedListing, ...prev]);
 
     // Pending listings must never be published to Telegram before moderation.
     const shouldPostTelegram =
