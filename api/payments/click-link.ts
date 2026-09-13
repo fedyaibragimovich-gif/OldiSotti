@@ -46,6 +46,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
+  // Checkout stays unavailable until server-side provider callbacks are implemented and tested.
+  res.status(503).json({ success: false, configured: false, error: 'VIP to‘lov xizmati hali ishga tushirilmagan.' });
+  return;
+
   const user = await verifyFirebaseUser(req);
   if (!user) {
     res.status(401).json({ success: false, error: 'Authentication required' });

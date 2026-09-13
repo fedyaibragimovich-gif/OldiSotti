@@ -86,8 +86,33 @@ export const ListingFilters: React.FC<ListingFiltersProps> = ({
     { value: 'newest', label: t.sortNewest },
     { value: 'price_asc', label: t.sortPriceAsc },
     { value: 'price_desc', label: t.sortPriceDesc },
-    { value: 'popular', label: t.sortPopular }
+    { value: 'popular', label: t.sortPopular },
+    { value: 'distance', label: lang === 'ru' ? 'Рядом со мной' : lang === 'oz' ? 'Менга яқин' : 'Menga yaqin' }
   ];
+
+  const handleSortChange = (value: SortOption) => {
+    if (value !== 'distance') {
+      onFilterChange({ sortBy: value });
+      return;
+    }
+    if (!navigator.geolocation) {
+      window.alert('Qurilmangiz joylashuvni aniqlashni qo‘llab-quvvatlamaydi.');
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const point = {
+          latitude: Number(position.coords.latitude.toFixed(6)),
+          longitude: Number(position.coords.longitude.toFixed(6))
+        };
+        try { localStorage.setItem('oldisotti_user_location', JSON.stringify(point)); } catch { /* ignore */ }
+        window.dispatchEvent(new Event('oldisotti_user_location_updated'));
+        onFilterChange({ sortBy: 'distance' });
+      },
+      () => window.alert('Menga yaqin e’lonlarni ko‘rsatish uchun joylashuvga ruxsat bering.'),
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+    );
+  };
 
   const brandLabel = lang === 'uz' ? 'Brend bo‘yicha saralash' : lang === 'ru' ? 'Выбор бренда' : 'Brand Filter';
   const clearLabel = lang === 'uz' ? 'Tozalash' : lang === 'ru' ? 'Сброс' : 'Clear';
@@ -124,7 +149,7 @@ export const ListingFilters: React.FC<ListingFiltersProps> = ({
           </button>
 
           <div className="relative">
-            <select id="sort-select" value={filters.sortBy} onChange={(e) => onFilterChange({ sortBy: e.target.value as SortOption })} className="appearance-none rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 pl-3 pr-8 py-2 text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 focus:outline-none cursor-pointer transition-colors">
+            <select id="sort-select" value={filters.sortBy} onChange={(e) => handleSortChange(e.target.value as SortOption)} className="appearance-none rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 pl-3 pr-8 py-2 text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 focus:outline-none cursor-pointer transition-colors">
               {sortOptions.map((opt) => <option key={opt.value} value={opt.value} className="dark:bg-slate-800 dark:text-white">{opt.label}</option>)}
             </select>
             <ChevronDown size={14} className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400" />

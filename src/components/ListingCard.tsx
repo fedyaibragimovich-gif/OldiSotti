@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Heart, MapPin, Truck, Share2, Check } from 'lucide-react';
 import { Listing, Currency, Language } from '../types';
-import { formatPrice, formatPriceSecondary } from '../utils/formatters';
+import { formatPrice, formatPriceSecondary, EXCHANGE_RATE_NOTE, formatDisplayDate } from '../utils/formatters';
 import { regions } from '../data/locations';
 import { getTranslation } from '../data/translations';
 import { auth, isSellerBlockedInDb } from '../lib/firebase';
@@ -98,14 +98,14 @@ export const ListingCard: React.FC<ListingCardProps> = React.memo(({ listing, cu
             </div>
             <div className="mt-2 flex items-baseline gap-2">
               <span className="text-xl font-black text-slate-900 dark:text-white">{formatPrice(listing.price, listing.currency, currency)}</span>
-              <span className="text-xs text-slate-400">{formatPriceSecondary(listing.price, listing.currency)}</span>
+              <span title={EXCHANGE_RATE_NOTE} className="text-xs text-slate-400">{(currency === listing.currency ? formatPriceSecondary(listing.price, listing.currency) : '≈ ' + formatPrice(listing.price, listing.currency))}</span>
               {listing.isNegotiable && <span className="text-[11px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-semibold px-2 py-0.5 rounded-md">Kelishiladi</span>}
             </div>
             <p className="mt-2 text-xs text-slate-500 dark:text-slate-400 line-clamp-2">{listing.description}</p>
           </div>
           <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-slate-400">
             <span className="flex items-center gap-1.5 truncate max-w-xs text-slate-500"><MapPin size={13} /><span className="truncate">{displayLocation}</span></span>
-            <span className="shrink-0">{listing.createdAt}</span>
+            <span className="shrink-0">{formatDisplayDate(listing.createdAt)}</span>
           </div>
         </div>
       </div>
@@ -175,7 +175,7 @@ export const ListingCard: React.FC<ListingCardProps> = React.memo(({ listing, cu
             </div>
             <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
               <span className="text-[11px] text-slate-400">
-                {formatPriceSecondary(listing.price, listing.currency)}
+                {(currency === listing.currency ? formatPriceSecondary(listing.price, listing.currency) : '≈ ' + formatPrice(listing.price, listing.currency))}
               </span>
               {listing.isNegotiable && (
                 <span className="text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-semibold px-1.5 py-0.5 rounded">
@@ -191,7 +191,7 @@ export const ListingCard: React.FC<ListingCardProps> = React.memo(({ listing, cu
             <MapPin size={11} className="shrink-0" />
             <span className="truncate">{displayLocation}</span>
           </div>
-          <span className="shrink-0 text-slate-400">{listing.createdAt}</span>
+          <span className="shrink-0 text-slate-400">{formatDisplayDate(listing.createdAt)}</span>
         </div>
       </div>
     </div>
