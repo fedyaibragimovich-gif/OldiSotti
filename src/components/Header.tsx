@@ -107,7 +107,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({
         <div className="flex items-center space-x-1 sm:space-x-2.5 shrink-0">
           <div className="flex items-center space-x-0.5 bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl border border-slate-200/80 dark:border-slate-700 text-[10px] sm:text-xs">
             <button id="currency-uzs-btn" type="button" onClick={() => onCurrencyChange('UZS')} className={`rounded-lg px-1.5 sm:px-2.5 py-1 font-bold transition-all cursor-pointer ${currency === 'UZS' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'}`}>UZS</button>
-            <button id="currency-usd-btn" type="button" onClick={() => onCurrencyChange('USD')} className={`rounded-lg px-1.5 sm:px-2.5 py-1 font-bold transition-all cursor-pointer ${currency === 'USD' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'}`}>USD ($)</button>
+            <button title="Taxminiy hisob: 1 USD = 12 750 so‘m. Bank kursi emas." id="currency-usd-btn" type="button" onClick={() => onCurrencyChange('USD')} className={`rounded-lg px-1.5 sm:px-2.5 py-1 font-bold transition-all cursor-pointer ${currency === 'USD' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'}`}>USD ($)</button>
           </div>
 
           <div ref={langContainerRef} className="relative">

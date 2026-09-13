@@ -35,6 +35,7 @@ import { categories } from '../data/categories';
 import { InfoTabKey } from '../data/infoPagesData';
 import { PriceHistoryChart } from './PriceHistoryChart';
 import { SimilarListingsSection } from './SimilarListingsSection';
+import { LocationMap } from './LocationMap';
 import { auth, saveReportToDb, blockSellerInDb } from '../lib/firebase';
 
 interface ListingDetailModalProps {
@@ -500,26 +501,17 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
                     <p className="text-xs text-slate-500 dark:text-slate-400 mb-3 ml-6">{listing.location.address}</p>
                   )}
 
-                  {/* Stylized map container */}
-                  <div className="relative w-full h-44 rounded-xl bg-[#e5e3df] dark:bg-slate-950 overflow-hidden flex items-center justify-center border border-slate-300 dark:border-slate-700">
-                    {/* Map roads grid pattern */}
-                    <div
-                      className="absolute inset-0 opacity-40"
-                      style={{
-                        backgroundImage: `linear-gradient(#d1cfcb 1px, transparent 1px), linear-gradient(to right, #d1cfcb 1px, #e5e3df 1px)`,
-                        backgroundSize: '32px 32px'
-                      }}
-                    ></div>
-                    {/* Animated Pin */}
-                    <div className="relative z-10 flex flex-col items-center">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-indigo-600 text-white shadow-xl ring-4 ring-indigo-500/30 animate-bounce">
-                        <MapPin size={22} />
-                      </div>
-                      <span className="mt-1 bg-white/95 dark:bg-slate-900 px-2.5 py-0.5 rounded shadow text-[11px] font-bold text-slate-800 dark:text-slate-200">
-                        {regionName}
-                      </span>
+                  {typeof listing.location.latitude === 'number' && typeof listing.location.longitude === 'number' ? (
+                    <LocationMap
+                      value={{ latitude: listing.location.latitude, longitude: listing.location.longitude }}
+                      readOnly
+                      heightClass="h-48 sm:h-56"
+                    />
+                  ) : (
+                    <div className="rounded-xl border border-dashed border-slate-300 dark:border-slate-700 bg-white/60 dark:bg-slate-900/40 p-5 text-center text-xs text-slate-500 dark:text-slate-400">
+                      Bu e'lon uchun xaritadagi aniq nuqta ko‘rsatilmagan.
                     </div>
-                  </div>
+                  )}
                 </div>
               </div>
 

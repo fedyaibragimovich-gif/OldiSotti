@@ -3,7 +3,7 @@ import { Language } from '../types';
 export const translations = {
   uz: {
     // Header
-    searchPlaceholder: "1 000 000 dan ortiq e'lonlar orasidan qidiring...",
+    searchPlaceholder: "Mahsulot yoki xizmat qidiring...",
     allUzbekistan: "Butun O'zbekiston",
     searchBtn: "Qidirish",
     postAdBtn: "E'lon berish",
@@ -251,7 +251,7 @@ export const translations = {
   },
   ru: {
     // Header
-    searchPlaceholder: "Поиск среди более 1 000 000 объявлений...",
+    searchPlaceholder: "Поиск товаров и услуг...",
     allUzbekistan: "Весь Узбекистан",
     searchBtn: "Поиск",
     postAdBtn: "Подать объявление",
@@ -499,7 +499,7 @@ export const translations = {
   },
   oz: {
     // Header
-    searchPlaceholder: "1 000 000 дан ортиқ эълонлар орасидан қидиринг...",
+    searchPlaceholder: "Маҳсулот ёки хизмат қидиринг...",
     allUzbekistan: "Бутун Ўзбекистон",
     searchBtn: "Қидириш",
     postAdBtn: "Эълон бериш",

@@ -24,6 +24,9 @@ import { categories } from '../data/categories';
 import { regions } from '../data/locations';
 import { getTranslation } from '../data/translations';
 import { InfoTabKey } from '../data/infoPagesData';
+import { LocationMap, type MapPoint } from './LocationMap';
+import { auth } from '../lib/firebase';
+import { uploadListingImagesToStorage, deleteListingImages } from '../lib/storage';
 
 interface SmartSuggestion {
   id: string;
@@ -127,7 +130,7 @@ interface PostAdModalProps {
   isOpen: boolean;
   onClose: () => void;
   lang: Language;
-  onAddListing: (newListing: Listing) => void;
+  onAddListing: (newListing: Listing) => Promise<void> | void;
   onOpenInfoModal?: (tab: InfoTabKey) => void;
 }
 
@@ -151,13 +154,15 @@ export const PostAdModal: React.FC<PostAdModalProps> = ({
   const [condition, setCondition] = useState<'new' | 'used'>('used');
   const [regionId, setRegionId] = useState('tashkent-city');
   const [address, setAddress] = useState('');
+  const [mapPoint, setMapPoint] = useState<MapPoint | null>(null);
   const [description, setDescription] = useState('');
   const [images, setImages] = useState<string[]>([]);
-  const [contactName, setContactName] = useState('Fedya Ibragimovich');
-  const [contactPhone, setContactPhone] = useState('+998 90 123 45 67');
-  const [contactTelegram, setContactTelegram] = useState('@fedya_uz');
+  const [contactName, setContactName] = useState('');
+  const [contactPhone, setContactPhone] = useState('');
+  const [contactTelegram, setContactTelegram] = useState('');
   const [isVip, setIsVip] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [successCreated, setSuccessCreated] = useState<Listing | null>(null);
 
   // AI Image generator & presets state
@@ -170,40 +175,47 @@ export const PostAdModal: React.FC<PostAdModalProps> = ({
 
   const handleGenerateAiPhoto = async (customPrompt?: string) => {
     setIsGeneratingAi(true);
+    setErrorMsg('');
+
     try {
-      const promptToUse = (customPrompt || aiPrompt || title || 'Mahsulot').toLowerCase();
-      let selectedPhoto = 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80';
-      if (promptToUse.includes('damas')) {
-        selectedPhoto = 'https://images.unsplash.com/photo-1570125909232-eb263c188f7e?auto=format&fit=crop&w=800&q=80';
-      } else if (promptToUse.includes('cobalt') || promptToUse.includes('sedan')) {
-        selectedPhoto = 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=800&q=80';
-      } else if (promptToUse.includes('gentra') || promptToUse.includes('lacetti')) {
-        selectedPhoto = 'https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=800&q=80';
-      } else if (promptToUse.includes('byd') || promptToUse.includes('elektromobil')) {
-        selectedPhoto = 'https://images.unsplash.com/photo-1593941707882-a5bba14938c7?auto=format&fit=crop&w=800&q=80';
-      } else if (promptToUse.includes('iphone') || promptToUse.includes('telefon') || promptToUse.includes('apple')) {
-        selectedPhoto = 'https://images.unsplash.com/photo-1695048133142-1a20484d2569?auto=format&fit=crop&w=800&q=80';
-      } else if (promptToUse.includes('kvartira') || promptToUse.includes('uy') || promptToUse.includes('apartment')) {
-        selectedPhoto = 'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?auto=format&fit=crop&w=800&q=80';
-      } else if (promptToUse.includes('noutbuk') || promptToUse.includes('laptop') || promptToUse.includes('macbook')) {
-        selectedPhoto = 'https://images.unsplash.com/photo-1517336714731-489689fd1ca8?auto=format&fit=crop&w=800&q=80';
-      } else if (promptToUse.includes('playstation') || promptToUse.includes('ps5') || promptToUse.includes('game')) {
-        selectedPhoto = 'https://images.unsplash.com/photo-1606813907291-d86efa9b94db?auto=format&fit=crop&w=800&q=80';
-      } else if (promptToUse.includes('divan') || promptToUse.includes('mebel') || promptToUse.includes('sofa')) {
-        selectedPhoto = 'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&w=800&q=80';
-      } else if (promptToUse.includes('velosiped') || promptToUse.includes('bike')) {
-        selectedPhoto = 'https://images.unsplash.com/photo-1485965120184-e220f721d03e?auto=format&fit=crop&w=800&q=80';
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
+        throw new Error('AI generatoridan foydalanish uchun avval akkauntga kiring.');
       }
 
-      await new Promise(resolve => setTimeout(resolve, 600));
+      const idToken = await currentUser.getIdToken();
+      const prompt = (customPrompt || aiPrompt || title || 'Mahsulot').trim();
+      const styleLabel = {
+        studio: 'clean professional e-commerce studio photography, soft neutral background',
+        lifestyle: 'premium lifestyle product photography, natural realistic environment',
+        minimalist: 'minimalist premium product photography, clean composition and soft lighting',
+        automotive: 'professional automotive/product photography, realistic showroom or outdoor lighting'
+      }[aiStyle];
 
-      if (!images.includes(selectedPhoto)) {
-        setImages(prev => [selectedPhoto, ...prev]);
+      const response = await fetch('/api/ai-product-image', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + idToken
+        },
+        body: JSON.stringify({
+          title,
+          prompt,
+          style: styleLabel,
+          imageDataUrl: images[0] || null
+        })
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.imageDataUrl) {
+        throw new Error(data.error || 'AI rasm yaratishda xatolik yuz berdi.');
       }
-      setLastGenerated({ url: selectedPhoto, source: 'ai' });
-      setErrorMsg('');
-    } catch (e) {
-      console.error('AI image generation error:', e);
+
+      setImages(prev => [data.imageDataUrl, ...prev.filter(img => img !== data.imageDataUrl)]);
+      setLastGenerated({ url: data.imageDataUrl, source: 'ai' });
+    } catch (error: any) {
+      console.error('AI image generation error:', error);
+      setErrorMsg(error?.message || 'AI rasm yaratishda xatolik yuz berdi.');
     } finally {
       setIsGeneratingAi(false);
     }
@@ -222,19 +234,59 @@ export const PostAdModal: React.FC<PostAdModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFiles: File[] = Array.from(e.target.files || []) as File[];
+    e.target.value = '';
+    if (selectedFiles.length === 0) return;
 
-    Array.from(files).forEach((file: File) => {
+    const MAX_SOURCE_BYTES = 10 * 1024 * 1024;
+    const MAX_IMAGES = 4;
+    const MAX_SIDE = 1600;
+    const JPEG_QUALITY = 0.82;
+
+    const oversized = selectedFiles.find((file) => file.size > MAX_SOURCE_BYTES);
+    if (oversized) {
+      setErrorMsg(`Har bir rasm maksimal 10 MB bo'lishi mumkin. "${oversized.name}" juda katta.`);
+      return;
+    }
+
+    if (images.length + selectedFiles.length > MAX_IMAGES) {
+      setErrorMsg(`Ko'pi bilan ${MAX_IMAGES} ta rasm yuklash mumkin.`);
+      return;
+    }
+
+    const compressImage = (file: File): Promise<string> => new Promise((resolve, reject) => {
       const reader = new FileReader();
-      reader.onload = (event) => {
-        if (event.target?.result) {
-          setImages(prev => [...prev, event.target!.result as string]);
-        }
+      reader.onerror = () => reject(new Error('Rasmni o\'qib bo\'lmadi'));
+      reader.onload = () => {
+        const img = new Image();
+        img.onerror = () => reject(new Error('Rasm formati qo\'llab-quvvatlanmadi'));
+        img.onload = () => {
+          const scale = Math.min(1, MAX_SIDE / Math.max(img.width, img.height));
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.max(1, Math.round(img.width * scale));
+          canvas.height = Math.max(1, Math.round(img.height * scale));
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            reject(new Error('Rasmni qayta ishlash imkoni bo\'lmadi'));
+            return;
+          }
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          resolve(canvas.toDataURL('image/jpeg', JPEG_QUALITY));
+        };
+        img.src = String(reader.result);
       };
       reader.readAsDataURL(file);
     });
+
+    try {
+      const compressed = await Promise.all(selectedFiles.map(compressImage));
+      setImages(prev => [...prev, ...compressed].slice(0, MAX_IMAGES));
+      setErrorMsg('');
+    } catch (error) {
+      console.error('Image compression failed:', error);
+      setErrorMsg('Rasmni qayta ishlashda xatolik yuz berdi. Boshqa rasm bilan urinib ko\'ring.');
+    }
   };
 
 
@@ -242,13 +294,19 @@ export const PostAdModal: React.FC<PostAdModalProps> = ({
     setImages(prev => prev.filter((_, i) => i !== index));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
+    const currentUser = auth.currentUser;
+    if (!currentUser || currentUser.isAnonymous) {
+      setErrorMsg('E\'lon joylash uchun avval akkauntingizga kiring.');
+      return;
+    }
     if (!title.trim()) {
       setErrorMsg('Iltimos, e\'lon sarlavhasini kiriting');
       return;
     }
-    if (!price || isNaN(Number(price))) {
+    if (!price || !Number.isFinite(Number(price)) || Number(price) < 0) {
       setErrorMsg('Iltimos, to\'g\'ri narxni kiriting');
       return;
     }
@@ -257,8 +315,22 @@ export const PostAdModal: React.FC<PostAdModalProps> = ({
       return;
     }
 
+    if (images.length > 4) {
+      setErrorMsg('Ko\'pi bilan 4 ta rasm yuklash mumkin.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    const listingId = `olx-${crypto.randomUUID()}`;
+    let uploadedImages: string[] = [];
+    try {
+    const uploadResult = await uploadListingImagesToStorage(listingId, images);
+    uploadedImages = uploadResult.uploadedImages;
+    const storedImages = uploadResult.images;
+
     const newListing: Listing = {
-      id: `olx-${Date.now()}`,
+      id: listingId,
+      userId: currentUser.uid,
       title: title.trim(),
       description: description.trim() || 'Holati yaxshi, sotib oluvchiga qulay narxda beriladi.',
       categoryId,
@@ -270,22 +342,24 @@ export const PostAdModal: React.FC<PostAdModalProps> = ({
       location: {
         region: regionId,
         district: '',
-        address: address.trim() || undefined
+        address: address.trim() || undefined,
+        ...(mapPoint ? { latitude: mapPoint.latitude, longitude: mapPoint.longitude } : {})
       },
-      images,
-      createdAt: 'Hozirginagina',
+      images: storedImages,
+      createdAt: new Date().toISOString(),
       viewsCount: 1,
-      isTop: isVip,
-      isVip,
+      isTop: false,
+      isVip: false,
+      isPostedToTelegram: false,
       seller: {
-        id: 'user-self',
+        id: currentUser.uid,
         name: contactName.trim() || 'Foydalanuvchi',
         phone: contactPhone.trim(),
         avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80',
         telegram: contactTelegram.trim() || undefined,
         registeredSince: 'Sentyabr 2026',
         responseTime: '5 daqiqa ichida',
-        isVerified: true,
+        isVerified: false,
         rating: 5.0,
         activeAdsCount: 1
       },
@@ -294,8 +368,14 @@ export const PostAdModal: React.FC<PostAdModalProps> = ({
       deliveryNote: isDeliveryAvailable && deliveryNote.trim() ? deliveryNote.trim() : undefined
     };
 
-    onAddListing(newListing);
-    setSuccessCreated(newListing);
+      await onAddListing(newListing);
+      setSuccessCreated(newListing);
+      setErrorMsg('');
+    } catch (error) {
+      await deleteListingImages(uploadedImages, currentUser.uid, listingId).catch(console.warn);
+      console.error('Listing submission failed:', error);
+      setErrorMsg("E'lonni saqlashda xatolik yuz berdi. Internet aloqasini tekshirib, qayta urinib ko'ring.");
+    } finally { setIsSubmitting(false); }
   };
 
   return (
@@ -323,7 +403,9 @@ export const PostAdModal: React.FC<PostAdModalProps> = ({
             </div>
             <h3 className="text-2xl font-black text-slate-900 dark:text-white">{t.adPublishedSuccess}</h3>
             <p className="text-sm text-slate-600 dark:text-slate-300 max-w-md mx-auto">
-              "{successCreated.title}" nomli e'loningiz muvaffaqiyatli saqlandi va xaridorlarga ko'rinadi!
+              {successCreated.status === 'pending'
+                ? `"${successCreated.title}" e'loningiz saqlandi va moderatsiyaga yuborildi. Tasdiqlangach xaridorlarga ko'rinadi.`
+                : `"${successCreated.title}" e'loningiz muvaffaqiyatli saqlandi va xaridorlarga ko'rinadi!`}
             </p>
 
             {/* Telegram Channel posting confirmation badge */}
@@ -334,23 +416,23 @@ export const PostAdModal: React.FC<PostAdModalProps> = ({
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-xs font-bold text-sky-950 dark:text-sky-200">
-                    Telegram Kanalga yuborildi
+                    Telegram tarqatish
                   </span>
                   <span className="text-[10px] bg-sky-200 dark:bg-sky-800 text-sky-900 dark:text-sky-100 px-2 py-0.5 rounded-full font-extrabold">
-                    @oldisotti_uz
+                    @OSot_uz
                   </span>
                 </div>
                 <p className="text-[11px] text-sky-800/85 dark:text-sky-300/85 mt-0.5 leading-snug">
-                  E'lon rasmi, narxi, manzili va to'g'ridan-to'g'ri aloqa ma'lumotlari bilan rasmiy kanalga avtomatik uzatildi.
+                  E'lon platforma sozlamalari va moderatsiya holatiga ko'ra rasmiy Telegram kanalga avtomatik yuborilishi mumkin.
                 </p>
                 <div className="pt-2 flex items-center gap-2">
                   <a
-                    href="https://t.me/oldisotti_uz"
+                    href="https://t.me/OSot_uz"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-[11px] font-bold transition-all shadow-xs"
                   >
-                    <span>Kanalda ko'rish</span>
+                    <span>Telegram kanal</span>
                     <ExternalLink size={12} />
                   </a>
                 </div>
@@ -522,7 +604,7 @@ export const PostAdModal: React.FC<PostAdModalProps> = ({
                     <button
                       type="button"
                       onClick={() => handleRemoveImage(idx)}
-                      className="absolute top-1 right-1 p-1 rounded-full bg-black/60 text-white hover:bg-rose-600 transition-colors opacity-0 group-hover:opacity-100 cursor-pointer"
+                      className="absolute top-1 right-1 z-10 p-1.5 rounded-full bg-black/70 text-white hover:bg-rose-600 transition-colors opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100 cursor-pointer shadow-sm" aria-label="Rasmni o‘chirish"
                       title="O'chirish"
                     >
                       <Trash2 size={12} />
@@ -962,23 +1044,51 @@ export const PostAdModal: React.FC<PostAdModalProps> = ({
               )}
             </div>
 
-            {/* 5. Location (Viloyat) */}
-            <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider mb-1.5">
-                {t.regionField} *
-              </label>
-              <select
-                id="post-region-select"
-                value={regionId}
-                onChange={(e) => setRegionId(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 dark:border-slate-700 p-3 text-sm font-semibold focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-2xs"
-              >
-                {regions.map((r) => (
-                  <option key={r.id} value={r.id} className="bg-white dark:bg-slate-800 text-slate-900 dark:text-white">
-                    {r.name[lang] || r.name.uz || r.name.ru}
-                  </option>
-                ))}
-              </select>
+            {/* 5. Location */}
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider mb-1.5">
+                  {t.regionField} *
+                </label>
+                <select
+                  id="post-region-select"
+                  value={regionId}
+                  onChange={(e) => setRegionId(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 p-3 text-sm font-semibold focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-2xs"
+                >
+                  {regions.map((r) => (
+                    <option key={r.id} value={r.id} className="bg-white dark:bg-slate-800 text-slate-900 dark:text-white">
+                      {r.name[lang] || r.name.uz || r.name.ru}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider mb-1.5">
+                  Manzil <span className="normal-case font-medium text-slate-400">(ixtiyoriy)</span>
+                </label>
+                <input
+                  id="post-address-input"
+                  type="text"
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                  placeholder="Masalan: Registon ko‘chasi yoki mo‘ljal"
+                  maxLength={160}
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 p-3 text-sm font-medium focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 shadow-2xs"
+                />
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/40 p-3 sm:p-4">
+                <div className="flex items-start gap-2 mb-3">
+                  <MapPin size={17} className="mt-0.5 shrink-0 text-indigo-600 dark:text-indigo-400" />
+                  <div>
+                    <div className="text-xs font-bold text-slate-800 dark:text-slate-200">Xaritada joylashuvni belgilang</div>
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Aniq uy manzilini ko‘rsatish majburiy emas. Istasangiz yaqin atrofdagi nuqtani belgilang.</div>
+                  </div>
+                </div>
+                <LocationMap value={mapPoint} onChange={setMapPoint} showLocateButton heightClass="h-56 sm:h-64" />
+              </div>
             </div>
 
             {/* 6. Description */}
@@ -1059,11 +1169,12 @@ export const PostAdModal: React.FC<PostAdModalProps> = ({
                 <input
                   id="post-vip-checkbox"
                   type="checkbox"
-                  checked={isVip}
-                  onChange={(e) => setIsVip(e.target.checked)}
+                  checked={false}
+                  disabled
+                  onChange={() => {}}
                   className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500"
                 />
-                <span>VIP qilish</span>
+                <span>VIP — to‘lovdan keyin</span>
               </label>
             </div>
 
@@ -1093,7 +1204,7 @@ export const PostAdModal: React.FC<PostAdModalProps> = ({
             {/* Submit button */}
             <div className="pt-1">
               <button
-                type="submit"
+                type="submit" disabled={isSubmitting}
                 className="w-full rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 py-3.5 px-6 text-sm sm:text-base font-bold text-white hover:from-indigo-500 hover:to-blue-500 transition-all shadow-md shadow-indigo-600/20 active:scale-98 cursor-pointer"
               >
                 {t.publishBtn}
