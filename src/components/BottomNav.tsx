@@ -93,6 +93,13 @@ export const BottomNav: React.FC<BottomNavProps> = React.memo(({
     if (code.includes('email-already-in-use')) return 'Bu email allaqachon ro‘yxatdan o‘tgan.';
     if (code.includes('weak-password')) return 'Parol kamida 6 ta belgidan iborat bo‘lishi kerak.';
     if (code.includes('invalid-email')) return 'Email manzilini tekshiring.';
+    if (code.includes('popup-blocked')) return 'Google oynasi bloklandi. Brauzerda popup oynalarga ruxsat bering va qayta bosing.';
+    if (code.includes('unauthorized-domain')) return 'Bu sayt manzilida Google orqali kirishga ruxsat berilmagan. Asosiy sayt manzilidan kiring.';
+    if (code.includes('operation-not-allowed')) return 'Google orqali kirish hozir sozlanmagan. Email orqali kiring.';
+    if (code.includes('operation-not-supported') || code.includes('web-storage-unsupported')) return 'Saytni Chrome yoki Safari brauzerida ochib qayta urinib ko‘ring.';
+    if (code.includes('network-request-failed')) return 'Internet aloqasini tekshiring va qayta urinib ko‘ring.';
+    if (code.includes('account-exists-with-different-credential')) return 'Bu email boshqa kirish usuli bilan ro‘yxatdan o‘tgan. Avval o‘sha usul orqali kiring.';
+    if (code.includes('too-many-requests')) return 'Juda ko‘p urinish bo‘ldi. Birozdan keyin qayta urinib ko‘ring.';
     if (code.includes('popup-closed')) return 'Google oynasi yopildi.';
     return 'Kirishda xatolik yuz berdi. Qayta urinib ko‘ring.';
   };
@@ -280,7 +287,7 @@ export const BottomNav: React.FC<BottomNavProps> = React.memo(({
         </div>
       )}
 
-      <nav id="bottom-navigation-dock" aria-label="Pastki asosiy menyu" style={{ display: isKeyboardOpen ? 'none' : undefined }} className={`md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white dark:bg-slate-900 border-t border-slate-200/90 dark:border-slate-800 shadow-[0_-4px_20px_rgba(0,0,0,0.06)] dark:shadow-[0_-4px_20px_rgba(0,0,0,0.3)] transition-all duration-200 transform-gpu ${isKeyboardOpen ? 'translate-y-full opacity-0 pointer-events-none' : 'translate-y-0 opacity-100'}`}>
+      <nav id="bottom-navigation-dock" aria-label="Pastki asosiy menyu" style={{ display: isKeyboardOpen ? 'none' : undefined }} className={`fixed bottom-0 left-0 right-0 z-40 bg-white dark:bg-slate-900 border-t border-slate-200/90 dark:border-slate-800 shadow-[0_-4px_20px_rgba(0,0,0,0.06)] dark:shadow-[0_-4px_20px_rgba(0,0,0,0.3)] transition-all duration-200 transform-gpu ${isKeyboardOpen ? 'translate-y-full opacity-0 pointer-events-none' : 'translate-y-0 opacity-100'}`}>
         <div className="max-w-xl mx-auto px-2 sm:px-6 h-16 flex items-center justify-between relative">
           <button id="bottom-nav-home-btn" type="button" onClick={onHomeClick} className="flex-1 flex flex-col items-center justify-center py-1 text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer group"><Home size={20} className="group-hover:scale-110 transition-transform" /><span className="text-[10px] sm:text-[11px] font-bold mt-1 tracking-tight">{navLabels.home}</span></button>
           <button id="bottom-nav-messages-btn" type="button" onClick={onMessagesClick} className="flex-1 flex flex-col items-center justify-center py-1 text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer group relative"><div className="relative"><MessageSquare size={20} className="group-hover:scale-110 transition-transform" />{unreadCount > 0 && <span className="absolute -top-1.5 -right-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-indigo-600 text-white text-[9px] font-black px-1 shadow-xs animate-pulse">{unreadCount}</span>}</div><span className="text-[10px] sm:text-[11px] font-bold mt-1 tracking-tight">{navLabels.messages}</span></button>

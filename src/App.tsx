@@ -17,6 +17,7 @@ import { initialPlatformSettings, initialModerationReports } from './data/adminD
 import { AlertTriangle } from 'lucide-react';
 import {
   subscribeToListings,
+  fetchListingById,
   seedInitialListingsIfEmpty,
   saveListingToDb,
   updateListingInDb,
@@ -59,20 +60,8 @@ import { InfoPagesModal } from './components/InfoPagesModal';
 import { AdminPanelModal } from './components/AdminPanelModal';
 import { InfoTabKey } from './data/infoPagesData';
 import { postListingToTelegram, sendTelegramNotification } from './services/telegram';
-
-function calculateDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371; // Earth radius in km
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLon = ((lon2 - lon1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLon / 2) *
-      Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
-}
+import { subscribeToAuth, isAdminUser } from './lib/auth';
+import type { User as FirebaseUser } from 'firebase/auth';
 
 export default function App() {
   // 1. Language & Currency & Dark Mode
@@ -116,25 +105,38 @@ export default function App() {
   };
 
   const t = getTranslation(lang);
+  const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
+
+  useEffect(() => subscribeToAuth(setCurrentUser), []);
 
   const [isDbConnected, setIsDbConnected] = useState<boolean>(false);
-
-  // 2. Listings state
-  const [listings, setListings] = useState<Listing[]>(() => {
-    const saved = localStorage.getItem('olx_listings');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        console.error('Failed to parse saved listings', e);
-      }
+  const [nearbyLocation, setNearbyLocation] = useState<{ latitude: number; longitude: number } | null>(() => {
+    try {
+      const raw = localStorage.getItem('oldisotti_user_location');
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      return typeof parsed?.latitude === 'number' && typeof parsed?.longitude === 'number' ? parsed : null;
+    } catch {
+      return null;
     }
-    return mockListings;
   });
 
   useEffect(() => {
-    localStorage.setItem('olx_listings', JSON.stringify(listings));
-  }, [listings]);
+    const syncNearbyLocation = () => {
+      try {
+        const raw = localStorage.getItem('oldisotti_user_location');
+        if (!raw) return setNearbyLocation(null);
+        const parsed = JSON.parse(raw);
+        if (typeof parsed?.latitude === 'number' && typeof parsed?.longitude === 'number') setNearbyLocation(parsed);
+      } catch { /* ignore invalid cache */ }
+    };
+    window.addEventListener('oldisotti_user_location_updated', syncNearbyLocation);
+    return () => window.removeEventListener('oldisotti_user_location_updated', syncNearbyLocation);
+  }, []);
+
+  // 2. Listings state
+  const [listings, setListings] = useState<Listing[]>([]);
+  useEffect(() => { try { localStorage.removeItem('olx_listings'); } catch { /* Storage may be disabled. */ } }, []);
 
   // 3. Favorites state
   const [favorites, setFavorites] = useState<string[]>(() => {
@@ -146,7 +148,7 @@ export default function App() {
         console.error('Failed to parse saved favorites', e);
       }
     }
-    return ['olx-001', 'olx-002'];
+    return [];
   });
 
   useEffect(() => {
@@ -172,7 +174,7 @@ export default function App() {
         console.error('Failed to parse saved recently viewed', e);
       }
     }
-    return ['olx-001', 'olx-002', 'olx-004'];
+    return [];
   });
 
   useEffect(() => {
@@ -180,21 +182,8 @@ export default function App() {
   }, [recentlyViewedIds]);
 
   // 4. Conversations state
-  const [conversations, setConversations] = useState<Conversation[]>(() => {
-    const saved = localStorage.getItem('olx_conversations');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        console.error('Failed to parse saved conversations', e);
-      }
-    }
-    return mockConversations;
-  });
-
-  useEffect(() => {
-    localStorage.setItem('olx_conversations', JSON.stringify(conversations));
-  }, [conversations]);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  useEffect(() => { localStorage.removeItem('olx_conversations'); }, []);
 
   const unreadMessagesCount = useMemo(() => {
     return conversations.reduce((acc, c) => acc + (c.unreadCount || 0), 0);
@@ -217,28 +206,6 @@ export default function App() {
   });
 
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-
-  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(() => {
-    try {
-      const saved = localStorage.getItem('oldisotti_user_location');
-      return saved ? JSON.parse(saved) : null;
-    } catch {
-      return null;
-    }
-  });
-
-  useEffect(() => {
-    const handleLocationUpdate = () => {
-      try {
-        const saved = localStorage.getItem('oldisotti_user_location');
-        if (saved) setUserLocation(JSON.parse(saved));
-      } catch {
-        // no-op
-      }
-    };
-    window.addEventListener('oldisotti_user_location_updated', handleLocationUpdate);
-    return () => window.removeEventListener('oldisotti_user_location_updated', handleLocationUpdate);
-  }, []);
 
   // 5.5 Loading state for listings feed and filter changes
   const [isLoadingListings, setIsLoadingListings] = useState(true);
@@ -353,13 +320,7 @@ export default function App() {
       async (dbListings) => {
         if (!isMounted) return;
         setIsDbConnected(true);
-        if (dbListings.length === 0) {
-          // Initialize DB with starter catalog if completely empty
-          await seedInitialListingsIfEmpty(mockListings);
-        } else {
-          setListings(dbListings);
-          localStorage.setItem('olx_listings', JSON.stringify(dbListings));
-        }
+        setListings(dbListings);
       },
       (err) => {
         console.warn('Firestore subscription notice (using local offline cache):', err);
@@ -371,12 +332,8 @@ export default function App() {
     const unsubscribeConversations = subscribeToConversations(
       async (dbConversations) => {
         if (!isMounted) return;
-        if (dbConversations.length === 0) {
-          await seedConversationsIfEmpty(mockConversations);
-        } else {
-          setConversations(dbConversations);
-          localStorage.setItem('olx_conversations', JSON.stringify(dbConversations));
-        }
+        setConversations(dbConversations);
+
       }
     );
 
@@ -387,12 +344,8 @@ export default function App() {
       localStorage.setItem('olx_platform_settings', JSON.stringify(dbSettings));
     });
 
-    // 4. Moderation Reports real-time listener
-    const unsubscribeReports = subscribeToModerationReports((dbReports) => {
-      if (!isMounted) return;
-      setReports(dbReports);
-      localStorage.setItem('olx_moderation_reports', JSON.stringify(dbReports));
-    });
+    // Moderation reports are admin-only and are subscribed in a separate auth-aware effect.
+    const unsubscribeReports = () => {};
 
     return () => {
       isMounted = false;
@@ -402,6 +355,18 @@ export default function App() {
       unsubscribeReports();
     };
   }, []);
+
+  // Admin-only moderation reports listener. Regular users never issue a forbidden Firestore read.
+  useEffect(() => {
+    if (!isAdminUser(currentUser)) {
+      setReports([]);
+      return;
+    }
+    return subscribeToModerationReports((dbReports) => {
+      setReports(dbReports);
+      localStorage.setItem('olx_moderation_reports', JSON.stringify(dbReports));
+    });
+  }, [currentUser]);
 
   const handleOpenInfoModal = (tab: InfoTabKey = 'help') => {
     setInfoModalTab(tab);
@@ -436,11 +401,14 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const [visibleLimit, setVisibleLimit] = useState(40);
+  useEffect(() => setVisibleLimit(40), [filters]);
+
   // Filter & Sort listings logic
   const filteredListings = useMemo(() => {
     return listings.filter((item) => {
-      // Hide listings pending review or rejected from public search feed
-      if (item.status === 'pending' || item.status === 'rejected') {
+      // Only active listings are visible in the public marketplace feed.
+      if (item.status && item.status !== 'active') {
         return false;
       }
 
@@ -547,25 +515,25 @@ export default function App() {
 
       return true;
     }).sort((a, b) => {
+      if (filters.sortBy === 'distance' && nearbyLocation) {
+        const distanceKm = (item: Listing) => {
+          const lat = item.location.latitude;
+          const lon = item.location.longitude;
+          if (typeof lat !== 'number' || typeof lon !== 'number') return Number.POSITIVE_INFINITY;
+          const toRad = (deg: number) => deg * Math.PI / 180;
+          const dLat = toRad(lat - nearbyLocation.latitude);
+          const dLon = toRad(lon - nearbyLocation.longitude);
+          const lat1 = toRad(nearbyLocation.latitude);
+          const lat2 = toRad(lat);
+          const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+          return 6371 * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+        };
+        return distanceKm(a) - distanceKm(b);
+      }
+
       // Sorting
       if (filters.sortBy === 'popular') {
         return b.viewsCount - a.viewsCount;
-      }
-
-      if (filters.sortBy === 'distance') {
-        const userLat = userLocation?.lat ?? 41.311081;
-        const userLng = userLocation?.lng ?? 69.240562;
-
-        const distA =
-          typeof a.location.latitude === 'number' && typeof a.location.longitude === 'number'
-            ? calculateDistanceKm(userLat, userLng, a.location.latitude, a.location.longitude)
-            : 99999;
-        const distB =
-          typeof b.location.latitude === 'number' && typeof b.location.longitude === 'number'
-            ? calculateDistanceKm(userLat, userLng, b.location.latitude, b.location.longitude)
-            : 99999;
-
-        return distA - distB;
       }
 
       const priceAInUzs = a.currency === 'USD' ? a.price * USD_TO_UZS_RATE : a.price;
@@ -583,24 +551,34 @@ export default function App() {
       if (!a.isVip && b.isVip) return 1;
       return 0;
     });
-  }, [listings, filters, currency, blockedSellerIds]);
+  }, [listings, filters, currency, blockedSellerIds, nearbyLocation]);
 
   // Add new listing handler
   const handleAddListing = async (newListing: Listing) => {
     const status = platformSettings.autoApproveListings ? 'active' : 'pending';
-    let finalizedListing: Listing = {
+    newListing.status = status;
+    const finalizedListing: Listing = {
       ...newListing,
       status
     };
+
+    try {
+      await saveListingToDb(finalizedListing);
+      newListing.status = finalizedListing.status;
+    } catch (e) {
+      console.warn('Failed to save listing to Firestore:', e);
+      throw e;
+    }
+
     setListings((prev) => [finalizedListing, ...prev]);
 
-    // Check Telegram automated channel posting
+    // Pending listings must never be published to Telegram before moderation.
     const shouldPostTelegram =
+      finalizedListing.status === 'active' &&
       platformSettings.autoPostListingsToTelegram &&
       (!platformSettings.postOnlyVipToTelegram || finalizedListing.isVip || finalizedListing.isTop);
 
     if (shouldPostTelegram) {
-      // Send asynchronously to Telegram channel
       postListingToTelegram(finalizedListing, {
         channelId: platformSettings.telegramChannelId,
         botToken: platformSettings.telegramBotToken
@@ -626,12 +604,6 @@ export default function App() {
         .catch((tgErr) => {
           console.warn('Telegram auto-post error:', tgErr);
         });
-    }
-
-    try {
-      await saveListingToDb(finalizedListing);
-    } catch (e) {
-      console.warn('Failed to save listing to Firestore:', e);
     }
   };
 
@@ -696,19 +668,31 @@ export default function App() {
     }
   };
 
-  const handleToggleVerifySeller = (sellerId: string) => {
-    const isCurrentlyVerified = verifiedSellerIds.includes(sellerId);
-    const newVerified = !isCurrentlyVerified;
-    setVerifiedSellerIds((prev) =>
-      isCurrentlyVerified ? prev.filter((id) => id !== sellerId) : [...prev, sellerId]
-    );
-    setListings((prev) =>
-      prev.map((l) =>
-        l.seller.id === sellerId
-          ? { ...l, seller: { ...l.seller, isVerified: newVerified } }
-          : l
-      )
-    );
+  const handleToggleVerifySeller = async (sellerId: string) => {
+    if (!isAdminUser(currentUser)) return;
+    const affected = listings.filter((l) => l.seller.id === sellerId || l.userId === sellerId);
+    const currentlyVerified = affected.some((l) => l.seller.isVerified) || verifiedSellerIds.includes(sellerId);
+    const newVerified = !currentlyVerified;
+
+    try {
+      for (const listing of affected) {
+        await updateListingInDb(listing.id, {
+          seller: { ...listing.seller, isVerified: newVerified }
+        });
+      }
+      setVerifiedSellerIds((prev) =>
+        newVerified ? Array.from(new Set([...prev, sellerId])) : prev.filter((id) => id !== sellerId)
+      );
+      setListings((prev) =>
+        prev.map((l) =>
+          l.seller.id === sellerId || l.userId === sellerId
+            ? { ...l, seller: { ...l.seller, isVerified: newVerified } }
+            : l
+        )
+      );
+    } catch (e) {
+      console.warn('Failed to persist seller verification:', e);
+    }
   };
 
   const handleUpdateReportStatus = async (reportId: string, status: 'resolved' | 'dismissed') => {
@@ -736,30 +720,32 @@ export default function App() {
 
   // Delete listing handler
   const handleDeleteListing = async (id: string) => {
-    setListings((prev) => prev.filter((item) => item.id !== id));
     try {
       await deleteListingFromDb(id);
+      setListings((prev) => prev.filter((item) => item.id !== id));
     } catch (e) {
-      console.warn('Failed to delete from Firestore:', e);
+      window.alert('E’lonni o‘chirib bo‘lmadi. Qayta urinib ko‘ring.');
     }
   };
 
-  // Upgrade to VIP
-  const handleUpgradeToVip = async (id: string) => {
-    setListings((prev) =>
-      prev.map((item) =>
-        item.id === id ? { ...item, isVip: true, isTop: true } : item
-      )
-    );
-    try {
-      await updateListingInDb(id, { isVip: true, isTop: true });
-    } catch (e) {
-      console.warn('Failed to upgrade VIP in Firestore:', e);
-    }
+  // VIP is never granted directly from the browser.
+  const handleUpgradeToVip = async (_id: string) => {
+    window.alert("VIP faqat tasdiqlangan to'lovdan keyin faollashtiriladi.");
   };
 
   // Start chat for listing
   const handleStartChat = async (listing: Listing) => {
+    if (!currentUser || currentUser.isAnonymous) {
+      window.alert('Chatdan foydalanish uchun avval akkauntingizga kiring.');
+      return;
+    }
+    if (listing.userId === currentUser.uid) {
+      window.alert("O'zingizning e'loningiz bilan chat ochib bo'lmaydi.");
+      return;
+    }
+    const url = new URL(window.location.href);
+    url.searchParams.delete('listing');
+    window.history.replaceState({}, '', url);
     setSelectedListing(null);
 
     // Check if conversation already exists
@@ -789,73 +775,34 @@ export default function App() {
           id: `msg-${Date.now()}`,
           sender: 'buyer',
           text: `Assalomu alaykum, "${listing.title}" bo'yicha yozmoqdaman.`,
-          timestamp: 'Hozir'
+          timestamp: new Date().toISOString()
         }
       ],
-      lastUpdated: 'Hozir',
+      lastUpdated: new Date().toISOString(),
       unreadCount: 0
     };
 
-    setConversations((prev) => [newConv, ...prev]);
-    setActiveChatId(newConv.id);
-    setIsChatOpen(true);
-
     try {
       await saveConversationToDb(newConv);
+      setActiveChatId(newConv.id);
+      setIsChatOpen(true);
     } catch (e) {
-      console.warn('Failed to save conversation to Firestore:', e);
+      window.alert('Suhbat ochilmadi. Qayta urinib ko‘ring.');
     }
   };
 
   // Send message in chat
   const handleSendMessage = async (chatId: string, text: string) => {
+    const sendingConversation = conversations.find((c) => c.id === chatId);
+    const senderRole: ChatMessage['sender'] = sendingConversation?.sellerUserId === currentUser?.uid ? 'seller' : 'buyer';
     const newMessage: ChatMessage = {
       id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-      sender: 'buyer',
+      sender: senderRole,
       text,
-      timestamp: 'Hozir'
+      timestamp: new Date().toISOString()
     };
 
-    let updatedConversationMessages: ChatMessage[] = [];
-    setConversations((prev) =>
-      prev.map((c) => {
-        if (c.id === chatId) {
-          updatedConversationMessages = [...c.messages, newMessage];
-          return {
-            ...c,
-            messages: updatedConversationMessages,
-            lastUpdated: 'Hozir'
-          };
-        }
-        return c;
-      })
-    );
-
-    try {
-      if (updatedConversationMessages.length > 0) {
-        await appendMessageInDb(chatId, newMessage, updatedConversationMessages);
-      }
-
-      // Check seller notification via Telegram bot
-      if (platformSettings.notifySellerOnChat) {
-        const currentConv = conversations.find((c) => c.id === chatId);
-        const relatedListing = currentConv
-          ? listings.find((l) => l.id === currentConv.listingId)
-          : null;
-
-        if (relatedListing && relatedListing.seller?.telegram) {
-          sendTelegramNotification({
-            type: 'chat_message',
-            title: `💬 Yangi xabar: "${relatedListing.title.slice(0, 24)}..."`,
-            message: `Xaridor: "${text.slice(0, 120)}"\n\nJavob berish uchun platformaga kiring.`,
-            listingId: relatedListing.id,
-            chatId: relatedListing.seller.telegram
-          }).catch((err) => console.warn('Telegram chat notification error:', err));
-        }
-      }
-    } catch (e) {
-      console.warn('Failed to append message in Firestore:', e);
-    }
+    await appendMessageInDb(chatId, newMessage);
   };
 
   // Full manual database resync handler
@@ -880,10 +827,11 @@ export default function App() {
     return listings.filter((l) => favorites.includes(l.id));
   }, [listings, favorites]);
 
-  // User's own listings (posted by user-self or default)
+  // User's own listings are strictly bound to the authenticated Firebase UID.
   const myListings = useMemo(() => {
-    return listings.filter((l) => l.seller.id === 'user-self' || l.seller.name === 'Fedya Ibragimovich');
-  }, [listings]);
+    if (!currentUser) return [];
+    return listings.filter((l) => l.userId === currentUser.uid);
+  }, [listings, currentUser]);
 
   // Computed recently viewed listings list (strictly up to 5 items)
   const recentlyViewedListings = useMemo(() => {
@@ -892,8 +840,22 @@ export default function App() {
       .filter((l): l is Listing => l !== undefined);
   }, [recentlyViewedIds, listings]);
 
+  // Deep links fetch one document independently of the loaded feed.
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get('listing');
+    if (!id || selectedListing?.id === id) return;
+    let active = true;
+    void fetchListingById(id).then(listing => {
+      if (active && listing?.status === 'active') setSelectedListing(listing);
+    }).catch(() => {});
+    return () => { active = false; };
+  }, [selectedListing?.id]);
+
   // Centralized selection handler that tracks recently viewed listings
   const handleSelectListing = (listing: Listing) => {
+    const url = new URL(window.location.href);
+    url.searchParams.set('listing', listing.id);
+    window.history.replaceState({}, '', url);
     setSelectedListing(listing);
     setRecentlyViewedIds((prev) => {
       const filtered = prev.filter((id) => id !== listing.id);
@@ -922,13 +884,15 @@ export default function App() {
             <AlertTriangle size={15} />
             <span>DIQQAT: Tizimda texnik profilaktika rejimi yoqilgan.</span>
           </div>
-          <button
-            type="button"
-            onClick={() => setIsAdminOpen(true)}
-            className="underline hover:text-rose-100 text-xs font-black cursor-pointer mr-2"
-          >
-            Admin
-          </button>
+          {isAdminUser(currentUser) && (
+            <button
+              type="button"
+              onClick={() => setIsAdminOpen(true)}
+              className="underline hover:text-rose-100 text-xs font-black cursor-pointer mr-2"
+            >
+              Admin
+            </button>
+          )}
         </div>
       )}
 
@@ -1031,6 +995,7 @@ export default function App() {
           onViewModeChange={setViewMode}
         />
 
+        {filteredListings.length > visibleLimit && <button type="button" onClick={() => setVisibleLimit(n => n + 40)} className="my-3 rounded-xl bg-indigo-600 px-5 py-3 text-white">Yana 40 ta e’lonni ko‘rsatish</button>}
         {/* Listings Grid / List / Skeleton */}
         {isLoadingListings ? (
           <ListingSkeletonGrid count={viewMode === 'grid' ? 10 : 5} viewMode={viewMode} />
@@ -1050,7 +1015,7 @@ export default function App() {
           </div>
         ) : viewMode === 'grid' ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4 animate-in fade-in duration-200">
-            {filteredListings.map((item) => (
+            {filteredListings.slice(0, visibleLimit).map((item) => (
               <ListingCard
                 key={item.id}
                 listing={item}
@@ -1065,7 +1030,7 @@ export default function App() {
           </div>
         ) : (
           <div className="space-y-3 animate-in fade-in duration-200">
-            {filteredListings.map((item) => (
+            {filteredListings.slice(0, visibleLimit).map((item) => (
               <ListingCard
                 key={item.id}
                 listing={item}
@@ -1096,7 +1061,12 @@ export default function App() {
       {selectedListing && (
         <ListingDetailModal
           listing={selectedListing}
-          onClose={() => setSelectedListing(null)}
+          onClose={() => {
+            const url = new URL(window.location.href);
+            url.searchParams.delete('listing');
+            window.history.replaceState({}, '', url);
+            setSelectedListing(null);
+          }}
           currency={currency}
           lang={lang}
           isFavorite={favorites.includes(selectedListing.id)}

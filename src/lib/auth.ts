@@ -3,13 +3,14 @@ import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   signInWithPopup,
-  signInWithRedirect,
   getRedirectResult,
   GoogleAuthProvider,
   signOut,
   sendPasswordResetEmail,
   setPersistence,
   browserLocalPersistence,
+  browserSessionPersistence,
+  inMemoryPersistence,
   User
 } from 'firebase/auth';
 import { auth } from './firebase';
@@ -23,9 +24,18 @@ export const isAdminUser = (user: User | null): boolean => {
   return Boolean(user.email && user.emailVerified && ADMIN_EMAILS.includes(user.email.toLowerCase()));
 };
 
-const persistAuthSession = async () => {
-  await setPersistence(auth, browserLocalPersistence);
-};
+// Configure storage on startup, before the user clicks a sign-in button.
+const persistenceReady = (async () => {
+  for (const persistence of [browserLocalPersistence, browserSessionPersistence, inMemoryPersistence]) {
+    try {
+      await setPersistence(auth, persistence);
+      return;
+    } catch {
+      // Restricted browsers may only support a session held in memory.
+    }
+  }
+})();
+const persistAuthSession = () => persistenceReady;
 
 let redirectRestorePromise: Promise<void> | null = null;
 
@@ -85,29 +95,13 @@ export const resetPassword = (email: string) => {
   );
 };
 
-export const loginWithGoogle = async () => {
-  await persistAuthSession();
-
+export const loginWithGoogle = () => {
   const provider = new GoogleAuthProvider();
   provider.setCustomParameters({ prompt: 'select_account' });
-
-  try {
-    const result = await signInWithPopup(auth, provider);
-    await auth.authStateReady();
-    return result;
-  } catch (error: any) {
-    const fallbackToRedirect =
-      error?.code === 'auth/popup-blocked' ||
-      error?.code === 'auth/operation-not-supported-in-this-environment' ||
-      error?.code === 'auth/web-storage-unsupported';
-
-    if (fallbackToRedirect) {
-      await signInWithRedirect(auth, provider);
-      return null;
-    }
-
-    throw error;
-  }
+  // Keep the popup call in the click handler's user activation. Firebase queues
+  // the pending persistence operation internally. Cross-site redirect is not a
+  // reliable fallback when browsers block third-party storage.
+  return signInWithPopup(auth, provider);
 };
 
 export const logoutUser = async () => {

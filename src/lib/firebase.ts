@@ -1,6 +1,6 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
-import { getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, onSnapshot, writeBatch, increment, query, where, or, limit, orderBy, deleteField } from 'firebase/firestore';
+import { getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, onSnapshot, writeBatch, increment, query, where, or, limit, orderBy, deleteField, runTransaction } from 'firebase/firestore';
 import { Listing, Conversation, ChatMessage, PlatformSettings, ModerationReport, AppNotification } from '../types';
 import firebaseConfig from '../../firebase-applet-config.json';
 
@@ -45,20 +45,33 @@ function stripUndefinedDeep<T>(value: T): T {
 }
 
 export function subscribeToListings(onSuccess: (listings: Listing[]) => void, onError?: (err: Error) => void) {
-  try {
-    const listingsQuery = query(collection(db, LISTINGS_COLLECTION), orderBy('createdAt', 'desc'), limit(LISTINGS_REALTIME_LIMIT));
-    return onSnapshot(listingsQuery, (snapshot) => {
-      const items: Listing[] = [];
-      snapshot.forEach((docSnap) => items.push({ ...(docSnap.data() as Listing), id: docSnap.id }));
-      onSuccess(items);
-    }, (error) => {
-      console.warn('Firestore listings subscription error:', error);
-      onError?.(error);
+  let stops: (() => void)[] = [];
+  const stopAuth = onAuthStateChanged(auth, user => {
+    stops.forEach(stop => stop());
+    stops = [];
+    onSuccess([]);
+    const sources = new Map<number, Listing[]>();
+    // Public and private queries are separate so unpublished listings never leak.
+    // No arbitrary 300-record ceiling: filters cover all readable listings.
+    const queries = isCurrentAdmin()
+      ? [query(collection(db, LISTINGS_COLLECTION))]
+      : [query(collection(db, LISTINGS_COLLECTION), where('status', '==', 'active')),
+          ...(user && !user.isAnonymous ? [query(collection(db, LISTINGS_COLLECTION), where('userId', '==', user.uid))] : [])];
+    queries.forEach((q, index) => {
+      stops.push(onSnapshot(q, snapshot => {
+        sources.set(index, snapshot.docs.map(d => ({ ...d.data(), id: d.id } as Listing)));
+        const merged = new Map<string, Listing>();
+        sources.forEach(items => items.forEach(item => merged.set(item.id, item)));
+        onSuccess([...merged.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+      }, error => onError?.(error)));
     });
-  } catch (err: any) {
-    onError?.(err);
-    return () => {};
-  }
+  });
+  return () => { stopAuth(); stops.forEach(stop => stop()); };
+}
+
+export async function fetchListingById(id: string): Promise<Listing | null> {
+  const snapshot = await getDoc(doc(db, LISTINGS_COLLECTION, id));
+  return snapshot.exists() ? { ...snapshot.data(), id: snapshot.id } as Listing : null;
 }
 
 export async function seedInitialListingsIfEmpty(fallbackListings: Listing[]): Promise<boolean> {
@@ -95,11 +108,11 @@ export async function saveListingToDb(listing: Listing): Promise<void> {
   } : {};
 
   if (!existing.exists() && !isAdmin) {
-    let autoApproveListings = true;
+    let autoApproveListings = false;
     try {
       const settingsSnap = await getDoc(doc(db, SETTINGS_COLLECTION, 'global_config'));
       if (settingsSnap.exists()) {
-        autoApproveListings = (settingsSnap.data() as Partial<PlatformSettings>).autoApproveListings !== false;
+        autoApproveListings = (settingsSnap.data() as Partial<PlatformSettings>).autoApproveListings === true;
       }
     } catch {
       // Default to the current public behavior if settings cannot be read.
@@ -125,6 +138,7 @@ export async function saveListingToDb(listing: Listing): Promise<void> {
     };
 
     await setDoc(listingRef, stripUndefinedDeep(safeListing));
+    Object.assign(listing, safeListing);
     return;
   }
 
@@ -141,7 +155,11 @@ export async function updateListingInDb(listingId: string, updates: Partial<List
 }
 
 export async function deleteListingFromDb(listingId: string): Promise<void> {
-  await deleteDoc(doc(db, LISTINGS_COLLECTION, listingId));
+  const snapshot = await getDoc(doc(db, LISTINGS_COLLECTION, listingId));
+  if (!snapshot.exists()) return;
+  const { deleteListingImages } = await import('./storage');
+  await deleteListingImages(snapshot.data().images || [], snapshot.data().userId, listingId);
+  await deleteDoc(snapshot.ref);
 }
 
 export async function incrementListingViewsInDb(listingId: string): Promise<void> {
@@ -234,49 +252,31 @@ export async function saveConversationToDb(conv: Conversation): Promise<void> {
   await setDoc(doc(db, CONVERSATIONS_COLLECTION, conv.id), data);
 }
 
-export async function appendMessageInDb(chatId: string, newMessage: ChatMessage, allMessages: ChatMessage[]): Promise<void> {
+export async function appendMessageInDb(chatId: string, newMessage: ChatMessage): Promise<void> {
+  const uid = auth.currentUser?.uid;
+  if (!uid) throw new Error('Authentication required.');
   const conversationRef = doc(db, CONVERSATIONS_COLLECTION, chatId);
-  const conversationSnap = await getDoc(conversationRef);
-  if (!conversationSnap.exists()) throw new Error('Conversation not found.');
-
-  const conversation = conversationSnap.data() as Conversation;
-  const currentUid = auth.currentUser?.uid;
-  if (!currentUid) throw new Error('Authentication required to send a message.');
-  if (conversation.buyerId !== currentUid && conversation.sellerUserId !== currentUid) {
-    throw new Error('You are not a participant in this conversation.');
-  }
-
-  const senderRole: ChatMessage['sender'] = conversation.buyerId === currentUid ? 'buyer' : 'seller';
-  const safeMessage: ChatMessage = { ...newMessage, sender: senderRole, text: newMessage.text.trim().slice(0, 2000) };
-  if (!safeMessage.text) throw new Error('Message cannot be empty.');
-
-  const safeMessages = allMessages.length > 0
-    ? [...allMessages.slice(0, -1), safeMessage]
-    : [safeMessage];
-  const recipientId = senderRole === 'buyer' ? conversation.sellerUserId : conversation.buyerId;
-  const updates: Record<string, unknown> = {
-    messages: safeMessages,
-    lastUpdated: safeMessage.timestamp
-  };
-  if (recipientId && recipientId !== currentUid) updates[`unreadCountByUser.${recipientId}`] = increment(1);
-
-  await updateDoc(conversationRef, updates);
-
-  if (recipientId && recipientId !== currentUid) {
-    const senderLabel = senderRole === 'buyer' ? 'Xaridor' : conversation.sellerName;
-    const notification: AppNotification = {
-      id: `msg-${chatId}-${safeMessage.id}`,
-      type: 'message',
-      title: 'Yangi xabar',
-      message: `${senderLabel}: ${safeMessage.text.slice(0, 90)}`,
-      createdAt: new Date().toISOString(),
-      read: false,
-      recipientId,
-      listingId: conversation.listingId,
-      chatId
-    };
-    await setDoc(doc(db, NOTIFICATIONS_COLLECTION, notification.id), notification);
-  }
+  await runTransaction(db, async transaction => {
+    const snapshot = await transaction.get(conversationRef);
+    if (!snapshot.exists()) throw new Error('Conversation not found.');
+    const conv = snapshot.data() as Conversation;
+    if (conv.buyerId !== uid && conv.sellerUserId !== uid) throw new Error('Not a participant.');
+    if (conv.messages.some(m => m.id === newMessage.id)) return;
+    const sender = conv.buyerId === uid ? 'buyer' : 'seller';
+    const recipientId = sender === 'buyer' ? conv.sellerUserId : conv.buyerId;
+    const message: ChatMessage = { ...newMessage, sender, text: newMessage.text.trim().slice(0, 2000) };
+    if (!message.text) throw new Error('Empty message.');
+    transaction.update(conversationRef, {
+      messages: [...conv.messages, message], lastUpdated: message.timestamp,
+      [`unreadCountByUser.${recipientId}`]: increment(1)
+    });
+    const notificationId = `msg-${chatId}-${message.id}`;
+    transaction.set(doc(db, NOTIFICATIONS_COLLECTION, notificationId), {
+      id: notificationId, type: 'message', title: 'Yangi xabar',
+      message: message.text.slice(0, 90), createdAt: message.timestamp,
+      read: false, recipientId, listingId: conv.listingId, chatId
+    });
+  });
 }
 
 export async function markConversationReadInDb(chatId: string): Promise<void> {

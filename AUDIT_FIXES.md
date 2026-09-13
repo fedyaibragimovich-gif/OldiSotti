@@ -36,3 +36,10 @@ No existing data was migrated or deleted. Legacy records without an active statu
 - Per-listing server-rendered SEO metadata, live exchange rates, bundle splitting and Lighthouse/mobile measurements.
 - Durable server-side cleanup/retry for interrupted uploads/deletions; current cleanup runs in the authenticated client.
 - Persistent per-user AI quotas (the existing in-memory limiter is not a distributed quota).
+
+
+## Follow-up against main 3a57c97
+
+Reconciled the previous audit fixes with the new map and location changes. The live Firebase authorized-domains endpoint includes fedyaibragimovich-gif.vercel.app. Google popup is now invoked directly from the click handler without waiting for persistence; persistence initializes on startup with session/memory fallbacks. Removed the unreliable automatic cross-domain redirect fallback and added actionable errors. Actual account sign-in still needs a user browser check; domain authorization alone does not prove provider login succeeds.
+
+Location permission denial no longer silently pretends the user is in Tashkent. Missing listing coordinates no longer display a precise region-center pin. Preserved current map component changes. This PR incorporates PR #1 and should replace it for review. Deploy the matching Firestore and Storage rules with the application. Payment endpoints remain unavailable until verified provider callbacks are implemented.

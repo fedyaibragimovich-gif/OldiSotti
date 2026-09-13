@@ -62,18 +62,18 @@ export const SafePurchasesSection: React.FC<SafePurchasesSectionProps> = ({
 
   const content = {
     uz: {
-      safeBadge: '100% Xavfsiz xarid',
+      safeBadge: 'Xavfsiz xarid bo‘yicha maslahatlar',
       deliveryBadge: 'Sotuvchidan yetkazish',
       verifiedBadge: 'Tekshirilgan e\'lonlar',
-      title: 'O\'zbekistonda xavfsiz xaridlar & Oldisotti Tezkor yetkazish',
-      description: 'O\'zbekistonning barcha hududlari bo\'ylab ishonchli bitimlar, kafolatlangan xavfsiz to\'lovlar hamda sotuvchi orqali to\'g\'ridan-to\'g\'ri yetkazib berish yoki olib ketish imkoniyati.',
+      title: 'O\'zbekistonda xavfsiz xaridlar & sotuvchi bilan kelishilgan yetkazish',
+      description: 'O\'zbekistonning barcha hududlari bo\'ylab ishonchli bitimlar, xavfsizlik tavsiyalari hamda sotuvchi orqali to\'g\'ridan-to\'g\'ri yetkazib berish yoki olib ketish imkoniyati.',
       postAdBtn: 'E\'lon berish',
       shareBtn: 'Ulashish',
       copiedBtn: 'Nusxalandi!',
       exploreBtn: 'Barcha e\'lonlarni ko\'rish'
     },
     ru: {
-      safeBadge: '100% Безопасные сделки',
+      safeBadge: 'Советы по безопасности',
       deliveryBadge: 'Доставка от продавца',
       verifiedBadge: 'Проверенные объявления',
       title: 'Безопасные покупки в Узбекистане & Быстрая доставка Oldisotti',
@@ -84,22 +84,22 @@ export const SafePurchasesSection: React.FC<SafePurchasesSectionProps> = ({
       exploreBtn: 'Все объявления'
     },
     oz: {
-      safeBadge: '100% Хавфсиз харид',
+      safeBadge: 'Хавфсиз харид маслаҳатлари',
       deliveryBadge: 'Сотувчидан етказиш',
       verifiedBadge: 'Текширилган эълонлар',
       title: 'Ўзбекистонда хавфсиз харидлар & Oldisotti Тезкор етказиш',
-      description: 'Ўзбекистоннинг барча ҳудудлари бўйлаб ишончли битимлар, кафолатланган хавфсиз тўловлар ҳамда сотувчи орқали тўғридан-тўғри етказиб бериш ёки олиб кетиш имконияти.',
+      description: 'Ўзбекистоннинг барча ҳудудлари бўйлаб ишончли битимлар, хавфсизлик тавсиялари ҳамда сотувчи орқали тўғридан-тўғри етказиб бериш ёки олиб кетиш имконияти.',
       postAdBtn: 'Эълон бериш',
       shareBtn: 'Улашиш',
       copiedBtn: 'Нусхаланди!',
       exploreBtn: 'Барча эълонларни кўриш'
     }
   }[lang] || {
-    safeBadge: '100% Xavfsiz xarid',
+    safeBadge: 'Xavfsiz xarid bo‘yicha maslahatlar',
     deliveryBadge: 'Sotuvchidan yetkazish',
     verifiedBadge: 'Tekshirilgan e\'lonlar',
-    title: 'O\'zbekistonda xavfsiz xaridlar & Oldisotti Tezkor yetkazish',
-    description: 'O\'zbekistonning barcha hududlari bo\'ylab ishonchli bitimlar, kafolatlangan xavfsiz to\'lovlar hamda sotuvchi orqali to\'g\'ridan-to\'g\'ri yetkazib berish yoki olib ketish imkoniyati.',
+    title: 'O\'zbekistonda xavfsiz xaridlar & sotuvchi bilan kelishilgan yetkazish',
+    description: 'O\'zbekistonning barcha hududlari bo\'ylab ishonchli bitimlar, xavfsizlik tavsiyalari hamda sotuvchi orqali to\'g\'ridan-to\'g\'ri yetkazib berish yoki olib ketish imkoniyati.',
     postAdBtn: 'E\'lon berish',
     shareBtn: 'Ulashish',
     copiedBtn: 'Nusxalandi!',
