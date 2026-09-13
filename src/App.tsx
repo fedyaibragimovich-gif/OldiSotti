@@ -60,6 +60,20 @@ import { AdminPanelModal } from './components/AdminPanelModal';
 import { InfoTabKey } from './data/infoPagesData';
 import { postListingToTelegram, sendTelegramNotification } from './services/telegram';
 
+function calculateDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371; // Earth radius in km
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
 export default function App() {
   // 1. Language & Currency & Dark Mode
   const [lang, setLang] = useState<Language>(() => {
@@ -203,6 +217,28 @@ export default function App() {
   });
 
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(() => {
+    try {
+      const saved = localStorage.getItem('oldisotti_user_location');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  useEffect(() => {
+    const handleLocationUpdate = () => {
+      try {
+        const saved = localStorage.getItem('oldisotti_user_location');
+        if (saved) setUserLocation(JSON.parse(saved));
+      } catch {
+        // no-op
+      }
+    };
+    window.addEventListener('oldisotti_user_location_updated', handleLocationUpdate);
+    return () => window.removeEventListener('oldisotti_user_location_updated', handleLocationUpdate);
+  }, []);
 
   // 5.5 Loading state for listings feed and filter changes
   const [isLoadingListings, setIsLoadingListings] = useState(true);
@@ -514,6 +550,22 @@ export default function App() {
       // Sorting
       if (filters.sortBy === 'popular') {
         return b.viewsCount - a.viewsCount;
+      }
+
+      if (filters.sortBy === 'distance') {
+        const userLat = userLocation?.lat ?? 41.311081;
+        const userLng = userLocation?.lng ?? 69.240562;
+
+        const distA =
+          typeof a.location.latitude === 'number' && typeof a.location.longitude === 'number'
+            ? calculateDistanceKm(userLat, userLng, a.location.latitude, a.location.longitude)
+            : 99999;
+        const distB =
+          typeof b.location.latitude === 'number' && typeof b.location.longitude === 'number'
+            ? calculateDistanceKm(userLat, userLng, b.location.latitude, b.location.longitude)
+            : 99999;
+
+        return distA - distB;
       }
 
       const priceAInUzs = a.currency === 'USD' ? a.price * USD_TO_UZS_RATE : a.price;

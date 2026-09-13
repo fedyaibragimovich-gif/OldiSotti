@@ -15,7 +15,8 @@ interface LocationMapProps {
   showLocateButton?: boolean;
 }
 
-const DEFAULT_CENTER: [number, number] = [41.3775, 64.5853];
+// O'zbekiston markazi (Navoiy/Samarqand atrofi)
+const DEFAULT_CENTER: [number, number] = [41.311081, 69.240562]; // Toshkent markazi boshlang'ich nuqta sifatida
 
 export const LocationMap: React.FC<LocationMapProps> = ({
   value,
@@ -38,21 +39,21 @@ export const LocationMap: React.FC<LocationMapProps> = ({
 
     const map = L.map(mapEl.current, {
       center: start,
-      zoom: value ? 14 : 6,
+      zoom: value ? 14 : 9,
       zoomControl: true,
-      attributionControl: true,
-      dragging: true,
-      scrollWheelZoom: true
+      attributionControl: false
     });
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
-      attribution: '&copy; OpenStreetMap contributors'
+      attribution: '&copy; OpenStreetMap'
     }).addTo(map);
 
     if (value) {
       markerRef.current = L.circleMarker(start, {
         radius: 9,
+        color: '#4f46e5',
+        fillColor: '#6366f1',
         weight: 3,
         fillOpacity: 0.85
       }).addTo(map);
@@ -67,6 +68,8 @@ export const LocationMap: React.FC<LocationMapProps> = ({
         if (!markerRef.current) {
           markerRef.current = L.circleMarker(event.latlng, {
             radius: 9,
+            color: '#4f46e5',
+            fillColor: '#6366f1',
             weight: 3,
             fillOpacity: 0.85
           }).addTo(map);
@@ -78,9 +81,13 @@ export const LocationMap: React.FC<LocationMapProps> = ({
     }
 
     mapRef.current = map;
-    setTimeout(() => map.invalidateSize(), 0);
+
+    const timer = setTimeout(() => {
+      map.invalidateSize();
+    }, 200);
 
     return () => {
+      clearTimeout(timer);
       map.remove();
       mapRef.current = null;
       markerRef.current = null;
@@ -93,13 +100,15 @@ export const LocationMap: React.FC<LocationMapProps> = ({
     if (!markerRef.current) {
       markerRef.current = L.circleMarker(latLng, {
         radius: 9,
+        color: '#4f46e5',
+        fillColor: '#6366f1',
         weight: 3,
         fillOpacity: 0.85
       }).addTo(mapRef.current);
     } else {
       markerRef.current.setLatLng(latLng);
     }
-    mapRef.current.setView(latLng, Math.max(mapRef.current.getZoom(), 14), { animate: true });
+    mapRef.current.setView(latLng, Math.max(mapRef.current.getZoom(), 13), { animate: true });
   }, [value?.latitude, value?.longitude]);
 
   const locateMe = () => {
@@ -108,6 +117,7 @@ export const LocationMap: React.FC<LocationMapProps> = ({
       setGeoError('Qurilmangiz joylashuvni aniqlashni qo‘llab-quvvatlamaydi.');
       return;
     }
+
     navigator.geolocation.getCurrentPosition(
       (position) => {
         const point = {
@@ -137,10 +147,13 @@ export const LocationMap: React.FC<LocationMapProps> = ({
           </span>
         </div>
       )}
+
       {geoError && <div className="text-[11px] font-semibold text-rose-600 dark:text-rose-400">{geoError}</div>}
+
       <div className={`relative overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 ${heightClass}`}>
         <div ref={mapEl} className="absolute inset-0 z-0" />
       </div>
+
       {value && (
         <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500 dark:text-slate-400">
           <span>Koordinata: {value.latitude.toFixed(5)}, {value.longitude.toFixed(5)}</span>

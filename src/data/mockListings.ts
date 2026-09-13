@@ -14,7 +14,9 @@ export const mockListings: Listing[] = [
     location: {
       region: 'tashkent-city',
       district: 'chilonzor',
-      address: 'Chilonzor 19-kvartal, Farhod bozori yaqinida'
+      address: 'Chilonzor 19-kvartal, Farhod bozori yaqinida',
+      latitude: 41.2721,
+      longitude: 69.2045
     },
     images: [
       'https://upload.wikimedia.org/wikipedia/commons/thumb/5/5b/Chevrolet_Cobalt_1.8_LTZ_2017_%2838346300391%29.jpg/1280px-Chevrolet_Cobalt_1.8_LTZ_2017_%2838346300391%29.jpg',
@@ -63,7 +65,9 @@ export const mockListings: Listing[] = [
     location: {
       region: 'tashkent-city',
       district: 'mirzo-ulugbek',
-      address: 'Buyuk Ipak Yo\'li metrosi yaqinida'
+      address: 'Buyuk Ipak Yo\'li metrosi yaqinida',
+      latitude: 41.3265,
+      longitude: 69.3286
     },
     images: [
       'https://images.unsplash.com/photo-1695048133142-1a20484d2569?auto=format&fit=crop&w=1000&q=80',
@@ -109,7 +113,9 @@ export const mockListings: Listing[] = [
     location: {
       region: 'tashkent-city',
       district: 'mirobod',
-      address: 'Nukus ko\'chasi, Oybek metro'
+      address: 'Nukus ko\'chasi, Oybek metro',
+      latitude: 41.2982,
+      longitude: 69.2711
     },
     images: [
       'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1000&q=80',
@@ -156,7 +162,9 @@ export const mockListings: Listing[] = [
     location: {
       region: 'samarkand',
       district: 'sam-city',
-      address: 'Samarqand shahri, Gagarin ko\'chasi'
+      address: 'Samarqand shahri, Gagarin ko\'chasi',
+      latitude: 39.6542,
+      longitude: 66.9597
     },
     images: [
       'https://images.unsplash.com/photo-1563720223185-11003d516935?auto=format&fit=crop&w=1000&q=80',

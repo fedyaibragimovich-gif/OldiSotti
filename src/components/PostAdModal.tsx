@@ -24,6 +24,7 @@ import { categories } from '../data/categories';
 import { regions } from '../data/locations';
 import { getTranslation } from '../data/translations';
 import { InfoTabKey } from '../data/infoPagesData';
+import { LocationMap, MapPoint } from './LocationMap';
 
 interface SmartSuggestion {
   id: string;
@@ -151,6 +152,7 @@ export const PostAdModal: React.FC<PostAdModalProps> = ({
   const [condition, setCondition] = useState<'new' | 'used'>('used');
   const [regionId, setRegionId] = useState('tashkent-city');
   const [address, setAddress] = useState('');
+  const [mapPoint, setMapPoint] = useState<MapPoint | null>(null);
   const [description, setDescription] = useState('');
   const [images, setImages] = useState<string[]>([]);
   const [contactName, setContactName] = useState('Fedya Ibragimovich');
@@ -212,10 +214,8 @@ export const PostAdModal: React.FC<PostAdModalProps> = ({
 
   const handleAddPresetPhoto = (url: string) => {
     if (!images.includes(url)) {
-      setImages(prev => [url, ...prev]);
+      setImages((prev) => [...prev, url]);
     }
-    setLastGenerated({ url, source: 'preset' });
-    setErrorMsg('');
   };
 
   const selectedCategory = categories.find(c => c.id === categoryId);
@@ -236,6 +236,7 @@ export const PostAdModal: React.FC<PostAdModalProps> = ({
       reader.readAsDataURL(file);
     });
   };
+
 
 
   const handleRemoveImage = (index: number) => {
@@ -270,7 +271,9 @@ export const PostAdModal: React.FC<PostAdModalProps> = ({
       location: {
         region: regionId,
         district: '',
-        address: address.trim() || undefined
+        address: address.trim() || undefined,
+        latitude: mapPoint?.latitude,
+        longitude: mapPoint?.longitude
       },
       images,
       createdAt: 'Hozirginagina',
@@ -962,23 +965,51 @@ export const PostAdModal: React.FC<PostAdModalProps> = ({
               )}
             </div>
 
-            {/* 5. Location (Viloyat) */}
-            <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider mb-1.5">
-                {t.regionField} *
-              </label>
-              <select
-                id="post-region-select"
-                value={regionId}
-                onChange={(e) => setRegionId(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 dark:border-slate-700 p-3 text-sm font-semibold focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-2xs"
-              >
-                {regions.map((r) => (
-                  <option key={r.id} value={r.id} className="bg-white dark:bg-slate-800 text-slate-900 dark:text-white">
-                    {r.name[lang] || r.name.uz || r.name.ru}
-                  </option>
-                ))}
-              </select>
+            {/* 5. Location (Viloyat va Xarita) */}
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider mb-1.5">
+                  {t.regionField} *
+                </label>
+                <select
+                  id="post-region-select"
+                  value={regionId}
+                  onChange={(e) => setRegionId(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 p-3 text-sm font-semibold focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-2xs"
+                >
+                  {regions.map((r) => (
+                    <option key={r.id} value={r.id} className="bg-white dark:bg-slate-800 text-slate-900 dark:text-white">
+                      {r.name[lang] || r.name.uz || r.name.ru}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider mb-1.5">
+                  Manzil <span className="normal-case font-medium text-slate-400">(ixtiyoriy)</span>
+                </label>
+                <input
+                  id="post-address-input"
+                  type="text"
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                  placeholder="Masalan: Amir Temur ko'chasi yoki mo'ljal"
+                  maxLength={160}
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 p-3 text-sm font-medium focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 shadow-2xs"
+                />
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/40 p-3 sm:p-4">
+                <div className="flex items-start gap-2 mb-3">
+                  <MapPin size={17} className="mt-0.5 shrink-0 text-indigo-600 dark:text-indigo-400" />
+                  <div>
+                    <div className="text-xs font-bold text-slate-800 dark:text-slate-200">Xaritada joylashuvni belgilang</div>
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Xaridorlar e'loningizni xaritada va o'zlariga yaqin masofada topishlari oson bo'ladi.</div>
+                  </div>
+                </div>
+                <LocationMap value={mapPoint} onChange={setMapPoint} showLocateButton heightClass="h-56 sm:h-64" />
+              </div>
             </div>
 
             {/* 6. Description */}

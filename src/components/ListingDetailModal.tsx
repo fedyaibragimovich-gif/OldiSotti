@@ -35,7 +35,25 @@ import { categories } from '../data/categories';
 import { InfoTabKey } from '../data/infoPagesData';
 import { PriceHistoryChart } from './PriceHistoryChart';
 import { SimilarListingsSection } from './SimilarListingsSection';
+import { LocationMap } from './LocationMap';
 import { auth, saveReportToDb, blockSellerInDb } from '../lib/firebase';
+
+const REGION_CENTERS: Record<string, { latitude: number; longitude: number }> = {
+  'tashkent-city': { latitude: 41.311081, longitude: 69.240562 },
+  'tashkent-reg': { latitude: 41.2858, longitude: 69.2038 },
+  'samarkand': { latitude: 39.6542, longitude: 66.9597 },
+  'bukhara': { latitude: 39.7681, longitude: 64.4556 },
+  'andijan': { latitude: 40.7821, longitude: 72.3442 },
+  'fergana': { latitude: 40.3842, longitude: 71.7843 },
+  'namangan': { latitude: 40.9983, longitude: 71.6726 },
+  'kashkadarya': { latitude: 38.8606, longitude: 65.7891 },
+  'surkhandarya': { latitude: 37.2242, longitude: 67.2783 },
+  'khorezm': { latitude: 41.5562, longitude: 60.6313 },
+  'navoiy': { latitude: 40.0844, longitude: 65.3792 },
+  'jizzakh': { latitude: 40.1158, longitude: 67.8422 },
+  'sirdaryo': { latitude: 40.4939, longitude: 68.7844 },
+  'karakalpakstan': { latitude: 42.4619, longitude: 59.6166 }
+};
 
 interface ListingDetailModalProps {
   listing: Listing | null;
@@ -500,26 +518,16 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
                     <p className="text-xs text-slate-500 dark:text-slate-400 mb-3 ml-6">{listing.location.address}</p>
                   )}
 
-                  {/* Stylized map container */}
-                  <div className="relative w-full h-44 rounded-xl bg-[#e5e3df] dark:bg-slate-950 overflow-hidden flex items-center justify-center border border-slate-300 dark:border-slate-700">
-                    {/* Map roads grid pattern */}
-                    <div
-                      className="absolute inset-0 opacity-40"
-                      style={{
-                        backgroundImage: `linear-gradient(#d1cfcb 1px, transparent 1px), linear-gradient(to right, #d1cfcb 1px, #e5e3df 1px)`,
-                        backgroundSize: '32px 32px'
-                      }}
-                    ></div>
-                    {/* Animated Pin */}
-                    <div className="relative z-10 flex flex-col items-center">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-indigo-600 text-white shadow-xl ring-4 ring-indigo-500/30 animate-bounce">
-                        <MapPin size={22} />
-                      </div>
-                      <span className="mt-1 bg-white/95 dark:bg-slate-900 px-2.5 py-0.5 rounded shadow text-[11px] font-bold text-slate-800 dark:text-slate-200">
-                        {regionName}
-                      </span>
-                    </div>
-                  </div>
+                  {/* Real OpenStreetMap location view */}
+                  <LocationMap
+                    value={
+                      typeof listing.location.latitude === 'number' && typeof listing.location.longitude === 'number'
+                        ? { latitude: listing.location.latitude, longitude: listing.location.longitude }
+                        : REGION_CENTERS[listing.location.region] || REGION_CENTERS['tashkent-city']
+                    }
+                    readOnly
+                    heightClass="h-52 sm:h-64"
+                  />
                 </div>
               </div>
 
