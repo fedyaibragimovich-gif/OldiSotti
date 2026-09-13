@@ -1,7 +1,7 @@
 import React, { useRef } from 'react';
-import { History, ChevronLeft, ChevronRight, Trash2 } from 'lucide-react';
+import { History, ChevronLeft, ChevronRight, Trash2, Heart } from 'lucide-react';
 import { Listing, Currency, Language } from '../types';
-import { ListingCard } from './ListingCard';
+import { formatPrice } from '../utils/formatters';
 import { getTranslation } from '../data/translations';
 
 interface RecentlyViewedProps {
@@ -46,25 +46,22 @@ export const RecentlyViewed: React.FC<RecentlyViewedProps> = ({
   return (
     <section
       id="recently-viewed-section"
-      className="mt-10 sm:mt-12 bg-white dark:bg-slate-900 rounded-2xl p-4 sm:p-6 border border-slate-200/90 dark:border-slate-800 shadow-2xs w-full max-w-full overflow-hidden transition-colors duration-200"
+      className="mt-6 sm:mt-8 bg-white dark:bg-slate-900 rounded-xl p-3 sm:p-4 border border-slate-200/90 dark:border-slate-800 shadow-2xs w-full max-w-full overflow-hidden transition-colors duration-200"
     >
-      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-        <div className="flex items-center gap-2.5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-800 shadow-2xs">
-            <History size={18} strokeWidth={2.2} />
+      <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+        <div className="flex items-center gap-2">
+          <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-800 shadow-2xs">
+            <History size={15} strokeWidth={2.2} />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white tracking-tight">
+              <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white tracking-tight">
                 {t.recentlyViewed}
               </h3>
               <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
                 {listings.length}
               </span>
             </div>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              {t.recentlyViewedSubtitle}
-            </p>
           </div>
         </div>
 
@@ -105,24 +102,35 @@ export const RecentlyViewed: React.FC<RecentlyViewedProps> = ({
 
       <div
         ref={scrollRef}
-        className="recently-viewed-scroll flex gap-3.5 sm:gap-4 overflow-x-auto pb-2 scrollbar-none w-full max-w-full overscroll-x-contain touch-pan-x"
+        className="recently-viewed-scroll flex gap-2 sm:gap-3 overflow-x-auto pb-2 scrollbar-none w-full max-w-full overscroll-x-contain touch-pan-x"
         style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
       >
         {listings.map((item) => (
           <div
             key={item.id}
-            className="recently-viewed-card min-w-[220px] sm:min-w-[260px] max-w-[260px] sm:max-w-[280px] shrink-0"
+            className="relative flex w-[220px] sm:w-[250px] shrink-0 items-center rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60"
           >
-            <ListingCard
-              listing={item}
-              currency={currency}
-              lang={lang}
-              isFavorite={favorites.includes(item.id)}
-              onToggleFavorite={onToggleFavorite}
-              onSelectListing={onSelectListing}
-              viewMode="grid"
-              inCarousel={true}
-            />
+            <button
+              type="button"
+              onClick={() => onSelectListing(item)}
+              className="flex min-w-0 flex-1 items-center gap-2 p-2 pr-9 text-left rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 focus-visible:outline-2 focus-visible:outline-indigo-500"
+              aria-label={item.title}
+            >
+              <img src={item.images[0]} alt="" loading="lazy" decoding="async" className="h-14 w-14 sm:h-16 sm:w-16 shrink-0 rounded-md object-cover bg-slate-200 dark:bg-slate-700" />
+              <span className="min-w-0">
+                <span className="block text-xs font-medium leading-4 text-slate-800 dark:text-slate-100 line-clamp-2">{item.title}</span>
+                <span className="block mt-1 text-xs font-bold text-slate-900 dark:text-white break-words">{formatPrice(item.price, item.currency, currency)}</span>
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onToggleFavorite(item.id)}
+              aria-label={lang === 'ru' ? 'Избранное' : lang === 'oz' ? 'Сараланган' : 'Saralangan'}
+              aria-pressed={favorites.includes(item.id)}
+              className="absolute right-0.5 top-1/2 -translate-y-1/2 flex h-9 w-9 items-center justify-center rounded-full text-slate-400 hover:text-rose-500 focus-visible:outline-2 focus-visible:outline-indigo-500"
+            >
+              <Heart size={16} className={favorites.includes(item.id) ? 'fill-rose-500 text-rose-500' : ''} />
+            </button>
           </div>
         ))}
       </div>
