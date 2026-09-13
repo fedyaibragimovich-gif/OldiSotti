@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   X,
   Upload,
@@ -163,6 +163,7 @@ export const PostAdModal: React.FC<PostAdModalProps> = ({
   const [isVip, setIsVip] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const submissionInFlight = useRef(false);
   const [successCreated, setSuccessCreated] = useState<Listing | null>(null);
 
   // AI Image generator & presets state
@@ -295,7 +296,7 @@ export const PostAdModal: React.FC<PostAdModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isSubmitting) return;
+    if (submissionInFlight.current || successCreated) return;
     const currentUser = auth.currentUser;
     if (!currentUser || currentUser.isAnonymous) {
       setErrorMsg('E\'lon joylash uchun avval akkauntingizga kiring.');
@@ -319,7 +320,9 @@ export const PostAdModal: React.FC<PostAdModalProps> = ({
       return;
     }
 
+    submissionInFlight.current = true;
     setIsSubmitting(true);
+    setErrorMsg('');
     const listingId = `olx-${crypto.randomUUID()}`;
     let uploadedImages: string[] = [];
     try {
@@ -374,7 +377,10 @@ export const PostAdModal: React.FC<PostAdModalProps> = ({
       await deleteListingImages(uploadedImages, currentUser.uid, listingId).catch(console.warn);
       console.error('Listing submission failed:', error);
       setErrorMsg("E'lonni saqlashda xatolik yuz berdi. Internet aloqasini tekshirib, qayta urinib ko'ring.");
-    } finally { setIsSubmitting(false); }
+    } finally {
+      submissionInFlight.current = false;
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -388,6 +394,7 @@ export const PostAdModal: React.FC<PostAdModalProps> = ({
           </div>
           <button
             onClick={onClose}
+            disabled={isSubmitting}
             className="p-2 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
           >
             <X size={20} />
@@ -441,6 +448,7 @@ export const PostAdModal: React.FC<PostAdModalProps> = ({
             <div className="pt-4 flex justify-center gap-3">
               <button
                 onClick={onClose}
+            disabled={isSubmitting}
                 className="rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 px-6 py-2.5 text-sm font-bold text-white hover:from-indigo-500 hover:to-blue-500 shadow-md shadow-indigo-600/20 transition-all cursor-pointer"
               >
                 E'lonni ko'rish
@@ -449,7 +457,7 @@ export const PostAdModal: React.FC<PostAdModalProps> = ({
           </div>
         ) : (
           /* Form Screen */
-          <form onSubmit={handleSubmit} className="p-6 space-y-6">
+          <form onSubmit={handleSubmit} aria-busy={isSubmitting} className="p-6 space-y-6">
             {errorMsg && (
               <div className="rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 p-3 text-xs font-semibold text-rose-700 dark:text-rose-200">
                 {errorMsg}
@@ -1203,11 +1211,21 @@ export const PostAdModal: React.FC<PostAdModalProps> = ({
             {/* Submit button */}
             <div className="pt-1">
               <button
-                type="submit" disabled={isSubmitting}
-                className="w-full rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 py-3.5 px-6 text-sm sm:text-base font-bold text-white hover:from-indigo-500 hover:to-blue-500 transition-all shadow-md shadow-indigo-600/20 active:scale-98 cursor-pointer"
+                type="submit" disabled={isSubmitting} aria-busy={isSubmitting}
+                className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 py-3.5 px-6 text-sm sm:text-base font-bold text-white hover:from-indigo-500 hover:to-blue-500 transition-all shadow-md shadow-indigo-600/20 active:scale-98 cursor-pointer disabled:opacity-70 disabled:cursor-wait disabled:active:scale-100"
               >
-                {t.publishBtn}
+                {isSubmitting && <Loader2 size={20} className="animate-spin" aria-hidden="true" />}
+                {isSubmitting
+                  ? (lang === 'ru' ? 'Публикуется…' : lang === 'oz' ? 'Жойланмоқда…' : 'Joylanmoqda…')
+                  : t.publishBtn}
               </button>
+              {isSubmitting && (
+                <p role="status" className="mt-3 text-center text-sm font-medium text-indigo-600 dark:text-indigo-300">
+                  {lang === 'ru' ? 'Сохраняем объявление и фотографии. Пожалуйста, подождите.'
+                    : lang === 'oz' ? 'Эълон ва расмлар сақланмоқда. Илтимос, кутинг.'
+                    : 'E’lon va rasmlar saqlanmoqda. Iltimos, kuting.'}
+                </p>
+              )}
             </div>
           </form>
         )}
