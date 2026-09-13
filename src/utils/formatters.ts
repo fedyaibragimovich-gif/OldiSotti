@@ -1,6 +1,8 @@
 import { Currency } from '../types';
 
+// An indicative display rate, not a payment quote.
 export const USD_TO_UZS_RATE = 12750;
+export const EXCHANGE_RATE_NOTE = 'Taxminiy hisob: 1 USD = 12 750 so‘m. Bank kursi emas.';
 
 export function formatPrice(amount: number, currency: Currency, targetCurrency?: Currency): string {
   if (amount === 0) {
@@ -46,4 +48,10 @@ export function maskPhoneNumber(phone: string): string {
     return `${parts[0]} ${parts[1]} ••• •• ${parts[parts.length - 1]}`;
   }
   return `${clean.slice(0, 7)} ••• •• ${clean.slice(-2)}`;
+}
+
+export function formatDisplayDate(value: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}T/.test(value)) return value;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString('uz-UZ', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 }

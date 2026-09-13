@@ -1,4 +1,4 @@
-const CACHE = 'oldisotti-shell-v1';
+const CACHE = 'oldisotti-shell-v2';
 const APP_SHELL = ['/', '/manifest.webmanifest'];
 
 self.addEventListener('install', (event) => {
@@ -11,6 +11,7 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   const request = event.request;
+  if (new URL(request.url).pathname.startsWith('/api/')) return;
   if (request.method !== 'GET' || new URL(request.url).origin !== self.location.origin) return;
   event.respondWith(
     fetch(request)

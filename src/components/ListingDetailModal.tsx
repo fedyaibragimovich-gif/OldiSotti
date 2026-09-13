@@ -518,16 +518,17 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
                     <p className="text-xs text-slate-500 dark:text-slate-400 mb-3 ml-6">{listing.location.address}</p>
                   )}
 
-                  {/* Real OpenStreetMap location view */}
-                  <LocationMap
-                    value={
-                      typeof listing.location.latitude === 'number' && typeof listing.location.longitude === 'number'
-                        ? { latitude: listing.location.latitude, longitude: listing.location.longitude }
-                        : REGION_CENTERS[listing.location.region] || REGION_CENTERS['tashkent-city']
-                    }
-                    readOnly
-                    heightClass="h-52 sm:h-64"
-                  />
+                  {typeof listing.location.latitude === 'number' && typeof listing.location.longitude === 'number' ? (
+                    <LocationMap
+                      value={{ latitude: listing.location.latitude, longitude: listing.location.longitude }}
+                      readOnly
+                      heightClass="h-48 sm:h-56"
+                    />
+                  ) : (
+                    <div className="rounded-xl border border-dashed border-slate-300 dark:border-slate-700 bg-white/60 dark:bg-slate-900/40 p-5 text-center text-xs text-slate-500 dark:text-slate-400">
+                      Bu e'lon uchun xaritadagi aniq nuqta ko‘rsatilmagan.
+                    </div>
+                  )}
                 </div>
               </div>
 

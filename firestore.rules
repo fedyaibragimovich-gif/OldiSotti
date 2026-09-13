@@ -8,7 +8,22 @@ service cloud.firestore {
       );
     }
 
-    function signedIn() { return request.auth != null; }
+    function signedIn() { return request.auth != null && request.auth.token.firebase.sign_in_provider != 'anonymous'; }
+
+    function initialListingStatus() {
+      return exists(/databases/$(database)/documents/platform_settings/global_config)
+        && get(/databases/$(database)/documents/platform_settings/global_config).data.get('autoApproveListings', false) == true
+        ? 'active' : 'pending';
+    }
+
+    function validListingContent() {
+      return request.resource.data.title is string
+        && request.resource.data.title.size() > 0 && request.resource.data.title.size() <= 80
+        && request.resource.data.description is string && request.resource.data.description.size() <= 5000
+        && request.resource.data.price is number && request.resource.data.price >= 0
+        && request.resource.data.images is list
+        && request.resource.data.images.size() > 0 && request.resource.data.images.size() <= 4;
+    }
 
     function listingExists(listingId) {
       return exists(/databases/$(database)/documents/listings/$(listingId));
@@ -30,35 +45,38 @@ service cloud.firestore {
         && request.resource.data.price >= 0
         && request.resource.data.images is list
         && request.resource.data.images.size() > 0
-        && request.resource.data.images.size() <= 8
+        && request.resource.data.images.size() <= 4
         && request.resource.data.viewsCount is number
         && request.resource.data.viewsCount >= 0
         && request.resource.data.viewsCount <= 1
         && request.resource.data.isVip == false
         && request.resource.data.isTop == false
         && request.resource.data.isPostedToTelegram == false
-        && request.resource.data.status in ['active', 'pending']
+        && request.resource.data.status == initialListingStatus()
         && request.resource.data.seller is map
-        && request.resource.data.seller.isVerified == false;
+        && request.resource.data.seller.isVerified == false
+        && request.resource.data.seller.id == request.auth.uid;
     }
 
     function isOwnerListingUpdate() {
-      return signedIn()
-        && resource.data.userId == request.auth.uid
-        && request.resource.data.userId == resource.data.userId
-        && request.resource.data.createdAt == resource.data.createdAt
-        && request.resource.data.seller == resource.data.seller
-        && request.resource.data.isVip == resource.data.isVip
-        && request.resource.data.isTop == resource.data.isTop
-        && request.resource.data.isPostedToTelegram == resource.data.isPostedToTelegram
-        && request.resource.data.telegramMessageId == resource.data.telegramMessageId
-        && request.resource.data.telegramPostedAt == resource.data.telegramPostedAt
-        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['viewsCount']) || request.resource.data.viewsCount == resource.data.viewsCount + 1)
-        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['status']) || request.resource.data.status in ['active', 'reserved', 'sold']);
+      return signedIn() && resource.data.userId == request.auth.uid
+        && validListingContent()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'title', 'description', 'price', 'currency', 'images', 'categoryId', 'subcategoryId',
+          'location', 'condition', 'isNegotiable', 'isDeliveryAvailable', 'status'
+        ])
+        && (request.resource.data.status == 'pending'
+          || (resource.data.status in ['active', 'reserved', 'sold']
+            && request.resource.data.status in ['active', 'reserved', 'sold']))
+        && (initialListingStatus() == 'active'
+          || !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+            'title', 'description', 'images', 'categoryId', 'subcategoryId'
+          ]) || request.resource.data.status == 'pending');
     }
 
     function isViewIncrementOnly() {
-      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewsCount'])
+      return signedIn() && resource.data.status == 'active'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewsCount'])
         && request.resource.data.viewsCount is number
         && resource.data.viewsCount is number
         && request.resource.data.viewsCount == resource.data.viewsCount + 1;
@@ -111,7 +129,8 @@ service cloud.firestore {
     }
 
     match /listings/{listingId} {
-      allow read: if true;
+      allow get: if !exists(/databases/$(database)/documents/listings/$(listingId));
+      allow read: if resource.data.status == 'active' || isAdmin() || (signedIn() && resource.data.userId == request.auth.uid);
       allow create: if isAdmin() || isSafeNewListing();
       allow update: if isAdmin() || isOwnerListingUpdate() || isViewIncrementOnly();
       allow delete: if isAdmin() || (signedIn() && resource.data.userId == request.auth.uid);
@@ -124,12 +143,14 @@ service cloud.firestore {
         isConversationParticipant()
         && request.resource.data.buyerId == resource.data.buyerId
         && request.resource.data.sellerUserId == resource.data.sellerUserId
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['messages', 'lastUpdated', 'unreadCountByUser'])
         && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
           'listingId','listingTitle','listingPrice','listingCurrency','listingImage',
           'sellerId','sellerName','sellerAvatar','sellerPhone'
         ])
         && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['messages']) || (
           request.resource.data.messages.size() == resource.data.messages.size() + 1
+          && request.resource.data.messages == resource.data.messages.concat([request.resource.data.messages[resource.data.messages.size()]])
           && request.resource.data.messages[resource.data.messages.size()].sender == (resource.data.buyerId == request.auth.uid ? 'buyer' : 'seller')
           && request.resource.data.messages[resource.data.messages.size()].text is string
           && request.resource.data.messages[resource.data.messages.size()].text.size() > 0
