@@ -77,6 +77,10 @@ jobs:
           s = s.replace("sellerPage.getByText(buyerPing, { exact: true })", "sellerPage.locator('div.whitespace-pre-wrap').filter({ hasText: buyerPing }).last()")
           s = s.replace("sellerPage.getByText(sellerPong, { exact: true })", "sellerPage.locator('div.whitespace-pre-wrap').filter({ hasText: sellerPong }).last()")
           s = s.replace("buyerPage.getByText(sellerPong, { exact: true })", "buyerPage.locator('div.whitespace-pre-wrap').filter({ hasText: sellerPong }).last()")
+          race_marker = "  await sellerPage.locator('div.whitespace-pre-wrap').filter({ hasText: buyerPing }).last().waitFor({ state: 'visible', timeout: 25_000 });"
+          if race_marker not in s:
+              raise SystemExit('seller chat marker not found')
+          s = s.replace(race_marker, race_marker + "\n  await sellerPage.waitForTimeout(3000); // diagnostic: let unread reset settle", 1)
           p.write_text(s)
           PY
           node tests/live-e2e.mjs
