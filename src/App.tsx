@@ -1,3 +1,4 @@
+import { browserStorage, readStoredIds } from './lib/browserStorage';
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   Listing,
@@ -67,17 +68,17 @@ import type { User as FirebaseUser } from 'firebase/auth';
 export default function App() {
   // 1. Language & Currency & Dark Mode
   const [lang, setLang] = useState<Language>(() => {
-    const saved = localStorage.getItem('olx_lang') as Language;
+    const saved = browserStorage.getItem('olx_lang') as Language;
     if (saved === 'uz' || saved === 'ru' || saved === 'oz') {
       return saved;
     }
     return 'uz';
   });
   const [currency, setCurrency] = useState<Currency>(() => {
-    return (localStorage.getItem('olx_currency') as Currency) || 'UZS';
+    return browserStorage.getItem('olx_currency') === 'USD' ? 'USD' : 'UZS';
   });
   const [darkMode, setDarkMode] = useState<boolean>(() => {
-    const saved = localStorage.getItem('olx_dark_mode');
+    const saved = browserStorage.getItem('olx_dark_mode');
     if (saved !== null) {
       return saved === 'true';
     }
@@ -85,15 +86,15 @@ export default function App() {
   });
 
   useEffect(() => {
-    localStorage.setItem('olx_lang', lang);
+    browserStorage.setItem('olx_lang', lang);
   }, [lang]);
 
   useEffect(() => {
-    localStorage.setItem('olx_currency', currency);
+    browserStorage.setItem('olx_currency', currency);
   }, [currency]);
 
   useEffect(() => {
-    localStorage.setItem('olx_dark_mode', String(darkMode));
+    browserStorage.setItem('olx_dark_mode', String(darkMode));
     if (darkMode) {
       document.documentElement.classList.add('dark');
     } else {
@@ -113,7 +114,7 @@ export default function App() {
   const [isDbConnected, setIsDbConnected] = useState<boolean>(false);
   const [nearbyLocation, setNearbyLocation] = useState<{ latitude: number; longitude: number } | null>(() => {
     try {
-      const raw = localStorage.getItem('oldisotti_user_location');
+      const raw = browserStorage.getItem('oldisotti_user_location');
       if (!raw) return null;
       const parsed = JSON.parse(raw);
       return typeof parsed?.latitude === 'number' && typeof parsed?.longitude === 'number' ? parsed : null;
@@ -125,7 +126,7 @@ export default function App() {
   useEffect(() => {
     const syncNearbyLocation = () => {
       try {
-        const raw = localStorage.getItem('oldisotti_user_location');
+        const raw = browserStorage.getItem('oldisotti_user_location');
         if (!raw) return setNearbyLocation(null);
         const parsed = JSON.parse(raw);
         if (typeof parsed?.latitude === 'number' && typeof parsed?.longitude === 'number') setNearbyLocation(parsed);
@@ -137,23 +138,13 @@ export default function App() {
 
   // 2. Listings state
   const [listings, setListings] = useState<Listing[]>([]);
-  useEffect(() => { try { localStorage.removeItem('olx_listings'); } catch { /* Storage may be disabled. */ } }, []);
+  useEffect(() => { try { browserStorage.removeItem('olx_listings'); } catch { /* Storage may be disabled. */ } }, []);
 
   // 3. Favorites state
-  const [favorites, setFavorites] = useState<string[]>(() => {
-    const saved = localStorage.getItem('olx_favorites');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        console.error('Failed to parse saved favorites', e);
-      }
-    }
-    return [];
-  });
+  const [favorites, setFavorites] = useState<string[]>(() => readStoredIds('olx_favorites'));
 
   useEffect(() => {
-    localStorage.setItem('olx_favorites', JSON.stringify(favorites));
+    browserStorage.setItem('olx_favorites', JSON.stringify(favorites));
   }, [favorites]);
 
   const handleToggleFavorite = (id: string) => {
@@ -163,28 +154,15 @@ export default function App() {
   };
 
   // 3.5. Recently Viewed state (tracks last 5 unique listings clicked)
-  const [recentlyViewedIds, setRecentlyViewedIds] = useState<string[]>(() => {
-    const saved = localStorage.getItem('olx_recently_viewed');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.slice(0, 5);
-        }
-      } catch (e) {
-        console.error('Failed to parse saved recently viewed', e);
-      }
-    }
-    return [];
-  });
+  const [recentlyViewedIds, setRecentlyViewedIds] = useState<string[]>(() => readStoredIds('olx_recently_viewed').slice(0, 5));
 
   useEffect(() => {
-    localStorage.setItem('olx_recently_viewed', JSON.stringify(recentlyViewedIds));
+    browserStorage.setItem('olx_recently_viewed', JSON.stringify(recentlyViewedIds));
   }, [recentlyViewedIds]);
 
   // 4. Conversations state
   const [conversations, setConversations] = useState<Conversation[]>([]);
-  useEffect(() => { localStorage.removeItem('olx_conversations'); }, []);
+  useEffect(() => { browserStorage.removeItem('olx_conversations'); }, []);
 
   const unreadMessagesCount = useMemo(() => {
     return conversations.reduce((acc, c) => acc + (c.unreadCount || 0), 0);
@@ -232,10 +210,11 @@ export default function App() {
   // 7. Admin Panel state & Platform Settings
   const [isAdminOpen, setIsAdminOpen] = useState<boolean>(false);
   const [platformSettings, setPlatformSettings] = useState<PlatformSettings>(() => {
-    const saved = localStorage.getItem('olx_platform_settings');
+    const saved = browserStorage.getItem('olx_platform_settings');
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return { ...initialPlatformSettings, ...parsed };
       } catch (e) {
         console.error('Failed to parse saved platform settings', e);
       }
@@ -243,40 +222,20 @@ export default function App() {
     return initialPlatformSettings;
   });
 
-  const [blockedSellerIds, setBlockedSellerIds] = useState<string[]>(() => {
-    const saved = localStorage.getItem('olx_blocked_sellers');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        console.error('Failed to parse saved blocked sellers', e);
-      }
-    }
-    return [];
-  });
+  const [blockedSellerIds, setBlockedSellerIds] = useState<string[]>(() => readStoredIds('olx_blocked_sellers'));
 
-  const [verifiedSellerIds, setVerifiedSellerIds] = useState<string[]>(() => {
-    const saved = localStorage.getItem('olx_verified_sellers');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        console.error('Failed to parse saved verified sellers', e);
-      }
-    }
-    return ['seller-001', 'seller-003'];
-  });
+  const [verifiedSellerIds, setVerifiedSellerIds] = useState<string[]>(() => readStoredIds('olx_verified_sellers'));
 
   useEffect(() => {
-    localStorage.setItem('olx_blocked_sellers', JSON.stringify(blockedSellerIds));
+    browserStorage.setItem('olx_blocked_sellers', JSON.stringify(blockedSellerIds));
   }, [blockedSellerIds]);
 
   useEffect(() => {
     const handleStorage = () => {
-      const saved = localStorage.getItem('olx_blocked_sellers');
+      const saved = browserStorage.getItem('olx_blocked_sellers');
       if (saved) {
         try {
-          setBlockedSellerIds(JSON.parse(saved));
+          setBlockedSellerIds(readStoredIds('olx_blocked_sellers'));
         } catch { /* ignore */ }
       }
     };
@@ -289,14 +248,15 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    localStorage.setItem('olx_verified_sellers', JSON.stringify(verifiedSellerIds));
+    browserStorage.setItem('olx_verified_sellers', JSON.stringify(verifiedSellerIds));
   }, [verifiedSellerIds]);
 
   const [reports, setReports] = useState<ModerationReport[]>(() => {
-    const saved = localStorage.getItem('olx_moderation_reports');
+    const saved = browserStorage.getItem('olx_moderation_reports');
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed.filter(item => item && typeof item.id === 'string');
       } catch (e) {
         console.error('Failed to parse saved moderation reports', e);
       }
@@ -305,11 +265,11 @@ export default function App() {
   });
 
   useEffect(() => {
-    localStorage.setItem('olx_platform_settings', JSON.stringify(platformSettings));
+    browserStorage.setItem('olx_platform_settings', JSON.stringify(platformSettings));
   }, [platformSettings]);
 
   useEffect(() => {
-    localStorage.setItem('olx_moderation_reports', JSON.stringify(reports));
+    browserStorage.setItem('olx_moderation_reports', JSON.stringify(reports));
   }, [reports]);
 
   // Real-time Cloud Database (Firestore) synchronization
@@ -342,7 +302,7 @@ export default function App() {
     const unsubscribeSettings = subscribeToPlatformSettings((dbSettings) => {
       if (!isMounted) return;
       setPlatformSettings(dbSettings);
-      localStorage.setItem('olx_platform_settings', JSON.stringify(dbSettings));
+      browserStorage.setItem('olx_platform_settings', JSON.stringify(dbSettings));
     });
 
     // Moderation reports are admin-only and are subscribed in a separate auth-aware effect.
@@ -365,7 +325,7 @@ export default function App() {
     }
     return subscribeToModerationReports((dbReports) => {
       setReports(dbReports);
-      localStorage.setItem('olx_moderation_reports', JSON.stringify(dbReports));
+      browserStorage.setItem('olx_moderation_reports', JSON.stringify(dbReports));
     });
   }, [currentUser]);
 
@@ -644,7 +604,7 @@ export default function App() {
 
   const handleResetCatalogDefaults = async () => {
     setListings(mockListings);
-    localStorage.setItem('olx_listings', JSON.stringify(mockListings));
+    browserStorage.setItem('olx_listings', JSON.stringify(mockListings));
     try {
       await seedInitialListingsIfEmpty(mockListings);
       for (const item of mockListings) {
@@ -700,11 +660,9 @@ export default function App() {
   };
 
   const handleUpdateReportStatus = async (reportId: string, status: 'resolved' | 'dismissed') => {
-    setReports((prev) =>
-      prev.map((r) => (r.id === reportId ? { ...r, status } : r))
-    );
     try {
       await updateReportStatusInDb(reportId, status);
+      setReports((prev) => prev.map((r) => r.id === reportId ? { ...r, status } : r));
     } catch (e) {
       console.warn('Failed to update report status in Firestore:', e);
     }
@@ -712,14 +670,10 @@ export default function App() {
 
   // Mark as sold handler
   const handleMarkAsSold = async (id: string) => {
+    await updateListingInDb(id, { status: 'sold' });
     setListings((prev) =>
       prev.map((item) => (item.id === id ? { ...item, status: 'sold' as const } : item))
     );
-    try {
-      await updateListingInDb(id, { status: 'sold' });
-    } catch (e) {
-      console.warn('Failed to mark sold in Firestore:', e);
-    }
   };
 
   // Delete listing handler
@@ -872,7 +826,7 @@ export default function App() {
   const handleClearRecentlyViewed = () => {
     setRecentlyViewedIds([]);
     try {
-      localStorage.removeItem('olx_recently_viewed');
+      browserStorage.removeItem('olx_recently_viewed');
     } catch {
       // ignore
     }

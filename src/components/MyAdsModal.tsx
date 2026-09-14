@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { X, Plus, CheckCircle, Trash2, Sparkles, Layers, Clock3, RotateCcw, ShieldAlert } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { X, Plus, CheckCircle, Trash2, Sparkles, Layers, Clock3, RotateCcw, ShieldAlert, Loader2 } from 'lucide-react';
 import { Listing, Currency, Language } from '../types';
 import { formatPrice } from '../utils/formatters';
 import { getTranslation } from '../data/translations';
@@ -11,7 +11,7 @@ interface MyAdsModalProps {
   lang: Language;
   currency: Currency;
   myListings: Listing[];
-  onMarkAsSold: (id: string) => void;
+  onMarkAsSold: (id: string) => Promise<void>;
   onDeleteListing: (id: string) => void;
   onUpgradeToVip: (id: string) => void;
   onSelectListing: (listing: Listing) => void;
@@ -36,17 +36,25 @@ export const MyAdsModal: React.FC<MyAdsModalProps> = ({
   const [activeTab, setActiveTab] = useState<MyAdsTab>('active');
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
+  const operationInFlight = useRef(false);
+  const [actionError, setActionError] = useState('');
+
   if (!isOpen) return null;
 
   const filteredListings = myListings.filter(l => l.status === activeTab);
 
-  const setStatus = async (id: string, status: 'active' | 'reserved') => {
+  const setStatus = async (id: string, status: 'active' | 'reserved' | 'sold') => {
+    if (operationInFlight.current) return;
+    operationInFlight.current = true;
+    setActionError('');
     setUpdatingId(id);
     try {
-      await updateListingInDb(id, { status });
+      if (status === 'sold') await onMarkAsSold(id);
+      else await updateListingInDb(id, { status });
     } catch (error) {
-      console.warn('Failed to update listing status:', error);
+      setActionError(lang === 'ru' ? 'Не удалось сохранить. Проверьте соединение и повторите.' : lang === 'oz' ? 'Сақланмади. Интернетни текшириб, қайта урининг.' : 'Saqlanmadi. Internetni tekshirib, qayta urining.');
     } finally {
+      operationInFlight.current = false;
       setUpdatingId(null);
     }
   };
@@ -92,6 +100,8 @@ export const MyAdsModal: React.FC<MyAdsModalProps> = ({
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-white dark:bg-slate-900">
+          {actionError && <p role="alert" className="rounded-xl bg-rose-50 p-3 text-sm text-rose-700 dark:bg-rose-950 dark:text-rose-200">{actionError}</p>}
+          {updatingId && <p role="status" className="flex items-center gap-2 text-sm text-indigo-600 dark:text-indigo-300"><Loader2 size={16} className="animate-spin" />{lang === 'ru' ? 'Сохранение…' : lang === 'oz' ? 'Сақланмоқда…' : 'Saqlanmoqda…'}</p>}
           {filteredListings.length === 0 ? (
             <div className="py-12 text-center text-slate-400 space-y-3">
               <p className="text-sm font-semibold">{activeTab === 'pending' ? "Tekshiruvdagi e'lonlar yo‘q" : activeTab === 'rejected' ? "Rad etilgan e'lonlar yo‘q" : t.noMyAds}</p>
@@ -127,20 +137,20 @@ export const MyAdsModal: React.FC<MyAdsModalProps> = ({
                 <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-slate-100 dark:border-slate-800 text-xs">
                   {item.status === 'active' && (
                     <>
-                      <button disabled={updatingId === item.id} onClick={() => setStatus(item.id, 'reserved')} className="flex items-center gap-1 text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 px-2.5 py-1 rounded-lg font-semibold transition-colors cursor-pointer disabled:opacity-50"><Clock3 size={13} /><span>Band qilish</span></button>
-                      <button onClick={() => onMarkAsSold(item.id)} className="flex items-center gap-1 text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 px-2.5 py-1 rounded-lg font-semibold transition-colors cursor-pointer"><CheckCircle size={13} /><span>{t.markAsSold}</span></button>
+                      <button disabled={updatingId !== null} onClick={() => setStatus(item.id, 'reserved')} className="flex items-center gap-1 text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 px-2.5 py-1 rounded-lg font-semibold transition-colors cursor-pointer disabled:opacity-50"><Clock3 size={13} /><span>Band qilish</span></button>
+                      <button disabled={updatingId !== null} onClick={() => setStatus(item.id, 'sold')} className="flex items-center gap-1 text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 px-2.5 py-1 rounded-lg font-semibold transition-colors cursor-pointer"><CheckCircle size={13} /><span>{t.markAsSold}</span></button>
                     </>
                   )}
                   {item.status === 'reserved' && (
                     <>
-                      <button disabled={updatingId === item.id} onClick={() => setStatus(item.id, 'active')} className="flex items-center gap-1 text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 px-2.5 py-1 rounded-lg font-semibold transition-colors cursor-pointer disabled:opacity-50"><RotateCcw size={13} /><span>Faollashtirish</span></button>
-                      <button onClick={() => onMarkAsSold(item.id)} className="flex items-center gap-1 text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 px-2.5 py-1 rounded-lg font-semibold transition-colors cursor-pointer"><CheckCircle size={13} /><span>{t.markAsSold}</span></button>
+                      <button disabled={updatingId !== null} onClick={() => setStatus(item.id, 'active')} className="flex items-center gap-1 text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 px-2.5 py-1 rounded-lg font-semibold transition-colors cursor-pointer disabled:opacity-50"><RotateCcw size={13} /><span>Faollashtirish</span></button>
+                      <button disabled={updatingId !== null} onClick={() => setStatus(item.id, 'sold')} className="flex items-center gap-1 text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 px-2.5 py-1 rounded-lg font-semibold transition-colors cursor-pointer"><CheckCircle size={13} /><span>{t.markAsSold}</span></button>
                     </>
                   )}
                   {!item.isVip && (item.status === 'active' || item.status === 'reserved') && (
                     <button onClick={() => onUpgradeToVip(item.id)} className="flex items-center gap-1 text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 px-2.5 py-1 rounded-lg font-semibold transition-colors cursor-pointer"><Sparkles size={13} /><span>{t.makeVip}</span></button>
                   )}
-                  <button onClick={() => handleDelete(item.id)} className="flex items-center gap-1 text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 px-2.5 py-1 rounded-lg font-semibold transition-colors ml-auto cursor-pointer"><Trash2 size={13} /><span>{t.deleteAd}</span></button>
+                  <button disabled={updatingId !== null} onClick={() => handleDelete(item.id)} className="flex items-center gap-1 text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 px-2.5 py-1 rounded-lg font-semibold transition-colors ml-auto cursor-pointer"><Trash2 size={13} /><span>{t.deleteAd}</span></button>
                 </div>
               </div>
             </div>

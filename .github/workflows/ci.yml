@@ -38,6 +38,9 @@ jobs:
       - name: Support API tests
         run: node --import tsx --test tests/support-chat.test.mjs
 
+      - name: Browser storage regression tests
+        run: node --import tsx --test tests/browser-storage.test.mjs
+
       - name: Typecheck
         run: npm run lint
 
