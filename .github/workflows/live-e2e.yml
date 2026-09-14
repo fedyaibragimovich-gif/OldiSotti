@@ -73,6 +73,10 @@ jobs:
           if old not in s:
               raise SystemExit('submit wait marker not found')
           s = s.replace(old, new, 1)
+          s = s.replace("buyerPage.getByText(buyerPing, { exact: true })", "buyerPage.locator('div.whitespace-pre-wrap').filter({ hasText: buyerPing }).last()")
+          s = s.replace("sellerPage.getByText(buyerPing, { exact: true })", "sellerPage.locator('div.whitespace-pre-wrap').filter({ hasText: buyerPing }).last()")
+          s = s.replace("sellerPage.getByText(sellerPong, { exact: true })", "sellerPage.locator('div.whitespace-pre-wrap').filter({ hasText: sellerPong }).last()")
+          s = s.replace("buyerPage.getByText(sellerPong, { exact: true })", "buyerPage.locator('div.whitespace-pre-wrap').filter({ hasText: sellerPong }).last()")
           p.write_text(s)
           PY
           node tests/live-e2e.mjs
