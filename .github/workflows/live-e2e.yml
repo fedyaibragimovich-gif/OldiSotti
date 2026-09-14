@@ -40,6 +40,7 @@ jobs:
       - name: Run live production E2E
         run: |
           sed -i "s/getByLabel('Email')/getByLabel('Email', { exact: true })/g" tests/live-e2e.mjs
+          sed -i "s#sellerPage.locator('form button\[type=\\\"submit\\\"\]').click()#sellerPage.getByRole('button', { name: \"E'lonni joylashtirish\", exact: true }).click()#" tests/live-e2e.mjs
           node tests/live-e2e.mjs
 
       - name: Upload E2E evidence
