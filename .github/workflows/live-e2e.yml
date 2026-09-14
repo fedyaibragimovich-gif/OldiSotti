@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      BASE_URL: https://fedyaibragimovich-b7hplsuoq-fedyaibragimovich-4068.vercel.app
+      BASE_URL: https://fedyaibragimovich-gif.vercel.app
       FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
     steps:
       - name: Checkout test branch
@@ -37,7 +37,7 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
 
-      - name: Run live preview E2E without chat delay
+      - name: Run live production E2E without chat delay
         run: |
           sed -i "s/getByLabel('Email')/getByLabel('Email', { exact: true })/g" tests/live-e2e.mjs
           sed -i "s#sellerPage.locator('form button\[type=\\\"submit\\\"\]').click()#sellerPage.getByRole('button', { name: \"E'lonni joylashtirish\", exact: true }).click()#" tests/live-e2e.mjs
