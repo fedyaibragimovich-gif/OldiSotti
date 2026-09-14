@@ -41,6 +41,7 @@ jobs:
         run: |
           sed -i "s/getByLabel('Email')/getByLabel('Email', { exact: true })/g" tests/live-e2e.mjs
           sed -i "s#sellerPage.locator('form button\[type=\\\"submit\\\"\]').click()#sellerPage.getByRole('button', { name: \"E'lonni joylashtirish\", exact: true }).click()#" tests/live-e2e.mjs
+          sed -i "s#iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAQAAABFaP0WAAAADUlEQVR42mNk+M/wHwAEAQH/6CkP5QAAAABJRU5ErkJggg==#iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAFElEQVR4nGOs2HKHAQaYGJAAbg4AZjACEGCkJT8AAAAASUVORK5CYII=#g" tests/live-e2e.mjs
           python - <<'PY'
           from pathlib import Path
           p = Path('tests/live-e2e.mjs')
