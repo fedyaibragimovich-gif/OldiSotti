@@ -12,6 +12,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ isOpen, onClose, lang, c
   const [inputText, setInputText] = useState('');
   const [sending, setSending] = useState(false);
   const sendInFlight = useRef(false);
+  const markReadInFlightRef = useRef<Promise<void>>(Promise.resolve());
   const selectedChatRef = useRef(activeChatId);
   selectedChatRef.current = activeChatId;
   const [sendError, setSendError] = useState('');
@@ -33,7 +34,9 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ isOpen, onClose, lang, c
 
   useEffect(() => {
     if (!isOpen || !activeConv?.id) return;
-    void markConversationReadInDb(activeConv.id).catch(() => {});
+    const markRead = markConversationReadInDb(activeConv.id).catch(() => {});
+    markReadInFlightRef.current = markRead;
+    void markRead;
   }, [isOpen, activeConv?.id, activeConv?.messages.at(-1)?.id]);
 
   useEffect(() => {
@@ -51,6 +54,10 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ isOpen, onClose, lang, c
     sendInFlight.current = true;
     setSending(true); setSendError('');
     try {
+      // Opening a chat marks it read. Wait for that write to settle before the
+      // message transaction starts, otherwise Firestore can reject the reply
+      // with a stale document precondition when both writes hit together.
+      await markReadInFlightRef.current;
       await onSendMessage(activeConv.id, text.trim().slice(0, 2000));
       if (selectedChatRef.current === sendingChatId) setInputText('');
     } catch {
