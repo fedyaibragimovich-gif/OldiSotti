@@ -37,8 +37,9 @@ export default async function handler(req: any, res: any) {
     return res.status(429).json({ error: 'rate' });
   }
   entry.count++; limits.set(ip, entry);
-  const key = process.env.GEMINI_API_KEY;
+  const key = process.env.GEMINI_API_KEY?.trim();
   if (!key) { console.warn('support-chat: missing GEMINI_API_KEY'); return res.status(503).json({ error: 'unavailable' }); }
+  if (!/^[A-Za-z0-9_-]+$/.test(key)) { console.warn('support-chat: invalid API key format'); return res.status(503).json({ error: 'unavailable' }); }
   try {
     const model = process.env.GEMINI_SUPPORT_MODEL || 'gemini-2.5-flash-lite';
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
@@ -55,5 +56,5 @@ export default async function handler(req: any, res: any) {
     const answer = data.candidates?.[0]?.content?.parts?.filter((p: any) => !p.thought && typeof p.text === 'string').map((p: any) => p.text).join('\n').trim();
     if (!answer) { console.warn('support-chat: empty provider answer'); return res.status(503).json({ error: 'unavailable' }); }
     return res.status(200).json({ answer: answer.slice(0, 4000) });
-  } catch { console.warn('support-chat: network or timeout failure'); return res.status(503).json({ error: 'unavailable' }); }
+  } catch (error) { console.warn('support-chat: request failure', error instanceof Error && ['TypeError', 'TimeoutError', 'AbortError', 'SyntaxError'].includes(error.name) ? error.name : 'unknown'); return res.status(503).json({ error: 'unavailable' }); }
 }
