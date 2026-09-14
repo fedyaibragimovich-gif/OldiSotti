@@ -12,7 +12,7 @@ interface MyAdsModalProps {
   currency: Currency;
   myListings: Listing[];
   onMarkAsSold: (id: string) => Promise<void>;
-  onDeleteListing: (id: string) => void;
+  onDeleteListing: (id: string) => Promise<void>;
   onUpgradeToVip: (id: string) => void;
   onSelectListing: (listing: Listing) => void;
   onOpenPostAd: () => void;
@@ -59,9 +59,16 @@ export const MyAdsModal: React.FC<MyAdsModalProps> = ({
     }
   };
 
-  const handleDelete = (id: string) => {
-    const ok = window.confirm("E'lonni o‘chirmoqchimisiz? Bu amalni ortga qaytarib bo‘lmaydi.");
-    if (ok) onDeleteListing(id);
+  const handleDelete = async (id: string) => {
+    if (operationInFlight.current) return;
+    const ok = window.confirm(lang === 'ru' ? 'Удалить объявление без возможности восстановления?' : lang === 'oz' ? 'Эълонни бутунлай ўчирасизми?' : "E'lonni o‘chirmoqchimisiz? Bu amalni ortga qaytarib bo‘lmaydi.");
+    if (!ok) return;
+    operationInFlight.current = true;
+    setUpdatingId(id);
+    setActionError('');
+    try { await onDeleteListing(id); }
+    catch { setActionError(lang === 'ru' ? 'Не удалось удалить. Повторите.' : lang === 'oz' ? 'Ўчирилмади. Қайта урининг.' : 'O‘chirilmadi. Qayta urinib ko‘ring.'); }
+    finally { operationInFlight.current = false; setUpdatingId(null); }
   };
 
   const tabClass = (tab: MyAdsTab) => `pb-3 text-xs sm:text-sm font-bold border-b-2 mr-5 transition-colors cursor-pointer whitespace-nowrap ${

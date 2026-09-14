@@ -1,5 +1,5 @@
 import { browserStorage, readStoredIds } from './lib/browserStorage';
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Listing,
   Language,
@@ -24,6 +24,7 @@ import {
   updateListingInDb,
   deleteListingFromDb,
   incrementListingViewsInDb,
+  subscribeToBlockedSellers,
   subscribeToConversations,
   seedConversationsIfEmpty,
   saveConversationToDb,
@@ -68,7 +69,7 @@ import type { User as FirebaseUser } from 'firebase/auth';
 export default function App() {
   // 1. Language & Currency & Dark Mode
   const [lang, setLang] = useState<Language>(() => {
-    const saved = browserStorage.getItem('olx_lang') as Language;
+    const saved = (new URLSearchParams(window.location.search).get('lang') || browserStorage.getItem('olx_lang')) as Language;
     if (saved === 'uz' || saved === 'ru' || saved === 'oz') {
       return saved;
     }
@@ -87,6 +88,10 @@ export default function App() {
 
   useEffect(() => {
     browserStorage.setItem('olx_lang', lang);
+    document.documentElement.lang = lang === 'oz' ? 'uz-Cyrl' : lang;
+    const url = new URL(window.location.href);
+    url.searchParams.set('lang', lang);
+    window.history.replaceState({}, '', url);
   }, [lang]);
 
   useEffect(() => {
@@ -170,7 +175,7 @@ export default function App() {
 
   // 5. Filter state
   const [filters, setFilters] = useState<FilterState>({
-    query: '',
+    query: new URLSearchParams(window.location.search).get('q') || '',
     categoryId: '',
     subcategoryId: '',
     region: '',
@@ -189,13 +194,6 @@ export default function App() {
   // 5.5 Loading state for listings feed and filter changes
   const [isLoadingListings, setIsLoadingListings] = useState(true);
 
-  useEffect(() => {
-    setIsLoadingListings(true);
-    const timer = setTimeout(() => {
-      setIsLoadingListings(false);
-    }, 280);
-    return () => clearTimeout(timer);
-  }, [filters, currency]);
 
   // 6. Modals & Drawers state
   const [selectedListing, setSelectedListing] = useState<Listing | null>(null);
@@ -222,55 +220,26 @@ export default function App() {
     return initialPlatformSettings;
   });
 
-  const [blockedSellerIds, setBlockedSellerIds] = useState<string[]>(() => readStoredIds('olx_blocked_sellers'));
+  const [blockedSellerIds, setBlockedSellerIds] = useState<string[]>([]);
+  useEffect(() => {
+    browserStorage.removeItem('olx_blocked_sellers');
+    return subscribeToBlockedSellers(setBlockedSellerIds);
+  }, []);
 
   const [verifiedSellerIds, setVerifiedSellerIds] = useState<string[]>(() => readStoredIds('olx_verified_sellers'));
-
-  useEffect(() => {
-    browserStorage.setItem('olx_blocked_sellers', JSON.stringify(blockedSellerIds));
-  }, [blockedSellerIds]);
-
-  useEffect(() => {
-    const handleStorage = () => {
-      const saved = browserStorage.getItem('olx_blocked_sellers');
-      if (saved) {
-        try {
-          setBlockedSellerIds(readStoredIds('olx_blocked_sellers'));
-        } catch { /* ignore */ }
-      }
-    };
-    window.addEventListener('storage', handleStorage);
-    window.addEventListener('olx_blocked_sellers_updated', handleStorage);
-    return () => {
-      window.removeEventListener('storage', handleStorage);
-      window.removeEventListener('olx_blocked_sellers_updated', handleStorage);
-    };
-  }, []);
 
   useEffect(() => {
     browserStorage.setItem('olx_verified_sellers', JSON.stringify(verifiedSellerIds));
   }, [verifiedSellerIds]);
 
-  const [reports, setReports] = useState<ModerationReport[]>(() => {
-    const saved = browserStorage.getItem('olx_moderation_reports');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed.filter(item => item && typeof item.id === 'string');
-      } catch (e) {
-        console.error('Failed to parse saved moderation reports', e);
-      }
-    }
-    return initialModerationReports;
-  });
+  const [reports, setReports] = useState<ModerationReport[]>([]);
+  useEffect(() => { browserStorage.removeItem('olx_moderation_reports'); }, []);
 
   useEffect(() => {
     browserStorage.setItem('olx_platform_settings', JSON.stringify(platformSettings));
   }, [platformSettings]);
 
-  useEffect(() => {
-    browserStorage.setItem('olx_moderation_reports', JSON.stringify(reports));
-  }, [reports]);
+
 
   // Real-time Cloud Database (Firestore) synchronization
   useEffect(() => {
@@ -281,12 +250,15 @@ export default function App() {
       async (dbListings) => {
         if (!isMounted) return;
         setIsDbConnected(true);
+        setIsLoadingListings(false);
         setListings(dbListings);
       },
       (err) => {
-        console.warn('Firestore subscription notice (using local offline cache):', err);
+        console.warn('Firestore subscription failed:', err);
         setIsDbConnected(false);
-      }
+        setIsLoadingListings(false);
+      },
+      () => { if (isMounted) { setIsLoadingListings(true); setIsDbConnected(false); } }
     );
 
     // 2. Conversations real-time listener
@@ -317,6 +289,25 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    setActiveChatId(null);
+    setIsChatOpen(false);
+    setIsMyAdsOpen(false);
+    setSelectedListing(null);
+    if (!isAdminUser(currentUser)) setIsAdminOpen(false);
+  }, [currentUser?.uid]);
+
+  useEffect(() => {
+    const openChat = (event: Event) => {
+      const id = (event as CustomEvent<string>).detail;
+      if (!conversations.some(c => c.id === id)) return;
+      setActiveChatId(id);
+      setIsChatOpen(true);
+    };
+    window.addEventListener('oldisotti_open_chat', openChat);
+    return () => window.removeEventListener('oldisotti_open_chat', openChat);
+  }, [conversations]);
+
   // Admin-only moderation reports listener. Regular users never issue a forbidden Firestore read.
   useEffect(() => {
     if (!isAdminUser(currentUser)) {
@@ -325,7 +316,6 @@ export default function App() {
     }
     return subscribeToModerationReports((dbReports) => {
       setReports(dbReports);
-      browserStorage.setItem('olx_moderation_reports', JSON.stringify(dbReports));
     });
   }, [currentUser]);
 
@@ -336,7 +326,15 @@ export default function App() {
 
   // Filter handlers
   const handleFilterChange = (updates: Partial<FilterState>) => {
-    setFilters((prev) => ({ ...prev, ...updates }));
+    setFilters((prev) => {
+      const next = { ...prev, ...updates };
+      if (updates.categoryId !== undefined && updates.categoryId !== prev.categoryId) {
+        next.subcategoryId = updates.subcategoryId || '';
+        next.brand = updates.brand;
+      }
+      if (updates.region !== undefined && updates.region !== prev.region) next.district = updates.district || '';
+      return next;
+    });
   };
 
   const handleResetFilters = () => {
@@ -573,14 +571,10 @@ export default function App() {
 
   // Admin and Moderation handlers
   const handleUpdateListing = async (updated: Listing) => {
-    setListings((prev) =>
-      prev.map((item) => (item.id === updated.id ? updated : item))
-    );
-    if (selectedListing && selectedListing.id === updated.id) {
-      setSelectedListing(updated);
-    }
     try {
       await saveListingToDb(updated);
+      setListings((prev) => prev.map((item) => item.id === updated.id ? updated : item));
+      if (selectedListing?.id === updated.id) setSelectedListing(updated);
       if (updated.userId && (updated.status === 'active' || updated.status === 'rejected')) {
         const notif: AppNotification = {
           id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -603,24 +597,11 @@ export default function App() {
   };
 
   const handleResetCatalogDefaults = async () => {
-    setListings(mockListings);
-    browserStorage.setItem('olx_listings', JSON.stringify(mockListings));
-    try {
-      await seedInitialListingsIfEmpty(mockListings);
-      for (const item of mockListings) {
-        await saveListingToDb(item);
-      }
-    } catch (e) {
-      console.warn('Failed to reset catalog in Firestore:', e);
-      throw e;
-    }
+    throw new Error("Production bazasiga namunaviy e'lonlarni qayta yozish o‘chirilgan.");
   };
 
   const handleToggleBlockSeller = async (sellerId: string) => {
     const isCurrentlyBlocked = blockedSellerIds.includes(sellerId);
-    setBlockedSellerIds((prev) =>
-      isCurrentlyBlocked ? prev.filter((id) => id !== sellerId) : [...prev, sellerId]
-    );
     try {
       if (isCurrentlyBlocked) {
         await unblockSellerInDb(sellerId);
@@ -629,6 +610,7 @@ export default function App() {
       }
     } catch (e) {
       console.warn('Failed to sync blocked seller with Firestore:', e);
+      window.alert('Bloklash holati saqlanmadi. Qayta urinib ko‘ring.');
     }
   };
 
@@ -682,7 +664,7 @@ export default function App() {
       await deleteListingFromDb(id);
       setListings((prev) => prev.filter((item) => item.id !== id));
     } catch (e) {
-      window.alert('E’lonni o‘chirib bo‘lmadi. Qayta urinib ko‘ring.');
+      throw new Error('E’lonni o‘chirib bo‘lmadi. Qayta urinib ko‘ring.');
     }
   };
 
@@ -691,6 +673,7 @@ export default function App() {
     window.alert("VIP faqat tasdiqlangan to'lovdan keyin faollashtiriladi.");
   };
 
+  const chatOpening = useRef(false);
   // Start chat for listing
   const handleStartChat = async (listing: Listing) => {
     if (!currentUser || currentUser.isAnonymous) {
@@ -714,9 +697,11 @@ export default function App() {
       return;
     }
 
+    if (chatOpening.current) return;
+    chatOpening.current = true;
     // Create new conversation
     const newConv: Conversation = {
-      id: `chat-${Date.now()}`,
+      id: `chat-${crypto.randomUUID()}`,
       listingId: listing.id,
       listingTitle: listing.title,
       listingPrice: listing.price,
@@ -746,6 +731,8 @@ export default function App() {
       setIsChatOpen(true);
     } catch (e) {
       window.alert('Suhbat ochilmadi. Qayta urinib ko‘ring.');
+    } finally {
+      chatOpening.current = false;
     }
   };
 
@@ -765,25 +752,14 @@ export default function App() {
 
   // Full manual database resync handler
   const handleResyncWithFirestore = async () => {
-    try {
-      await seedInitialListingsIfEmpty(mockListings);
-      for (const item of mockListings) {
-        await saveListingToDb(item);
-      }
-      for (const conv of mockConversations) {
-        await saveConversationToDb(conv);
-      }
-      await savePlatformSettingsToDb(initialPlatformSettings);
-      setIsDbConnected(true);
-    } catch (e) {
-      console.error('Failed to resync database:', e);
-    }
+    // A refresh must never overwrite production documents or platform settings.
+    window.location.reload();
   };
 
   // Listings for favorites drawer
   const favoriteListings = useMemo(() => {
-    return listings.filter((l) => favorites.includes(l.id));
-  }, [listings, favorites]);
+    return listings.filter((l) => favorites.includes(l.id) && !blockedSellerIds.includes(l.userId || l.seller.id));
+  }, [listings, favorites, blockedSellerIds]);
 
   // User's own listings are strictly bound to the authenticated Firebase UID.
   const myListings = useMemo(() => {
@@ -795,8 +771,8 @@ export default function App() {
   const recentlyViewedListings = useMemo(() => {
     return recentlyViewedIds
       .map((id) => listings.find((l) => l.id === id))
-      .filter((l): l is Listing => l !== undefined);
-  }, [recentlyViewedIds, listings]);
+      .filter((l): l is Listing => l !== undefined && !blockedSellerIds.includes(l.userId || l.seller.id));
+  }, [recentlyViewedIds, listings, blockedSellerIds]);
 
   // Deep links fetch one document independently of the loaded feed.
   useEffect(() => {
@@ -953,7 +929,7 @@ export default function App() {
           onViewModeChange={setViewMode}
         />
 
-        {filteredListings.length > visibleLimit && <button type="button" onClick={() => setVisibleLimit(n => n + 40)} className="my-3 rounded-xl bg-indigo-600 px-5 py-3 text-white">Yana 40 ta e’lonni ko‘rsatish</button>}
+        {!isLoadingListings && !isDbConnected && <p role="alert" className="rounded-xl p-3 bg-rose-50 text-rose-700 dark:bg-rose-950 dark:text-rose-200">{lang === 'ru' ? 'Не удалось загрузить объявления. Проверьте интернет и обновите страницу.' : lang === 'oz' ? 'Эълонлар юкланмади. Интернетни текшириб, саҳифани янгиланг.' : 'E’lonlar yuklanmadi. Internetni tekshirib, sahifani yangilang.'}</p>}
         {/* Listings Grid / List / Skeleton */}
         {isLoadingListings ? (
           <ListingSkeletonGrid count={viewMode === 'grid' ? 10 : 5} viewMode={viewMode} />
@@ -1003,6 +979,8 @@ export default function App() {
           </div>
         )}
 
+        {filteredListings.length > visibleLimit && <button type="button" onClick={() => setVisibleLimit(n => n + 40)} className="my-3 rounded-xl bg-indigo-600 px-5 py-3 text-white">Yana 40 ta e’lonni ko‘rsatish</button>}
+
         {/* Recently Viewed Strip below main feed */}
         <RecentlyViewed
           listings={recentlyViewedListings}
@@ -1031,20 +1009,20 @@ export default function App() {
           onToggleFavorite={handleToggleFavorite}
           onStartChat={handleStartChat}
           onSelectListing={handleSelectListing}
-          allListings={listings}
+          allListings={listings.filter(l => !blockedSellerIds.includes(l.userId || l.seller.id))}
           favorites={favorites}
           onOpenInfoModal={handleOpenInfoModal}
         />
       )}
 
       {/* 6. Post Ad Modal */}
-      <PostAdModal
+      {isPostAdOpen && <PostAdModal
         isOpen={isPostAdOpen}
         onClose={() => setIsPostAdOpen(false)}
         lang={lang}
         onAddListing={handleAddListing}
         onOpenInfoModal={handleOpenInfoModal}
-      />
+      />}
 
       {/* 7. Chat Drawer */}
       <ChatDrawer
@@ -1122,9 +1100,9 @@ export default function App() {
         onResetCatalogDefaults={handleResetCatalogDefaults}
         platformSettings={platformSettings}
         onUpdatePlatformSettings={async (settings) => {
-          setPlatformSettings(settings);
           try {
             await savePlatformSettingsToDb(settings);
+            setPlatformSettings(settings);
           } catch (e) {
             console.warn('Failed to save settings to Firestore:', e);
             throw e;

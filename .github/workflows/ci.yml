@@ -41,6 +41,9 @@ jobs:
       - name: Browser storage regression tests
         run: node --import tsx --test tests/browser-storage.test.mjs
 
+      - name: Listing data regression tests
+        run: node --import tsx --test tests/listing-data.test.mjs
+
       - name: Typecheck
         run: npm run lint
 

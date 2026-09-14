@@ -16,8 +16,45 @@ service cloud.firestore {
         ? 'active' : 'pending';
     }
 
+
+    function validListingShape() {
+      let data = request.resource.data;
+      return data.currency in ['UZS', 'USD']
+        && data.categoryId is string && data.categoryId.size() > 0 && data.categoryId.size() <= 100
+        && data.location is map && data.location.region is string
+        && data.location.region.size() > 0 && data.location.region.size() <= 100
+        && data.location.get('district', '') is string
+        && data.location.get('address', '') is string
+        && data.condition in ['new', 'used']
+        && data.isNegotiable is bool && data.isDeliveryAvailable is bool
+        && data.createdAt is string && data.createdAt.size() > 0 && data.createdAt.size() <= 50
+        && data.seller is map && data.seller.name is string && data.seller.name.size() <= 100
+        && data.seller.phone is string && data.seller.phone.size() <= 30;
+    }
+
+    function validMessage(message) {
+      return message.keys().hasOnly(['id', 'sender', 'text', 'timestamp'])
+        && message.id is string && message.id.size() > 0 && message.id.size() <= 150
+        && message.timestamp is string && message.timestamp.size() <= 50
+        && message.text is string && message.text.size() > 0 && message.text.size() <= 2000;
+    }
+
+    function safeUnreadUpdate() {
+      let before = resource.data.get('unreadCountByUser', {});
+      let after = request.resource.data.get('unreadCountByUser', {});
+      let recipient = resource.data.buyerId == request.auth.uid ? resource.data.sellerUserId : resource.data.buyerId;
+      return after is map && (
+        (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['messages'])
+          && after.diff(before).affectedKeys().hasOnly([request.auth.uid])
+          && after.get(request.auth.uid, 0) == 0)
+        || (request.resource.data.diff(resource.data).affectedKeys().hasAny(['messages'])
+          && after.diff(before).affectedKeys().hasOnly([recipient])
+          && after.get(recipient, 0) == before.get(recipient, 0) + 1)
+      );
+    }
+
     function validListingContent() {
-      return request.resource.data.title is string
+      return validListingShape() && request.resource.data.title is string
         && request.resource.data.title.size() > 0 && request.resource.data.title.size() <= 80
         && request.resource.data.description is string && request.resource.data.description.size() <= 5000
         && request.resource.data.price is number && request.resource.data.price >= 0
@@ -34,7 +71,7 @@ service cloud.firestore {
     }
 
     function isSafeNewListing() {
-      return signedIn()
+      return signedIn() && validListingShape()
         && request.resource.data.userId == request.auth.uid
         && request.resource.data.title is string
         && request.resource.data.title.size() > 0
@@ -103,11 +140,13 @@ service cloud.firestore {
         && request.resource.data.sellerUserId != request.auth.uid
         && request.resource.data.listingId is string
         && listingExists(request.resource.data.listingId)
+        && get(/databases/$(database)/documents/listings/$(request.resource.data.listingId)).data.status == 'active'
         && listingOwnerUid(request.resource.data.listingId) == request.resource.data.sellerUserId
         && request.resource.data.messages is list
         && request.resource.data.messages.size() <= 1
         && (request.resource.data.messages.size() == 0 || (
-          request.resource.data.messages[0].sender == 'buyer'
+          validMessage(request.resource.data.messages[0])
+          && request.resource.data.messages[0].sender == 'buyer'
           && request.resource.data.messages[0].text is string
           && request.resource.data.messages[0].text.size() > 0
           && request.resource.data.messages[0].text.size() <= 2000
@@ -141,6 +180,7 @@ service cloud.firestore {
       allow create: if isAdmin() || isSafeNewConversation();
       allow update: if isAdmin() || (
         isConversationParticipant()
+        && safeUnreadUpdate()
         && request.resource.data.buyerId == resource.data.buyerId
         && request.resource.data.sellerUserId == resource.data.sellerUserId
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['messages', 'lastUpdated', 'unreadCountByUser'])
@@ -149,7 +189,8 @@ service cloud.firestore {
           'sellerId','sellerName','sellerAvatar','sellerPhone'
         ])
         && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['messages']) || (
-          request.resource.data.messages.size() == resource.data.messages.size() + 1
+          validMessage(request.resource.data.messages[resource.data.messages.size()])
+          && request.resource.data.messages.size() == resource.data.messages.size() + 1
           && request.resource.data.messages == resource.data.messages.concat([request.resource.data.messages[resource.data.messages.size()]])
           && request.resource.data.messages[resource.data.messages.size()].sender == (resource.data.buyerId == request.auth.uid ? 'buyer' : 'seller')
           && request.resource.data.messages[resource.data.messages.size()].text is string
@@ -183,6 +224,12 @@ service cloud.firestore {
 
     match /moderation_reports/{reportId} {
       allow create: if signedIn()
+        && request.resource.data.status == 'pending'
+        && request.resource.data.reason in ['spam', 'price', 'prohibited', 'fraud', 'other']
+        && request.resource.data.get('comment', '') is string
+        && request.resource.data.get('comment', '').size() <= 2000
+        && request.resource.data.listingTitle is string && request.resource.data.listingTitle.size() <= 80
+        && request.resource.data.createdAt is string
         && request.resource.data.reporterId == request.auth.uid
         && request.resource.data.listingId is string
         && listingExists(request.resource.data.listingId);
@@ -227,11 +274,13 @@ service cloud.firestore {
     }
 
     match /blocked_sellers/{blockId} {
+      allow get: if signedIn() && !exists(/databases/$(database)/documents/blocked_sellers/$(blockId));
       allow read: if isAdmin() || (signedIn() && resource.data.userId == request.auth.uid);
       allow create: if signedIn()
         && request.resource.data.userId == request.auth.uid
         && request.resource.data.sellerUserId is string
-        && request.resource.data.sellerUserId != request.auth.uid;
+        && request.resource.data.sellerUserId != request.auth.uid
+        && blockId == request.auth.uid + '_' + request.resource.data.sellerUserId;
       allow update: if false;
       allow delete: if isAdmin() || (signedIn() && resource.data.userId == request.auth.uid);
     }

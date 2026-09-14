@@ -2,12 +2,12 @@ import { PlatformSettings, ModerationReport, Listing } from '../types';
 
 export const initialPlatformSettings: PlatformSettings = {
   maintenanceMode: false,
-  autoApproveListings: true,
+  autoApproveListings: false,
   vipPricePerDay: 25000,
-  announcementText: "🎉 Oldisotti yangilandi! Endi barcha viloyatlar bo'yicha xavfsiz oldi-sotdi va qulay qidiruv tizimi ishlamoqda.",
+  announcementText: "🎉 OldiSotdi yangilandi! Endi barcha viloyatlar bo'yicha xavfsiz oldi-sotdi va qulay qidiruv tizimi ishlamoqda.",
   isAnnouncementActive: true,
-  telegramChannelId: '@oldisotti_uz',
-  telegramBotUsername: 'OldisottiMarketBot',
+  telegramChannelId: '@OSot_uz',
+  telegramBotUsername: 'OSotBot',
   autoPostListingsToTelegram: true,
   postOnlyVipToTelegram: false,
   notifySellerOnChat: true

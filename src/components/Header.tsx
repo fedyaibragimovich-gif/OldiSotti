@@ -81,21 +81,21 @@ export const Header: React.FC<HeaderProps> = React.memo(({
     <header className="sticky top-0 z-30 bg-white dark:bg-slate-900 border-b border-slate-200/90 dark:border-slate-800 shadow-2xs w-full max-w-full transition-colors duration-200 transform-gpu">
       {/* Main navigation header with logo, currency, language, mode, and favorites */}
       <div className="mx-auto flex max-w-7xl items-center justify-between px-2 sm:px-4 py-2 sm:py-3 w-full gap-1.5 sm:gap-2">
-        {/* Left: Original Oldisotti Brand Logo */}
+        {/* Left: Original OldiSotdi Brand Logo */}
         <div className="flex items-center space-x-1.5 sm:space-x-3 shrink-0">
           <button
             id="brand-home-logo"
             type="button"
             onClick={onResetToHome}
             className="group flex items-center gap-1 sm:gap-2.5 focus:outline-none cursor-pointer"
-            title="Oldisotti O'zbekiston"
+            title="OldiSotdi O'zbekiston"
           >
             <div className="flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-700 to-blue-500 text-white shadow-md shadow-indigo-500/25 group-hover:scale-105 transition-all shrink-0">
               <ArrowLeftRight size={16} strokeWidth={2.5} className="sm:w-5 sm:h-5" />
             </div>
             <div className="flex items-center">
               <span className="font-black text-lg sm:text-2xl md:text-3xl tracking-tight text-slate-900 dark:text-white transition-colors">
-                oldi<span className="text-indigo-600 dark:text-indigo-400">sotti</span>
+                oldi<span className="text-indigo-600 dark:text-indigo-400">sotdi</span>
               </span>
               <span className="ml-1 sm:ml-1.5 rounded-md bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200/80 dark:border-indigo-800/80 px-1 py-0.2 sm:px-1.5 sm:py-0.5 text-[9px] sm:text-[10px] font-bold text-indigo-700 dark:text-indigo-300 uppercase">
                 uz

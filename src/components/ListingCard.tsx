@@ -4,7 +4,6 @@ import { Listing, Currency, Language } from '../types';
 import { formatPrice, formatPriceSecondary, EXCHANGE_RATE_NOTE, formatDisplayDate } from '../utils/formatters';
 import { regions } from '../data/locations';
 import { getTranslation } from '../data/translations';
-import { auth, isSellerBlockedInDb } from '../lib/firebase';
 
 interface ListingCardProps {
   listing: Listing;
@@ -20,29 +19,6 @@ interface ListingCardProps {
 export const ListingCard: React.FC<ListingCardProps> = React.memo(({ listing, currency, lang, isFavorite, onToggleFavorite, onSelectListing, viewMode = 'grid', inCarousel = false }) => {
   const t = getTranslation(lang);
   const [isCopied, setIsCopied] = useState(false);
-  const [isBlocked, setIsBlocked] = useState(false);
-
-  const sellerUid = listing.userId || (listing.seller.id !== 'user-self' ? listing.seller.id : '');
-
-  useEffect(() => {
-    let cancelled = false;
-    const loadBlockState = async () => {
-      try {
-        const local = JSON.parse(localStorage.getItem('olx_blocked_sellers') || '[]');
-        if (Array.isArray(local) && local.includes(listing.seller.id)) {
-          if (!cancelled) setIsBlocked(true);
-          return;
-        }
-        if (sellerUid && auth.currentUser) {
-          const blocked = await isSellerBlockedInDb(sellerUid);
-          if (!cancelled) setIsBlocked(blocked);
-        }
-      } catch { if (!cancelled) setIsBlocked(false); }
-    };
-    loadBlockState();
-    return () => { cancelled = true; };
-  }, [listing.seller.id, sellerUid]);
-
   const reg = regions.find(r => r.id === listing.location.region);
   const regionName = reg ? (reg.name[lang] || reg.name.uz || reg.name.ru) : listing.location.region;
   const displayLocation = regionName;
@@ -58,9 +34,11 @@ export const ListingCard: React.FC<ListingCardProps> = React.memo(({ listing, cu
 
   const handleShareClick = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    const baseUrl = typeof window !== 'undefined' ? window.location.href.split('#')[0] : '';
-    const shareUrl = `${baseUrl}#listing-${listing.id}`;
-    const shareData = { title: listing.title, text: `${listing.title} - ${formatPrice(listing.price, listing.currency, currency)} | Oldisotti`, url: shareUrl };
+    const url = new URL(window.location.href);
+    url.hash = '';
+    url.searchParams.set('listing', listing.id);
+    const shareUrl = url.toString();
+    const shareData = { title: listing.title, text: `${listing.title} - ${formatPrice(listing.price, listing.currency, currency)} | OldiSotdi`, url: shareUrl };
     if (typeof navigator !== 'undefined' && navigator.share) {
       try { if (navigator.canShare && !navigator.canShare(shareData)) throw new Error('Cannot share'); await navigator.share(shareData); return; }
       catch (err) { if ((err as Error)?.name === 'AbortError') return; }
@@ -68,7 +46,6 @@ export const ListingCard: React.FC<ListingCardProps> = React.memo(({ listing, cu
     try { if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) { await navigator.clipboard.writeText(shareUrl); setIsCopied(true); setTimeout(() => setIsCopied(false), 2000); } } catch { /* ignore */ }
   };
 
-  if (isBlocked) return null;
 
   if (viewMode === 'list') {
     return (

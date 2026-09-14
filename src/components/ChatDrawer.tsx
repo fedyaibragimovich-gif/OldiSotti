@@ -11,6 +11,9 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ isOpen, onClose, lang, c
   const t = getTranslation(lang);
   const [inputText, setInputText] = useState('');
   const [sending, setSending] = useState(false);
+  const sendInFlight = useRef(false);
+  const selectedChatRef = useRef(activeChatId);
+  selectedChatRef.current = activeChatId;
   const [sendError, setSendError] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const activeConv = conversations.find(c => c.id === activeChatId);
@@ -31,30 +34,34 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ isOpen, onClose, lang, c
   useEffect(() => {
     if (!isOpen || !activeConv?.id) return;
     void markConversationReadInDb(activeConv.id).catch(() => {});
-  }, [isOpen, activeConv?.id]);
+  }, [isOpen, activeConv?.id, activeConv?.messages.at(-1)?.id]);
 
   useEffect(() => {
     if (isOpen) messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
   }, [activeConv?.messages, isOpen]);
 
-  useEffect(() => { if (!isOpen) setInputText(''); }, [isOpen, activeChatId]);
+  useEffect(() => { setInputText(''); setSendError(''); }, [isOpen, activeChatId]);
 
   if (!isOpen) return null;
 
   const handleSend = async (textToSend?: string) => {
     const text = textToSend || inputText;
-    if (!text.trim() || !activeConv || sending) return;
+    if (!text.trim() || !activeConv || sendInFlight.current) return;
+    const sendingChatId = activeConv.id;
+    sendInFlight.current = true;
     setSending(true); setSendError('');
     try {
       await onSendMessage(activeConv.id, text.trim().slice(0, 2000));
-      setInputText('');
+      if (selectedChatRef.current === sendingChatId) setInputText('');
     } catch {
-      setInputText(text);
-      setSendError('Xabar yuborilmadi. Qayta urinib ko‘ring.');
-    } finally { setSending(false); }
+      if (selectedChatRef.current === sendingChatId) {
+        setInputText(text);
+        setSendError(lang === 'ru' ? 'Сообщение не отправлено. Повторите.' : lang === 'oz' ? 'Хабар юборилмади. Қайта урининг.' : 'Xabar yuborilmadi. Qayta urinib ko‘ring.');
+      }
+    } finally { sendInFlight.current = false; setSending(false); }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } };
+  const handleKeyDown = (e: React.KeyboardEvent) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); handleSend(); } };
 
   return (
     <div className="fixed inset-0 z-50 overflow-hidden bg-black/60 backdrop-blur-xs flex justify-end animate-in fade-in duration-200 overscroll-none">
@@ -112,7 +119,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ isOpen, onClose, lang, c
             <div className="min-w-0 bg-slate-50/90 dark:bg-slate-950/80 px-2.5 sm:px-3 py-2 border-t border-slate-200/90 dark:border-slate-800 shrink-0">
               <div className="flex min-w-0 items-center gap-1.5 overflow-x-auto pb-0.5 overscroll-contain">
                 <div className="flex items-center gap-1 shrink-0 px-2 py-1 rounded-lg bg-indigo-500/10 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 text-[11px] font-bold"><Zap size={13} className="fill-indigo-500 text-indigo-500 shrink-0" /><span>{t.quickQuestions}</span></div>
-                {[{ id: 'available', text: t.quickQ1, icon: HelpCircle }, { id: 'price', text: t.quickQ2, icon: Tag }, { id: 'meet', text: t.quickQ3, icon: Calendar }, { id: 'delivery', text: t.quickQ4, icon: Truck }, { id: 'pickup', text: t.quickQ5, icon: MapPin }].map((item) => { const Icon = item.icon; return <button key={item.id} type="button" onClick={() => handleSend(item.text)} className="group inline-flex items-center gap-1.5 shrink-0 rounded-full bg-white dark:bg-slate-800 border border-slate-200/90 dark:border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 hover:border-indigo-400 dark:hover:border-indigo-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-all shadow-2xs active:scale-95 cursor-pointer whitespace-nowrap"><Icon size={13} className="text-slate-400 group-hover:text-indigo-500 dark:group-hover:text-indigo-400 transition-colors shrink-0" /><span>{item.text}</span></button>; })}
+                {[{ id: 'available', text: t.quickQ1, icon: HelpCircle }, { id: 'price', text: t.quickQ2, icon: Tag }, { id: 'meet', text: t.quickQ3, icon: Calendar }, { id: 'delivery', text: t.quickQ4, icon: Truck }, { id: 'pickup', text: t.quickQ5, icon: MapPin }].map((item) => { const Icon = item.icon; return <button key={item.id} type="button" disabled={sending} onClick={() => handleSend(item.text)} className="group inline-flex items-center gap-1.5 shrink-0 rounded-full bg-white dark:bg-slate-800 border border-slate-200/90 dark:border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 hover:border-indigo-400 dark:hover:border-indigo-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-all shadow-2xs active:scale-95 cursor-pointer whitespace-nowrap"><Icon size={13} className="text-slate-400 group-hover:text-indigo-500 dark:group-hover:text-indigo-400 transition-colors shrink-0" /><span>{item.text}</span></button>; })}
               </div>
             </div>
 

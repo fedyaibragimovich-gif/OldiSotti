@@ -1,3 +1,4 @@
+import { readListing } from './listingData';
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, onSnapshot, writeBatch, increment, query, where, or, limit, orderBy, deleteField, runTransaction } from 'firebase/firestore';
@@ -44,12 +45,13 @@ function stripUndefinedDeep<T>(value: T): T {
   return value;
 }
 
-export function subscribeToListings(onSuccess: (listings: Listing[]) => void, onError?: (err: Error) => void) {
+export function subscribeToListings(onSuccess: (listings: Listing[]) => void, onError?: (err: Error) => void, onLoading?: () => void) {
   let stops: (() => void)[] = [];
   const stopAuth = onAuthStateChanged(auth, user => {
     stops.forEach(stop => stop());
     stops = [];
     onSuccess([]);
+    onLoading?.();
     const sources = new Map<number, Listing[]>();
     // Public and private queries are separate so unpublished listings never leak.
     // No arbitrary 300-record ceiling: filters cover all readable listings.
@@ -59,7 +61,7 @@ export function subscribeToListings(onSuccess: (listings: Listing[]) => void, on
           ...(user && !user.isAnonymous ? [query(collection(db, LISTINGS_COLLECTION), where('userId', '==', user.uid))] : [])];
     queries.forEach((q, index) => {
       stops.push(onSnapshot(q, snapshot => {
-        sources.set(index, snapshot.docs.map(d => ({ ...d.data(), id: d.id } as Listing)));
+        sources.set(index, snapshot.docs.map(d => readListing(d.data(), d.id)).filter((item): item is Listing => item !== null));
         const merged = new Map<string, Listing>();
         sources.forEach(items => items.forEach(item => merged.set(item.id, item)));
         onSuccess([...merged.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
@@ -71,7 +73,7 @@ export function subscribeToListings(onSuccess: (listings: Listing[]) => void, on
 
 export async function fetchListingById(id: string): Promise<Listing | null> {
   const snapshot = await getDoc(doc(db, LISTINGS_COLLECTION, id));
-  return snapshot.exists() ? { ...snapshot.data(), id: snapshot.id } as Listing : null;
+  return snapshot.exists() ? readListing(snapshot.data(), snapshot.id) : null;
 }
 
 export async function seedInitialListingsIfEmpty(fallbackListings: Listing[]): Promise<boolean> {
@@ -158,8 +160,10 @@ export async function deleteListingFromDb(listingId: string): Promise<void> {
   const snapshot = await getDoc(doc(db, LISTINGS_COLLECTION, listingId));
   if (!snapshot.exists()) return;
   const { deleteListingImages } = await import('./storage');
-  await deleteListingImages(snapshot.data().images || [], snapshot.data().userId, listingId);
+  // Delete the document first: a denied delete must never destroy its photos.
   await deleteDoc(snapshot.ref);
+  await deleteListingImages(snapshot.data().images || [], snapshot.data().userId, listingId)
+    .catch(() => console.warn('Listing deleted; image cleanup needs retry.'));
 }
 
 export async function incrementListingViewsInDb(listingId: string): Promise<void> {
@@ -177,25 +181,26 @@ export function subscribeToConversations(onSuccess: (conversations: Conversation
     unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       unsubscribeSnapshot?.();
       unsubscribeSnapshot = null;
-      if (!user) {
-        onSuccess([]);
+      onSuccess([]); // Clear private data before switching account subscriptions.
+      if (!user || user.isAnonymous) {
         return;
       }
       const participantQuery = query(
         collection(db, CONVERSATIONS_COLLECTION),
         or(where('buyerId', '==', user.uid), where('sellerUserId', '==', user.uid)),
-        orderBy('lastUpdated', 'desc'),
-        limit(CONVERSATIONS_REALTIME_LIMIT)
+        // Sort after reading: no undeployed composite-index dependency or hidden chats.
       );
       unsubscribeSnapshot = onSnapshot(participantQuery, (snapshot) => {
+        if (auth.currentUser?.uid !== user.uid) return;
         const items: Conversation[] = [];
         snapshot.forEach((docSnap) => {
           const data = docSnap.data() as Conversation;
           const userUnread = data.unreadCountByUser?.[user.uid];
           items.push({ ...data, id: docSnap.id, unreadCount: typeof userUnread === 'number' ? userUnread : (data.unreadCount || 0) });
         });
-        onSuccess(items);
+        onSuccess(items.sort((a, b) => b.lastUpdated.localeCompare(a.lastUpdated)));
       }, (error) => {
+        onSuccess([]);
         console.warn('Firestore conversations subscription error:', error);
         onError?.(error);
       });
@@ -232,7 +237,7 @@ export async function saveConversationToDb(conv: Conversation): Promise<void> {
   if (conv.listingId) {
     try {
       const listingSnap = await getDoc(doc(db, LISTINGS_COLLECTION, conv.listingId));
-      if (!listingSnap.exists()) throw new Error('Listing not found.');
+      if (!listingSnap.exists() || listingSnap.data().status !== 'active') throw new Error('Listing unavailable.');
       sellerUserId = (listingSnap.data() as Listing).userId;
     } catch (err) {
       console.warn('Could not resolve seller UID for conversation:', err);
@@ -249,7 +254,7 @@ export async function saveConversationToDb(conv: Conversation): Promise<void> {
     buyerId: currentUid,
     sellerUserId
   };
-  await setDoc(doc(db, CONVERSATIONS_COLLECTION, conv.id), data);
+  await setDoc(doc(db, CONVERSATIONS_COLLECTION, conv.id), stripUndefinedDeep(data));
 }
 
 export async function appendMessageInDb(chatId: string, newMessage: ChatMessage): Promise<void> {
@@ -292,17 +297,19 @@ export function subscribeToNotifications(onSuccess: (notifications: AppNotificat
     unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       unsubscribeSnapshot?.();
       unsubscribeSnapshot = null;
-      if (!user) {
-        onSuccess([]);
+      onSuccess([]); // Clear private data before switching account subscriptions.
+      if (!user || user.isAnonymous) {
         return;
       }
-      const q = query(collection(db, NOTIFICATIONS_COLLECTION), where('recipientId', '==', user.uid), limit(NOTIFICATIONS_REALTIME_LIMIT));
+      const q = query(collection(db, NOTIFICATIONS_COLLECTION), where('recipientId', '==', user.uid));
       unsubscribeSnapshot = onSnapshot(q, (snapshot) => {
+        if (auth.currentUser?.uid !== user.uid) return;
         const items: AppNotification[] = [];
         snapshot.forEach((snap) => items.push({ ...(snap.data() as AppNotification), id: snap.id }));
         items.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-        onSuccess(items);
+        onSuccess(items.slice(0, NOTIFICATIONS_REALTIME_LIMIT));
       }, (error) => {
+        onSuccess([]);
         console.warn('Notifications subscription error:', error);
         onError?.(error);
       });
@@ -337,7 +344,9 @@ export async function isSellerBlockedInDb(sellerUserId: string): Promise<boolean
 export async function blockSellerInDb(sellerUserId: string): Promise<void> {
   const uid = auth.currentUser?.uid;
   if (!uid || !sellerUserId || uid === sellerUserId) return;
-  await setDoc(doc(db, BLOCKED_SELLERS_COLLECTION, `${uid}_${sellerUserId}`), {
+  const blockRef = doc(db, BLOCKED_SELLERS_COLLECTION, `${uid}_${sellerUserId}`);
+  if ((await getDoc(blockRef)).exists()) return;
+  await setDoc(blockRef, {
     userId: uid,
     sellerUserId,
     createdAt: new Date().toISOString()
@@ -401,9 +410,24 @@ export async function saveReportToDb(report: ModerationReport): Promise<void> {
   const currentUid = auth.currentUser?.uid;
   if (!currentUid) throw new Error('Authentication required.');
   const safeReport: ModerationReport = { ...report, reporterId: currentUid };
-  await setDoc(doc(db, REPORTS_COLLECTION, report.id), safeReport);
+  await setDoc(doc(db, REPORTS_COLLECTION, report.id), stripUndefinedDeep(safeReport));
 }
 
 export async function updateReportStatusInDb(reportId: string, status: 'resolved' | 'dismissed'): Promise<void> {
   await updateDoc(doc(db, REPORTS_COLLECTION, reportId), { status });
+}
+
+export function subscribeToBlockedSellers(onSuccess: (ids: string[]) => void) {
+  let stop: (() => void) | undefined;
+  const stopAuth = onAuthStateChanged(auth, user => {
+    stop?.();
+    onSuccess([]);
+    if (!user || user.isAnonymous) return;
+    stop = onSnapshot(query(collection(db, BLOCKED_SELLERS_COLLECTION), where('userId', '==', user.uid)),
+      snapshot => {
+        if (auth.currentUser?.uid !== user.uid) return;
+        onSuccess(snapshot.docs.map(d => d.data().sellerUserId).filter((id): id is string => typeof id === 'string'));
+      }, () => onSuccess([]));
+  });
+  return () => { stop?.(); stopAuth(); };
 }
