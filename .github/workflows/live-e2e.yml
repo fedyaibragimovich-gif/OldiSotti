@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      BASE_URL: https://fedyaibragimovich-gif.vercel.app
+      BASE_URL: https://fedyaibragimovich-b7hplsuoq-fedyaibragimovich-4068.vercel.app
       FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
     steps:
       - name: Checkout test branch
@@ -37,7 +37,7 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
 
-      - name: Run live production E2E with submit diagnostics
+      - name: Run live preview E2E without chat delay
         run: |
           sed -i "s/getByLabel('Email')/getByLabel('Email', { exact: true })/g" tests/live-e2e.mjs
           sed -i "s#sellerPage.locator('form button\[type=\\\"submit\\\"\]').click()#sellerPage.getByRole('button', { name: \"E'lonni joylashtirish\", exact: true }).click()#" tests/live-e2e.mjs
@@ -77,10 +77,6 @@ jobs:
           s = s.replace("sellerPage.getByText(buyerPing, { exact: true })", "sellerPage.locator('div.whitespace-pre-wrap').filter({ hasText: buyerPing }).last()")
           s = s.replace("sellerPage.getByText(sellerPong, { exact: true })", "sellerPage.locator('div.whitespace-pre-wrap').filter({ hasText: sellerPong }).last()")
           s = s.replace("buyerPage.getByText(sellerPong, { exact: true })", "buyerPage.locator('div.whitespace-pre-wrap').filter({ hasText: sellerPong }).last()")
-          race_marker = "  await sellerPage.locator('div.whitespace-pre-wrap').filter({ hasText: buyerPing }).last().waitFor({ state: 'visible', timeout: 25_000 });"
-          if race_marker not in s:
-              raise SystemExit('seller chat marker not found')
-          s = s.replace(race_marker, race_marker + "\n  await sellerPage.waitForTimeout(3000); // diagnostic: let unread reset settle", 1)
           p.write_text(s)
           PY
           node tests/live-e2e.mjs
