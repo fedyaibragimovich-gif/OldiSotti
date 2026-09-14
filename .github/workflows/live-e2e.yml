@@ -37,10 +37,43 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
 
-      - name: Run live production E2E
+      - name: Run live production E2E with submit diagnostics
         run: |
           sed -i "s/getByLabel('Email')/getByLabel('Email', { exact: true })/g" tests/live-e2e.mjs
           sed -i "s#sellerPage.locator('form button\[type=\\\"submit\\\"\]').click()#sellerPage.getByRole('button', { name: \"E'lonni joylashtirish\", exact: true }).click()#" tests/live-e2e.mjs
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('tests/live-e2e.mjs')
+          s = p.read_text()
+          marker = "  sellerPage = await sellerContext.newPage();"
+          inject = """  sellerPage = await sellerContext.newPage();
+          sellerPage.on('console', msg => {
+            if (msg.type() === 'error' || msg.type() === 'warning') console.log(`[BROWSER ${msg.type()}] ${msg.text()}`);
+          });
+          sellerPage.on('pageerror', err => console.log(`[PAGEERROR] ${err.message}`));
+          sellerPage.on('requestfailed', req => {
+            if (/firebase|firebasestorage|googleapis|identitytoolkit/i.test(req.url())) console.log(`[REQUESTFAILED] ${req.method()} ${req.url()} :: ${req.failure()?.errorText || ''}`);
+          });
+          sellerPage.on('response', res => {
+            if (res.status() >= 400 && /firebase|firebasestorage|googleapis|identitytoolkit/i.test(res.url())) console.log(`[HTTP ${res.status()}] ${res.request().method()} ${res.url()}`);
+          });"""
+          if marker not in s:
+              raise SystemExit('listener marker not found')
+          s = s.replace(marker, inject, 1)
+          old = "  await sellerPage.getByRole('button', { name: \"E'lonni ko'rish\", exact: true }).waitFor({ state: 'visible', timeout: 35_000 });"
+          new = """  const submitOutcome = await Promise.race([
+            sellerPage.getByRole('button', { name: \"E'lonni ko'rish\", exact: true }).waitFor({ state: 'visible', timeout: 25_000 }).then(() => 'success'),
+            sellerPage.getByText(\"E'lonni saqlashda xatolik yuz berdi. Internet aloqasini tekshirib, qayta urinib ko'ring.\", { exact: true }).waitFor({ state: 'visible', timeout: 25_000 }).then(() => 'ui-error')
+          ]).catch(() => 'timeout');
+          console.log(`SUBMIT OUTCOME: ${submitOutcome}`);
+          console.log(`VISIBLE ALERTS: ${JSON.stringify(await sellerPage.locator('[role=\\\"alert\\\"]').allTextContents().catch(() => []))}`);
+          await sellerPage.screenshot({ path: path.join(artifactDir, '03-after-submit.png'), fullPage: true });
+          if (submitOutcome !== 'success') throw new Error(`Listing submit outcome: ${submitOutcome}`);"""
+          if old not in s:
+              raise SystemExit('submit wait marker not found')
+          s = s.replace(old, new, 1)
+          p.write_text(s)
+          PY
           node tests/live-e2e.mjs
 
       - name: Upload E2E evidence
