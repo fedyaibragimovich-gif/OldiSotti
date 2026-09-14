@@ -59,7 +59,7 @@ export const Footer: React.FC<FooterProps> = ({ lang, onOpenInfoModal, onOpenAdm
               <div className="flex h-6 w-6 items-center justify-center rounded-md bg-indigo-600 text-white">
                 <ArrowLeftRight size={13} strokeWidth={2.5} />
               </div>
-              <span className="font-black text-sm tracking-tight text-white">oldi<span className="text-indigo-400">sotti</span><span className="ml-1 text-[8px] text-indigo-300">UZ</span></span>
+              <span className="font-black text-sm tracking-tight text-white">oldi<span className="text-indigo-400">sotdi</span><span className="ml-1 text-[8px] text-indigo-300">UZ</span></span>
             </div>
 
             <div className="flex items-center justify-center flex-wrap gap-x-3 gap-y-1 text-[10px] text-slate-500">

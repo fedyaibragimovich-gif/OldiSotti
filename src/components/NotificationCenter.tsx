@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Bell, CheckCheck, MessageSquare, X } from 'lucide-react';
-import { markAllNotificationsRead, markNotificationRead, subscribeToConversations, subscribeToNotifications } from '../lib/firebase';
+import { markAllNotificationsRead, markNotificationRead, markConversationReadInDb, subscribeToConversations, subscribeToNotifications } from '../lib/firebase';
 import { AppNotification, Conversation, Language } from '../types';
 
 interface NotificationCenterProps { lang?: Language; }
@@ -47,22 +47,27 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ lang = '
   };
 
   const markAllRead = async () => {
-    try { await markAllNotificationsRead(notifications); } catch { /* offline fallback */ }
+    try {
+      await markAllNotificationsRead(notifications);
+      await Promise.all(unreadConversations.map(c => markConversationReadInDb(c.id)));
+    } catch { /* Remain unread so the user can retry. */ }
   };
 
   const openChat = async (item?: AppNotification) => {
+    if (item?.type !== 'message' && item?.listingId) {
+      await markNotificationRead(item.id).catch(() => {});
+      window.dispatchEvent(new CustomEvent('oldisotti_open_listing', { detail: item.listingId }));
+      setOpen(false);
+      return;
+    }
     const target = item?.chatId ? conversations.find(c => c.id === item.chatId) : unreadConversations[0] || conversations[0];
     if (!target) return;
     try {
       if (item?.id && item.id !== 'unread-messages-fallback') await markNotificationRead(item.id);
       localStorage.setItem('oldisotti_notification_chat_id', target.id);
     } catch { /* ignore */ }
-    const buttons = Array.from(document.querySelectorAll('button'));
-    const messagesButton = buttons.find(button => {
-      const text = (button.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
-      return text === 'xabarlar' || text === 'сообщения' || text === 'хабарлар' || text.includes('xabarlar');
-    });
-    if (messagesButton) { (messagesButton as HTMLButtonElement).click(); setOpen(false); }
+    window.dispatchEvent(new CustomEvent('oldisotti_open_chat', { detail: target.id }));
+    setOpen(false);
   };
 
   const containerRef = React.useRef<HTMLDivElement>(null);

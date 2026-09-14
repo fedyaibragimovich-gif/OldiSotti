@@ -4,7 +4,7 @@ import { initializeTestEnvironment, assertFails, assertSucceeds } from '@firebas
 import { doc, setDoc, getDoc, updateDoc } from 'firebase/firestore';
 let env;
 const identity = uid => env.authenticatedContext(uid, { firebase: { sign_in_provider: 'password' } }).firestore();
-const listing = (uid, status = 'pending') => ({ userId: uid, title: 'Phone', description: 'Used phone', price: 100, images: ['https://example.com/a.jpg'], viewsCount: 0, isVip: false, isTop: false, isPostedToTelegram: false, status, seller: {id:uid,isVerified:false}, createdAt:'2026-09-13' });
+const listing = (uid, status = 'pending') => ({ userId: uid, title: 'Phone', description: 'Used phone', price: 100, currency:'UZS', categoryId:'cat-electronics', condition:'used', location:{region:'tashkent-city'}, isNegotiable:true, isDeliveryAvailable:false, images: ['https://example.com/a.jpg'], viewsCount: 0, isVip: false, isTop: false, isPostedToTelegram: false, status, seller: {id:uid,isVerified:false,name:'Seller',phone:'+998901234567'}, createdAt:'2026-09-13' });
 const old = {id:'one',sender:'buyer',text:'Original',timestamp:'2026-09-13T00:00:00Z'};
 before(async () => { env = await initializeTestEnvironment({ projectId:'demo-oldisotti', firestore:{ rules:await readFile('firestore.rules','utf8'),host:'127.0.0.1',port:8080 } }); });
 after(async () => { await env?.cleanup(); });
@@ -38,9 +38,9 @@ test('owner cannot self-approve pending or grant VIP',async()=>{
 test('valid message append succeeds; editing history or impersonation fails',async()=>{
  const db=identity('buyer'), chat=doc(db,'conversations/chat');
  const next={...old,id:'two',text:'Next'};
- await assertFails(updateDoc(chat,{messages:[{...old,text:'Forged'},next]}));
- await assertFails(updateDoc(chat,{messages:[old,{...next,sender:'seller'}]}));
- await assertSucceeds(updateDoc(chat,{messages:[old,next]}));
+ await assertFails(updateDoc(chat,{messages:[{...old,text:'Forged'},next],unreadCountByUser:{seller:1}}));
+ await assertFails(updateDoc(chat,{messages:[old,{...next,sender:'seller'}],unreadCountByUser:{seller:1}}));
+ await assertSucceeds(updateDoc(chat,{messages:[old,next],unreadCountByUser:{seller:1}}));
 });
 test('stranger cannot read chat or append',async()=>{
  const chat=doc(identity('stranger'),'conversations/chat');
@@ -50,4 +50,36 @@ test('stranger cannot read chat or append',async()=>{
 test('anonymous users cannot create listings',async()=>{
  const db=env.authenticatedContext('anon',{firebase:{sign_in_provider:'anonymous'}}).firestore();
  await assertFails(setDoc(doc(db,'listings/new'),listing('anon')));
+});
+
+test('malformed listing data cannot break marketplace rendering', async () => {
+ const db=identity('buyer');
+ for (const patch of [{currency:'EUR'}, {location:null}, {seller:{id:'buyer',isVerified:false}}, {createdAt:12}]) {
+  await assertFails(setDoc(doc(db,'listings/new'),{...listing('buyer'),...patch}));
+ }
+});
+test('reports must be pending, bounded, and attributable', async () => {
+ const db=identity('buyer'), ref=doc(db,'moderation_reports/report');
+ const report={listingId:'phone',listingTitle:'Phone',reporterId:'buyer',reason:'fraud',createdAt:'2026-09-14',status:'pending'};
+ await assertFails(setDoc(ref,{...report,status:'resolved'}));
+ await assertFails(setDoc(ref,{...report,comment:'x'.repeat(2001)}));
+ await assertFails(setDoc(ref,{...report,reporterId:'seller'}));
+ await assertSucceeds(setDoc(ref,report));
+});
+test('participant cannot reset the other participants unread count', async () => {
+ const ref=doc(identity('buyer'),'conversations/chat');
+ await assertFails(updateDoc(ref,{unreadCountByUser:{seller:0}}));
+ await assertSucceeds(updateDoc(ref,{unreadCountByUser:{buyer:0}}));
+});
+test('missing block lookup is safe and another users block is private', async () => {
+ const buyer=identity('buyer');
+ await assertSucceeds(getDoc(doc(buyer,'blocked_sellers/buyer_seller')));
+ await assertSucceeds(setDoc(doc(buyer,'blocked_sellers/buyer_seller'),{userId:'buyer',sellerUserId:'seller'}));
+ await assertFails(getDoc(doc(identity('stranger'),'blocked_sellers/buyer_seller')));
+ await assertFails(setDoc(doc(buyer,'blocked_sellers/wrong'),{userId:'buyer',sellerUserId:'seller'}));
+});
+test('new conversations cannot target unpublished listings', async () => {
+ const db=identity('buyer');
+ await assertFails(setDoc(doc(db,'conversations/new'),{buyerId:'buyer',sellerUserId:'seller',listingId:'private',messages:[]}));
+ await assertSucceeds(setDoc(doc(db,'conversations/new'),{buyerId:'buyer',sellerUserId:'seller',listingId:'phone',messages:[]}));
 });

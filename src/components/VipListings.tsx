@@ -29,8 +29,7 @@ export const VipListings: React.FC<VipListingsProps> = ({
   const vipAds = React.useMemo(() => {
     return listings.filter(l => 
       (l.isVip || l.isTop) && 
-      l.status !== 'pending' && 
-      l.status !== 'rejected' &&
+      l.status === 'active' &&
       (!blockedSellerIds || (
         !blockedSellerIds.includes(l.seller.id) &&
         !blockedSellerIds.includes(l.userId || '')
@@ -58,7 +57,7 @@ export const VipListings: React.FC<VipListingsProps> = ({
             <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
               {t.vipAds}
             </h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400">Eng ko'p ko'rilayotgan premium takliflar</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">{lang === 'ru' ? 'Выделенные объявления' : lang === 'oz' ? 'Ажратиб кўрсатилган эълонлар' : 'Ajratib ko‘rsatilgan e’lonlar'}</p>
           </div>
         </div>
 

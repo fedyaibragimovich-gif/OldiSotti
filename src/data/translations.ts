@@ -87,14 +87,14 @@ export const translations = {
     linkCopied: "Havola nusxalandi!",
 
     // Price Alert
-    priceAlert: "Narx pasayishini kuzatish",
-    priceAlertDesc: "Sotuvchi narxni arzonlashtirsa, darhol bildirishnoma olasiz",
-    priceAlertActive: "Narx pasayishi bildirishnomasi faol",
-    priceAlertInactive: "Narx arzonlashganda xabar olish",
-    priceAlertSubscribed: "Narx pasayishi kuzatuviga muvaffaqiyatli obuna bo'ldingiz!",
-    priceAlertUnsubscribed: "Narx kuzatuvi bekor qilindi",
+    priceAlert: "Narxni eslab qolish",
+    priceAlertDesc: "Faqat shu brauzerda saqlanadi. Avtomatik xabar yuborilmaydi.",
+    priceAlertActive: "Narx shu brauzerda saqlangan",
+    priceAlertInactive: "Joriy narxni saqlash",
+    priceAlertSubscribed: "Joriy narx shu brauzerda saqlandi",
+    priceAlertUnsubscribed: "Saqlangan narx olib tashlandi",
     priceAlertCurrentPrice: "Kuzatilayotgan narx",
-    priceAlertBadge: "Kuzatuvda",
+    priceAlertBadge: "Saqlangan",
 
     // Price History (30 Days)
     priceHistoryTitle: "So'nggi 30 kunlik narxlar dinamikasi",
@@ -335,14 +335,14 @@ export const translations = {
     linkCopied: "Ссылка скопирована!",
 
     // Price Alert
-    priceAlert: "Следить за ценой",
-    priceAlertDesc: "Уведомим вас, если продавец снизит цену на эт��т товар",
-    priceAlertActive: "Уведомление о снижении цены включено",
-    priceAlertInactive: "Получать уведомление при снижении цены",
-    priceAlertSubscribed: "Вы подписались на уведомление о снижении цены!",
-    priceAlertUnsubscribed: "Подписка на изменение цены отменена",
+    priceAlert: "Сохранить цену",
+    priceAlertDesc: "Сохраняется только в этом браузере. Автоуведомлений нет.",
+    priceAlertActive: "Цена сохранена в этом браузере",
+    priceAlertInactive: "Сохранить текущую цену",
+    priceAlertSubscribed: "Текущая цена сохранена в этом браузере",
+    priceAlertUnsubscribed: "Сохранённая цена удалена",
     priceAlertCurrentPrice: "Отслеживаемая цена",
-    priceAlertBadge: "Отслеживается",
+    priceAlertBadge: "Сохранено",
 
     // Price History (30 Days)
     priceHistoryTitle: "Динамика цен за последние 30 дней",
@@ -583,14 +583,14 @@ export const translations = {
     linkCopied: "Ҳавола нусхаланди!",
 
     // Price Alert
-    priceAlert: "Нарх пасайишини кузатиш",
-    priceAlertDesc: "Сотувчи нархни арзонлаштирса, дарҳол билдиришнома оласиз",
-    priceAlertActive: "Нарх пасайиши билдиришномаси фаол",
-    priceAlertInactive: "Нарх арзонлашганда хабар олиш",
-    priceAlertSubscribed: "Нарх пасайиши кузатувига муваффақиятли обуна бўлдингиз!",
-    priceAlertUnsubscribed: "Нарх кузатуви бекор қилинди",
+    priceAlert: "Нархни эслаб қолиш",
+    priceAlertDesc: "Фақат шу браузерда сақланади. Автоматик хабар юборилмайди.",
+    priceAlertActive: "Нарх шу браузерда сақланган",
+    priceAlertInactive: "Жорий нархни сақлаш",
+    priceAlertSubscribed: "Жорий нарх шу браузерда сақланди",
+    priceAlertUnsubscribed: "Сақланган нарх олиб ташланди",
     priceAlertCurrentPrice: "Кузатилаётган нарх",
-    priceAlertBadge: "Кузатувда",
+    priceAlertBadge: "Сақланган",
 
     // Price History (30 Days)
     priceHistoryTitle: "Сўнгги 30 кунлик нархлар динамикаси",

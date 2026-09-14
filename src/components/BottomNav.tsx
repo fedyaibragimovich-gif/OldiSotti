@@ -52,6 +52,7 @@ export const BottomNav: React.FC<BottomNavProps> = React.memo(({
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [authLoading, setAuthLoading] = useState(false);
+  const authInFlight = useRef(false);
   const [forgotLoading, setForgotLoading] = useState(false);
   const [authError, setAuthError] = useState('');
   const [forgotMessage, setForgotMessage] = useState('');
@@ -116,6 +117,8 @@ export const BottomNav: React.FC<BottomNavProps> = React.memo(({
 
   const submitAuth = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (authInFlight.current) return;
+    authInFlight.current = true;
     setAuthLoading(true);
     setAuthError('');
     setForgotMessage('');
@@ -136,11 +139,13 @@ export const BottomNav: React.FC<BottomNavProps> = React.memo(({
     } catch (error) {
       setAuthError(friendlyAuthError(error));
     } finally {
+      authInFlight.current = false;
       setAuthLoading(false);
     }
   };
 
   const handleForgotPassword = async () => {
+    if (authInFlight.current) return;
     const normalizedEmail = email.trim();
     setAuthError('');
     setForgotMessage('');
@@ -148,6 +153,7 @@ export const BottomNav: React.FC<BottomNavProps> = React.memo(({
       setAuthError('Avval to‘g‘ri email manzilingizni kiriting.');
       return;
     }
+    authInFlight.current = true;
     setForgotLoading(true);
     try {
       await resetPassword(normalizedEmail);
@@ -158,11 +164,14 @@ export const BottomNav: React.FC<BottomNavProps> = React.memo(({
       else if (code.includes('invalid-email')) setAuthError('Email manzilini tekshiring.');
       else setAuthError('Parolni tiklashda xatolik yuz berdi. Qayta urinib ko‘ring.');
     } finally {
+      authInFlight.current = false;
       setForgotLoading(false);
     }
   };
 
   const handleGoogle = async () => {
+    if (authInFlight.current) return;
+    authInFlight.current = true;
     setAuthLoading(true);
     setAuthError('');
     setForgotMessage('');
@@ -172,6 +181,7 @@ export const BottomNav: React.FC<BottomNavProps> = React.memo(({
     } catch (error) {
       setAuthError(friendlyAuthError(error));
     } finally {
+      authInFlight.current = false;
       setAuthLoading(false);
     }
   };
@@ -196,7 +206,7 @@ export const BottomNav: React.FC<BottomNavProps> = React.memo(({
             <div className="flex items-center justify-between mb-5">
               <div>
                 <h3 className="text-xl font-black">{authMode === 'login' ? navLabels.login : navLabels.register}</h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">OldiSotti akkauntingiz</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">OldiSotdi akkauntingiz</p>
               </div>
               <button type="button" onClick={() => setAuthModalOpen(false)} className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"><X size={18} /></button>
             </div>
@@ -204,11 +214,11 @@ export const BottomNav: React.FC<BottomNavProps> = React.memo(({
             <form onSubmit={submitAuth} className="space-y-3" autoComplete="on">
               <div className="relative">
                 <Mail size={17} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input value={email} onChange={e => { setEmail(e.target.value); setForgotMessage(''); }} type="email" name="email" autoComplete="username email" required placeholder="Email" className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 pl-10 pr-3 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500" />
+                <input value={email} onChange={e => { setEmail(e.target.value); setForgotMessage(''); }} aria-label="Email" type="email" name="email" autoComplete="username email" required placeholder="Email" className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 pl-10 pr-3 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500" />
               </div>
               <div className="relative">
                 <Lock size={17} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input value={password} onChange={e => setPassword(e.target.value)} type="password" name="password" autoComplete={authMode === 'login' ? 'current-password' : 'new-password'} required minLength={6} placeholder="Parol" className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 pl-10 pr-3 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500" />
+                <input value={password} onChange={e => setPassword(e.target.value)} aria-label={lang === 'ru' ? 'Пароль' : 'Parol'} type="password" name="password" autoComplete={authMode === 'login' ? 'current-password' : 'new-password'} required minLength={6} placeholder="Parol" className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 pl-10 pr-3 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500" />
               </div>
               {authMode === 'login' && (
                 <>

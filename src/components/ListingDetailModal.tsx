@@ -1,3 +1,4 @@
+import { browserStorage } from '../lib/browserStorage';
 import React, { useState, useEffect, useRef } from 'react';
 import {
   X,
@@ -242,17 +243,18 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
   const regionName = reg ? (reg.name[lang] || reg.name.uz || reg.name.ru) : listing.location.region;
   const displayLocation = regionName;
 
-  const handleCopyPhone = () => {
-    navigator.clipboard?.writeText(listing.seller.phone);
-    setCopiedToast(t.phoneCopied);
+  const copyText = async (text: string, message: string) => {
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable');
+      await navigator.clipboard.writeText(text);
+      setCopiedToast(message);
+    } catch {
+      setCopiedToast(lang === 'ru' ? 'Не удалось скопировать. Скопируйте вручную.' : lang === 'oz' ? 'Нусхаланмади. Қўлда нусхаланг.' : 'Nusxalanmadi. Qo‘lda nusxalang.');
+    }
     setTimeout(() => setCopiedToast(null), 2500);
   };
-
-  const handleShare = () => {
-    navigator.clipboard?.writeText(window.location.href);
-    setCopiedToast(t.linkCopied);
-    setTimeout(() => setCopiedToast(null), 2500);
-  };
+  const handleCopyPhone = () => copyText(listing.seller.phone, t.phoneCopied);
+  const handleShare = () => copyText(window.location.href, t.linkCopied);
 
   const sellerUid = listing.userId || (listing.seller.id !== 'user-self' ? listing.seller.id : '');
 
@@ -266,9 +268,9 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
     if (!raw) return;
     const normalized = raw.trim().toLowerCase();
     const reason: ModerationReport['reason'] = ['spam', 'price', 'prohibited', 'fraud', 'other'].includes(normalized) ? (normalized as ModerationReport['reason']) : 'other';
-    const comment = window.prompt('Qo‘shimcha izoh (ixtiyoriy):', '') || undefined;
+    const comment = (window.prompt('Qo‘shimcha izoh (ixtiyoriy):', '') || '').slice(0, 2000);
     const reportKey = `report-${auth.currentUser.uid}-${listing.id}`;
-    if (localStorage.getItem(`oldisotti_reported_${listing.id}`)) {
+    if (browserStorage.getItem(`oldisotti_reported_${auth.currentUser.uid}_${listing.id}`)) {
       setCopiedToast('Bu e’lon bo‘yicha siz allaqachon shikoyat yuborgansiz.');
       setTimeout(() => setCopiedToast(null), 3000);
       return;
@@ -284,7 +286,7 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
         createdAt: new Date().toISOString(),
         status: 'pending'
       });
-      localStorage.setItem(`oldisotti_reported_${listing.id}`, '1');
+      browserStorage.setItem(`oldisotti_reported_${auth.currentUser.uid}_${listing.id}`, '1');
       setCopiedToast('Shikoyatingiz qabul qilindi. Rahmat!');
       setTimeout(() => setCopiedToast(null), 3000);
     } catch {
@@ -308,10 +310,6 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
     if (!ok) return;
     try {
       await blockSellerInDb(sellerUid);
-      const current = JSON.parse(localStorage.getItem('olx_blocked_sellers') || '[]');
-      const next = Array.isArray(current) ? Array.from(new Set([...current, listing.seller.id, sellerUid])) : [listing.seller.id, sellerUid];
-      localStorage.setItem('olx_blocked_sellers', JSON.stringify(next));
-      window.dispatchEvent(new Event('olx_blocked_sellers_updated'));
       setCopiedToast('Sotuvchi bloklandi.');
       setTimeout(() => {
         setCopiedToast(null);
@@ -767,7 +765,7 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
 
                   {/* Official Telegram Channel Link */}
                   <a
-                    href="https://t.me/oldisotti_uz"
+                    href="https://t.me/OSot_uz"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="w-full flex items-center justify-between rounded-xl bg-sky-50 dark:bg-sky-950/50 border border-sky-200 dark:border-sky-800/60 py-2.5 px-3 text-xs text-sky-800 dark:text-sky-300 hover:bg-sky-100 dark:hover:bg-sky-900/60 transition-colors"
@@ -777,7 +775,7 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
                       <span>Rasmiy Telegram Kanalimiz</span>
                     </span>
                     <span className="text-[10px] bg-sky-500 text-white px-2 py-0.5 rounded-full font-bold">
-                      @oldisotti_uz
+                      @OSot_uz
                     </span>
                   </a>
 

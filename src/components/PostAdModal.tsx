@@ -62,6 +62,8 @@ export const PostAdModal: React.FC<PostAdModalProps> = ({
   const [errorMsg, setErrorMsg] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const submissionInFlight = useRef(false);
+  const imageProcessing = useRef(false);
+  const [isProcessingImages, setIsProcessingImages] = useState(false);
   const [successCreated, setSuccessCreated] = useState<Listing | null>(null);
 
   const selectedCategory = categories.find(c => c.id === categoryId);
@@ -69,6 +71,7 @@ export const PostAdModal: React.FC<PostAdModalProps> = ({
   if (!isOpen) return null;
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (submissionInFlight.current || imageProcessing.current) return;
     const selectedFiles: File[] = Array.from(e.target.files || []) as File[];
     e.target.value = '';
     if (selectedFiles.length === 0) return;
@@ -78,6 +81,10 @@ export const PostAdModal: React.FC<PostAdModalProps> = ({
     const MAX_SIDE = 1600;
     const JPEG_QUALITY = 0.82;
 
+    if (selectedFiles.some(file => !['image/jpeg', 'image/png', 'image/webp'].includes(file.type))) {
+      setErrorMsg('JPEG, PNG yoki WebP rasmini tanlang.');
+      return;
+    }
     const oversized = selectedFiles.find((file) => file.size > MAX_SOURCE_BYTES);
     if (oversized) {
       setErrorMsg(`Har bir rasm maksimal 10 MB bo'lishi mumkin. "${oversized.name}" juda katta.`);
@@ -113,6 +120,8 @@ export const PostAdModal: React.FC<PostAdModalProps> = ({
       reader.readAsDataURL(file);
     });
 
+    imageProcessing.current = true;
+    setIsProcessingImages(true);
     try {
       const compressed = await Promise.all(selectedFiles.map(compressImage));
       setImages(prev => [...prev, ...compressed].slice(0, MAX_IMAGES));
@@ -120,6 +129,9 @@ export const PostAdModal: React.FC<PostAdModalProps> = ({
     } catch (error) {
       console.error('Image compression failed:', error);
       setErrorMsg('Rasmni qayta ishlashda xatolik yuz berdi. Boshqa rasm bilan urinib ko\'ring.');
+    } finally {
+      imageProcessing.current = false;
+      setIsProcessingImages(false);
     }
   };
 
@@ -131,7 +143,7 @@ export const PostAdModal: React.FC<PostAdModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (submissionInFlight.current || successCreated) return;
+    if (submissionInFlight.current || imageProcessing.current || successCreated) return;
     const currentUser = auth.currentUser;
     if (!currentUser || currentUser.isAnonymous) {
       setErrorMsg('E\'lon joylash uchun avval akkauntingizga kiring.');
@@ -155,6 +167,14 @@ export const PostAdModal: React.FC<PostAdModalProps> = ({
       return;
     }
 
+    if (description.trim().length > 5000 || title.trim().length > 80) {
+      setErrorMsg('Sarlavha 80, tavsif 5000 belgidan oshmasin.');
+      return;
+    }
+    if (!/^\+?[\d\s()-]{9,20}$/.test(contactPhone.trim())) {
+      setErrorMsg('To‘g‘ri telefon raqamini kiriting.');
+      return;
+    }
     submissionInFlight.current = true;
     setIsSubmitting(true);
     setErrorMsg('');
@@ -194,10 +214,10 @@ export const PostAdModal: React.FC<PostAdModalProps> = ({
         phone: contactPhone.trim(),
         avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80',
         telegram: contactTelegram.trim() || undefined,
-        registeredSince: 'Sentyabr 2026',
-        responseTime: '5 daqiqa ichida',
+        registeredSince: currentUser.metadata.creationTime ? new Date(currentUser.metadata.creationTime).toLocaleDateString('uz-UZ') : '',
+        responseTime: '',
         isVerified: false,
-        rating: 5.0,
+        rating: 0,
         activeAdsCount: 1
       },
       status: 'active',
@@ -292,7 +312,9 @@ export const PostAdModal: React.FC<PostAdModalProps> = ({
           </div>
         ) : (
           /* Form Screen */
-          <form onSubmit={handleSubmit} aria-busy={isSubmitting} className="p-6 space-y-6">
+          <form onSubmit={handleSubmit} aria-busy={isSubmitting || isProcessingImages} className="p-6">
+            <fieldset disabled={isSubmitting || isProcessingImages} className="space-y-6 min-w-0">
+            {isProcessingImages && <p role="status">{lang === 'ru' ? 'Обработка изображений…' : lang === 'oz' ? 'Расмлар тайёрланмоқда…' : 'Rasmlar tayyorlanmoqda…'}</p>}
             {errorMsg && (
               <div className="rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 p-3 text-xs font-semibold text-rose-700 dark:text-rose-200">
                 {errorMsg}
@@ -774,6 +796,7 @@ export const PostAdModal: React.FC<PostAdModalProps> = ({
                 </p>
               )}
             </div>
+            </fieldset>
           </form>
         )}
       </div>
