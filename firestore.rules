@@ -133,6 +133,14 @@ service cloud.firestore {
       );
     }
 
+    function safeInitialUnread() {
+      let counters = request.resource.data.get('unreadCountByUser', {});
+      return counters is map
+        && counters.keys().hasOnly([request.auth.uid, request.resource.data.sellerUserId])
+        && counters.get(request.auth.uid, 0) == 0
+        && counters.get(request.resource.data.sellerUserId, 0) == request.resource.data.messages.size();
+    }
+
     function isSafeNewConversation() {
       return signedIn()
         && request.resource.data.buyerId == request.auth.uid
@@ -144,6 +152,7 @@ service cloud.firestore {
         && listingOwnerUid(request.resource.data.listingId) == request.resource.data.sellerUserId
         && request.resource.data.messages is list
         && request.resource.data.messages.size() <= 1
+        && safeInitialUnread()
         && (request.resource.data.messages.size() == 0 || (
           validMessage(request.resource.data.messages[0])
           && request.resource.data.messages[0].sender == 'buyer'

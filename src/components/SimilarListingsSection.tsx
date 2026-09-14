@@ -50,7 +50,7 @@ export const SimilarListingsSection: React.FC<SimilarListingsSectionProps> = ({
   // All listings in the same category (excluding current)
   const categoryListings = useMemo(() => {
     return allListings.filter(
-      (item) => item.categoryId === currentListing.categoryId && item.id !== currentListing.id
+      (item) => item.status === 'active' && item.categoryId === currentListing.categoryId && item.id !== currentListing.id
     );
   }, [allListings, currentListing.categoryId, currentListing.id]);
 

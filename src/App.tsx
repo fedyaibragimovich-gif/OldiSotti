@@ -308,6 +308,19 @@ export default function App() {
     return () => window.removeEventListener('oldisotti_open_chat', openChat);
   }, [conversations]);
 
+  useEffect(() => {
+    let active = true;
+    const openListing = (event: Event) => {
+      const id = (event as CustomEvent<string>).detail;
+      if (typeof id !== 'string') return;
+      void fetchListingById(id).then(listing => {
+        if (active && listing) setSelectedListing(listing);
+      }).catch(() => {});
+    };
+    window.addEventListener('oldisotti_open_listing', openListing);
+    return () => { active = false; window.removeEventListener('oldisotti_open_listing', openListing); };
+  }, [currentUser?.uid]);
+
   // Admin-only moderation reports listener. Regular users never issue a forbidden Firestore read.
   useEffect(() => {
     if (!isAdminUser(currentUser)) {

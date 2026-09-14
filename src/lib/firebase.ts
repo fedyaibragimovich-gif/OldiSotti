@@ -252,7 +252,8 @@ export async function saveConversationToDb(conv: Conversation): Promise<void> {
   const data: Conversation = {
     ...conv,
     buyerId: currentUid,
-    sellerUserId
+    sellerUserId,
+    unreadCountByUser: { [currentUid]: 0, [sellerUserId]: conv.messages.length }
   };
   await setDoc(doc(db, CONVERSATIONS_COLLECTION, conv.id), stripUndefinedDeep(data));
 }

@@ -54,6 +54,12 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ lang = '
   };
 
   const openChat = async (item?: AppNotification) => {
+    if (item?.type !== 'message' && item?.listingId) {
+      await markNotificationRead(item.id).catch(() => {});
+      window.dispatchEvent(new CustomEvent('oldisotti_open_listing', { detail: item.listingId }));
+      setOpen(false);
+      return;
+    }
     const target = item?.chatId ? conversations.find(c => c.id === item.chatId) : unreadConversations[0] || conversations[0];
     if (!target) return;
     try {
