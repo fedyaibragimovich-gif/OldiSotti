@@ -4,6 +4,7 @@ import { Listing, Currency, Language } from '../types';
 import { formatPrice, formatPriceSecondary, EXCHANGE_RATE_NOTE, formatDisplayDate } from '../utils/formatters';
 import { regions } from '../data/locations';
 import { getTranslation } from '../data/translations';
+import { toPublicListingId } from '../lib/publicListingId';
 
 interface ListingCardProps {
   listing: Listing;
@@ -34,7 +35,7 @@ export const ListingCard: React.FC<ListingCardProps> = React.memo(({ listing, cu
 
   const handleShareClick = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    const shareUrl = `${window.location.origin}/l/${encodeURIComponent(listing.id)}`;
+    const shareUrl = `${window.location.origin}/l/${encodeURIComponent(toPublicListingId(listing.id))}`;
     const shareData = { title: listing.title, text: `${listing.title} - ${formatPrice(listing.price, listing.currency, currency)} | OldiSotdi`, url: shareUrl };
     if (typeof navigator !== 'undefined' && navigator.share) {
       try { if (navigator.canShare && !navigator.canShare(shareData)) throw new Error('Cannot share'); await navigator.share(shareData); return; }

@@ -2,15 +2,79 @@ import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary.tsx';
+import { translations } from './data/translations.ts';
+import { toLegacyListingId, toPublicListingId } from './lib/publicListingId.ts';
 import './index.css';
 import './performance.css';
 
-if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch((error) => {
-      console.warn('OldiSotti service worker registration failed:', error);
+// Keep user-facing copy consistently branded as OldiSotdi while legacy
+// translation keys/storage identifiers remain compatible for existing users.
+const localizedCopy = translations as unknown as Record<string, Record<string, unknown>>;
+for (const locale of Object.values(localizedCopy)) {
+  for (const [key, value] of Object.entries(locale)) {
+    if (typeof value === 'string') {
+      locale[key] = value.replace(/Oldisotti/g, 'OldiSotdi').replace(/OldiSotti/g, 'OldiSotdi');
+    }
+  }
+}
+
+let pendingDeepLinkListingId: string | null = null;
+
+if (typeof window !== 'undefined') {
+  const nativeReplaceState = window.history.replaceState.bind(window.history);
+  const listingPathPattern = /^\/l\/([^/]+)\/?$/i;
+
+  const normalizePublicListingUrl = (url: URL, rawListingId: string) => {
+    const publicId = toPublicListingId(toLegacyListingId(rawListingId));
+    url.pathname = `/l/${encodeURIComponent(publicId)}`;
+    url.searchParams.delete('listing');
+    return url;
+  };
+
+  // Resolve both the new /l/<id> format and older ?listing=<id> deep links.
+  // Firestore may still contain pre-rebrand demo document IDs, so only the
+  // internal event receives the legacy ID; the address bar remains OldiSotdi-branded.
+  try {
+    const initialUrl = new URL(window.location.href);
+    const pathMatch = initialUrl.pathname.match(listingPathPattern);
+    const rawListingId = pathMatch
+      ? decodeURIComponent(pathMatch[1])
+      : initialUrl.searchParams.get('listing');
+
+    if (rawListingId) {
+      pendingDeepLinkListingId = toLegacyListingId(rawListingId);
+      const normalizedUrl = normalizePublicListingUrl(initialUrl, rawListingId);
+      nativeReplaceState(window.history.state, '', normalizedUrl);
+    }
+  } catch {
+    pendingDeepLinkListingId = null;
+  }
+
+  // App.tsx historically writes ?listing=<internal-id> when a card is opened.
+  // Transparently convert that navigation to /l/<public-id> without changing
+  // the listing object used by Firestore, favorites, chat, or moderation.
+  window.history.replaceState = ((data: unknown, unused: string, url?: string | URL | null) => {
+    if (url !== undefined && url !== null) {
+      try {
+        const nextUrl = new URL(String(url), window.location.href);
+        const rawListingId = nextUrl.searchParams.get('listing');
+        if (rawListingId) {
+          return nativeReplaceState(data, unused, normalizePublicListingUrl(nextUrl, rawListingId));
+        }
+      } catch {
+        // Fall through to the native implementation for malformed third-party URLs.
+      }
+    }
+    return nativeReplaceState(data, unused, url);
+  }) as History['replaceState'];
+
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js').catch((error) => {
+        console.warn('OldiSotdi service worker registration failed:', error);
+      });
     });
-  });
+  }
 }
 
 createRoot(document.getElementById('root')!).render(
@@ -20,3 +84,66 @@ createRoot(document.getElementById('root')!).render(
     </ErrorBoundary>
   </StrictMode>,
 );
+
+if (typeof window !== 'undefined') {
+  // The app already exposes a safe deep-link event that fetches one listing by
+  // document ID. Retry briefly because React effects register the listener after render.
+  if (pendingDeepLinkListingId) {
+    const internalId = pendingDeepLinkListingId;
+    let attempt = 0;
+    const openDeepLinkedListing = () => {
+      if (document.getElementById(`price-alert-card-${internalId}`)) return;
+      window.dispatchEvent(new CustomEvent<string>('oldisotti_open_listing', { detail: internalId }));
+      attempt += 1;
+      if (attempt < 8) window.setTimeout(openDeepLinkedListing, Math.min(250 + attempt * 250, 1500));
+    };
+    window.setTimeout(openDeepLinkedListing, 250);
+  }
+
+  // Transitional UI compatibility: old demo IDs can remain in Firestore until
+  // their references (favorites/chats/reports) are migrated, but users should
+  // never see the old prefix in the interface.
+  const normalizeLegacyDemoText = (root: Node) => {
+    const replaceText = (node: Node) => {
+      if (node.nodeType !== Node.TEXT_NODE || !node.nodeValue) return;
+      node.nodeValue = node.nodeValue.replace(/\bolx-(\d+)\b/gi, (_match, digits) => `oldisotdi-demo-${digits}`);
+    };
+
+    replaceText(root);
+    if (root.nodeType === Node.ELEMENT_NODE || root.nodeType === Node.DOCUMENT_FRAGMENT_NODE) {
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      let current = walker.nextNode();
+      while (current) {
+        replaceText(current);
+        current = walker.nextNode();
+      }
+    }
+  };
+
+  let hadListingModal = false;
+  const observer = new MutationObserver((mutations) => {
+    for (const mutation of mutations) {
+      mutation.addedNodes.forEach(normalizeLegacyDemoText);
+      if (mutation.type === 'characterData') normalizeLegacyDemoText(mutation.target);
+    }
+
+    const listingModalOpen = Boolean(document.querySelector('[id^="price-alert-card-"]'));
+    if (listingModalOpen) {
+      hadListingModal = true;
+      return;
+    }
+
+    // Closing a listing opened at /l/<id> should return to the marketplace home
+    // instead of leaving a stale listing URL that would reopen on refresh.
+    if (hadListingModal && /^\/l\//i.test(window.location.pathname)) {
+      const homeUrl = new URL(window.location.href);
+      homeUrl.pathname = '/';
+      homeUrl.searchParams.delete('listing');
+      window.history.replaceState(window.history.state, '', homeUrl);
+      hadListingModal = false;
+    }
+  });
+
+  observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+  normalizeLegacyDemoText(document.body);
+}

@@ -5,6 +5,19 @@ const FIREBASE_DATABASE_ID = 'ai-studio-bazaarbuilder-41fa17d8-6b10-46d7-a618-e3
 // Firebase web API keys are public client configuration; Firestore Security Rules enforce access.
 const FIREBASE_WEB_API_KEY = 'AIzaSyAITdHp6PssWTS-LWTpjQ49faSn1ozXoOU';
 
+const LEGACY_DEMO_ID = /^olx-(\d+)$/i;
+const PUBLIC_DEMO_ID = /^oldisotdi-demo-(\d+)$/i;
+
+function toPublicListingId(id: string): string {
+  const match = LEGACY_DEMO_ID.exec(id);
+  return match ? `oldisotdi-demo-${match[1]}` : id;
+}
+
+function toLegacyListingId(id: string): string {
+  const match = PUBLIC_DEMO_ID.exec(id);
+  return match ? `olx-${match[1]}` : id;
+}
+
 function escapeHtml(value: unknown): string {
   return String(value ?? '')
     .replace(/&/g, '&amp;')
@@ -35,7 +48,7 @@ function decodeFirestoreFields(fields: AnyRecord): AnyRecord {
   return result;
 }
 
-async function fetchListing(listingId: string): Promise<AnyRecord | null> {
+async function fetchListingById(listingId: string): Promise<AnyRecord | null> {
   const endpoint = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(FIREBASE_PROJECT_ID)}/databases/${encodeURIComponent(FIREBASE_DATABASE_ID)}/documents/listings/${encodeURIComponent(listingId)}?key=${encodeURIComponent(FIREBASE_WEB_API_KEY)}`;
   try {
     const response = await fetch(endpoint, { signal: AbortSignal.timeout(5000) });
@@ -46,6 +59,17 @@ async function fetchListing(listingId: string): Promise<AnyRecord | null> {
   } catch {
     return null;
   }
+}
+
+async function fetchListing(requestedId: string): Promise<AnyRecord | null> {
+  // Prefer the requested (new) ID so future migrated documents work directly.
+  const direct = await fetchListingById(requestedId);
+  if (direct) return direct;
+
+  // Compatibility fallback for demo documents seeded before the rebrand.
+  const legacyId = toLegacyListingId(requestedId);
+  if (legacyId === requestedId) return null;
+  return fetchListingById(legacyId);
 }
 
 function formatPrice(price: unknown, currency: unknown): string {
@@ -88,12 +112,6 @@ function injectListingMeta(html: string, listing: AnyRecord, canonicalUrl: strin
   return html;
 }
 
-function injectSpaDeepLink(html: string, listingId: string): string {
-  const target = `/?listing=${encodeURIComponent(listingId)}`;
-  const script = `<script>try{history.replaceState({},'',${JSON.stringify(target)})}catch(e){}</script>`;
-  return html.includes('</head>') ? html.replace('</head>', `${script}\n  </head>`) : `${script}${html}`;
-}
-
 function deploymentOrigin(): string {
   const productionHost = process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim();
   if (productionHost) return `https://${productionHost.replace(/^https?:\/\//, '')}`;
@@ -120,17 +138,27 @@ export default async function handler(req: any, res: any) {
   }
 
   const rawId = Array.isArray(req.query?.listing) ? req.query.listing[0] : req.query?.listing;
-  const listingId = typeof rawId === 'string' ? rawId.trim() : '';
-  if (!listingId || listingId.length > 160 || !/^[A-Za-z0-9._:-]+$/.test(listingId)) {
+  const requestedId = typeof rawId === 'string' ? rawId.trim() : '';
+  if (!requestedId || requestedId.length > 160 || !/^[A-Za-z0-9._:-]+$/.test(requestedId)) {
     return res.status(400).send('Invalid listing id');
   }
 
-  try {
-    const [baseHtml, listing] = await Promise.all([fetchBaseHtml(), fetchListing(listingId)]);
-    const canonicalUrl = `${deploymentOrigin()}/l/${encodeURIComponent(listingId)}`;
-    const withMeta = listing ? injectListingMeta(baseHtml, listing, canonicalUrl) : baseHtml;
-    const output = injectSpaDeepLink(withMeta, listingId);
+  // Never expose the pre-rebrand OLX demo prefix in public URLs.
+  const publicId = toPublicListingId(requestedId);
+  if (publicId !== requestedId) {
+    res.setHeader('Location', `/l/${encodeURIComponent(publicId)}`);
+    res.setHeader('Cache-Control', 'public, max-age=300');
+    return res.status(308).end();
+  }
 
+  try {
+    const [baseHtml, listing] = await Promise.all([fetchBaseHtml(), fetchListing(requestedId)]);
+    const canonicalUrl = `${deploymentOrigin()}/l/${encodeURIComponent(publicId)}`;
+    const output = listing ? injectListingMeta(baseHtml, listing, canonicalUrl) : baseHtml;
+
+    // Client-side deep-link bootstrap in src/main.tsx resolves /l/<public-id>
+    // back to the legacy Firestore document ID when needed. The server never
+    // rewrites the address bar to an internal pre-rebrand identifier.
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.setHeader('Cache-Control', listing ? 'public, s-maxage=60, stale-while-revalidate=300' : 'no-store');
     if (req.method === 'HEAD') return res.status(200).end();
