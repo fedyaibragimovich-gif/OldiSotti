@@ -1,7 +1,9 @@
-import firebaseConfig from '../firebase-applet-config.json' with { type: 'json' };
-import { mockListings } from '../src/data/mockListings';
-
 type AnyRecord = Record<string, any>;
+
+const FIREBASE_PROJECT_ID = 'gen-lang-client-0261863601';
+const FIREBASE_DATABASE_ID = 'ai-studio-bazaarbuilder-41fa17d8-6b10-46d7-a618-e3efc2bd76de';
+// Firebase web API keys are public client configuration; Firestore Security Rules enforce access.
+const FIREBASE_WEB_API_KEY = 'AIzaSyAITdHp6PssWTS-LWTpjQ49faSn1ozXoOU';
 
 function escapeHtml(value: unknown): string {
   return String(value ?? '')
@@ -34,26 +36,16 @@ function decodeFirestoreFields(fields: AnyRecord): AnyRecord {
 }
 
 async function fetchListing(listingId: string): Promise<AnyRecord | null> {
-  const projectId = String(firebaseConfig.projectId || '');
-  const databaseId = String((firebaseConfig as AnyRecord).firestoreDatabaseId || '(default)');
-  const apiKey = String(firebaseConfig.apiKey || '');
-
-  if (projectId && databaseId && apiKey) {
-    const endpoint = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(projectId)}/databases/${encodeURIComponent(databaseId)}/documents/listings/${encodeURIComponent(listingId)}?key=${encodeURIComponent(apiKey)}`;
-    try {
-      const response = await fetch(endpoint, { signal: AbortSignal.timeout(5000) });
-      if (response.ok) {
-        const document = await response.json() as AnyRecord;
-        const listing = decodeFirestoreFields(document.fields || {});
-        if (listing && listing.status === 'active') return { ...listing, id: listingId };
-      }
-    } catch {
-      // Fall through to bundled demo data. Social previews must never break the SPA.
-    }
+  const endpoint = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(FIREBASE_PROJECT_ID)}/databases/${encodeURIComponent(FIREBASE_DATABASE_ID)}/documents/listings/${encodeURIComponent(listingId)}?key=${encodeURIComponent(FIREBASE_WEB_API_KEY)}`;
+  try {
+    const response = await fetch(endpoint, { signal: AbortSignal.timeout(5000) });
+    if (!response.ok) return null;
+    const document = await response.json() as AnyRecord;
+    const listing = decodeFirestoreFields(document.fields || {});
+    return listing && listing.status === 'active' ? { ...listing, id: listingId } : null;
+  } catch {
+    return null;
   }
-
-  const fallback = mockListings.find((listing) => listing.id === listingId && (!listing.status || listing.status === 'active'));
-  return fallback ? fallback as unknown as AnyRecord : null;
 }
 
 function formatPrice(price: unknown, currency: unknown): string {
