@@ -50,7 +50,7 @@ const REGION_CENTERS: Record<string, { latitude: number; longitude: number }> = 
   'namangan': { latitude: 40.9983, longitude: 71.6726 },
   'kashkadarya': { latitude: 38.8606, longitude: 65.7891 },
   'surkhandarya': { latitude: 37.2242, longitude: 67.2783 },
-  'khorezm': { latitude: 41.5562, longitude: 60.6313 },
+  'khorezm': { latitude: 41.5562, longitude: 60.6316 },
   'navoiy': { latitude: 40.0844, longitude: 65.3792 },
   'jizzakh': { latitude: 40.1158, longitude: 67.8422 },
   'sirdaryo': { latitude: 40.4939, longitude: 68.7844 },
@@ -270,7 +270,7 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
       try {
         await navigator.share({
           title: `${listing.title} | OldiSotdi`,
-          text: `${listing.title} — ${formatPrice(listing.price, currency, listing.currency)}`,
+          text: `${listing.title} — ${formatPrice(listing.price, listing.currency, currency)}`,
           url: shareUrl
         });
         return;
