@@ -265,12 +265,12 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
   const handleCopyPhone = () => copyText(listing.seller.phone, t.phoneCopied);
   const handleShare = async () => {
     const origin = typeof window !== 'undefined' ? window.location.origin : '';
-    const shareUrl = `${origin}/?listing=${encodeURIComponent(listing.id)}`;
+    const shareUrl = `${origin}/l/${encodeURIComponent(listing.id)}`;
     if (typeof navigator !== 'undefined' && navigator.share) {
       try {
         await navigator.share({
           title: `${listing.title} | OldiSotdi`,
-          text: `${listing.title} — ${formatPrice(listing.price, currency, listing.currency)}`,
+          text: `${listing.title} — ${formatPrice(listing.price, listing.currency, currency)}`,
           url: shareUrl
         });
         return;
