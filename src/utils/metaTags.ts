@@ -71,8 +71,8 @@ export function generateListingMeta(
   listing: Listing,
   options?: { currency?: Currency; lang?: Language; baseUrl?: string }
 ) {
-  const currency = options?.currency || listing.currency || 'UZS';
-  const priceFormatted = formatPrice(listing.price, currency, listing.currency);
+  const targetCurrency = options?.currency || listing.currency || 'UZS';
+  const priceFormatted = formatPrice(listing.price, listing.currency, targetCurrency);
 
   const title = `${listing.title} — ${priceFormatted} | OldiSotdi`;
 
@@ -98,7 +98,7 @@ export function generateListingMeta(
     primaryImage = `${origin}${primaryImage}`;
   }
 
-  const listingUrl = `${origin}/?listing=${encodeURIComponent(listing.id)}`;
+  const listingUrl = `${origin}/l/${encodeURIComponent(listing.id)}`;
 
   return {
     title,
