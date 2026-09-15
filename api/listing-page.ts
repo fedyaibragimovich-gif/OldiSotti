@@ -112,12 +112,6 @@ function injectListingMeta(html: string, listing: AnyRecord, canonicalUrl: strin
   return html;
 }
 
-function injectSpaDeepLink(html: string, listingId: string): string {
-  const target = `/?listing=${encodeURIComponent(listingId)}`;
-  const script = `<script>try{history.replaceState({},'',${JSON.stringify(target)})}catch(e){}</script>`;
-  return html.includes('</head>') ? html.replace('</head>', `${script}\n  </head>`) : `${script}${html}`;
-}
-
 function deploymentOrigin(): string {
   const productionHost = process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim();
   if (productionHost) return `https://${productionHost.replace(/^https?:\/\//, '')}`;
@@ -160,11 +154,11 @@ export default async function handler(req: any, res: any) {
   try {
     const [baseHtml, listing] = await Promise.all([fetchBaseHtml(), fetchListing(requestedId)]);
     const canonicalUrl = `${deploymentOrigin()}/l/${encodeURIComponent(publicId)}`;
-    const withMeta = listing ? injectListingMeta(baseHtml, listing, canonicalUrl) : baseHtml;
-    // If the document still has a legacy Firestore ID, hand that internal ID to the SPA.
-    const internalId = listing?.id || requestedId;
-    const output = injectSpaDeepLink(withMeta, internalId);
+    const output = listing ? injectListingMeta(baseHtml, listing, canonicalUrl) : baseHtml;
 
+    // Client-side deep-link bootstrap in src/main.tsx resolves /l/<public-id>
+    // back to the legacy Firestore document ID when needed. The server never
+    // rewrites the address bar to an internal pre-rebrand identifier.
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.setHeader('Cache-Control', listing ? 'public, s-maxage=60, stale-while-revalidate=300' : 'no-store');
     if (req.method === 'HEAD') return res.status(200).end();
