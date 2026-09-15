@@ -1,12 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Bot, X, Send, Loader2, RotateCcw } from 'lucide-react';
 import type { Language } from '../types';
+import { findFallbackAnswer } from '../lib/supportKnowledge';
 
 type Message = { role: 'user' | 'assistant'; text: string };
 const COPY = {
-  uz: { title: 'AI yordamchi', open: 'AI yordam', hello: 'Salom! OldiSotti bo‘yicha qanday yordam bera olaman?', hint: 'Savolingizni yozing…', send: 'Yuborish', close: 'Yopish', clear: 'Suhbatni tozalash', thinking: 'Javob tayyorlanmoqda…', help: 'Yordam markazi', notice: 'AI xato qilishi mumkin. Savollar Google Gemini’ga yuboriladi. Parol, SMS kod yoki karta ma’lumotlarini yozmang.', failed: 'Hozir javob olishning imkoni bo‘lmadi. Qayta urinib ko‘ring yoki yordam markazini oching.', rate: 'Savollar ko‘payib ketdi. Bir daqiqadan keyin qayta urinib ko‘ring.', retry: 'Qayta urinish', questions: ['Qanday e’lon beraman?', 'Google orqali kira olmayapman', 'E’lonim tekshiruvda', 'Sotuvchiga qanday yozaman?'] },
-  ru: { title: 'AI-помощник', open: 'AI-помощь', hello: 'Здравствуйте! Чем помочь по OldiSotti?', hint: 'Напишите вопрос…', send: 'Отправить', close: 'Закрыть', clear: 'Очистить диалог', thinking: 'Готовим ответ…', help: 'Центр помощи', notice: 'AI может ошибаться. Вопросы отправляются Google Gemini. Не указывайте пароли, SMS-коды и данные карты.', failed: 'Не удалось получить ответ. Повторите попытку или откройте центр помощи.', rate: 'Слишком много вопросов. Повторите через минуту.', retry: 'Повторить', questions: ['Как подать объявление?', 'Не могу войти через Google', 'Объявление на проверке', 'Как написать продавцу?'] },
-  oz: { title: 'AI ёрдамчи', open: 'AI ёрдам', hello: 'Салом! OldiSotti бўйича қандай ёрдам бера оламан?', hint: 'Саволингизни ёзинг…', send: 'Юбориш', close: 'Ёпиш', clear: 'Суҳбатни тозалаш', thinking: 'Жавоб тайёрланмоқда…', help: 'Ёрдам маркази', notice: 'AI хато қилиши мумкин. Саволлар Google Gemini’га юборилади. Парол, SMS код ёки карта маълумотларини ёзманг.', failed: 'Ҳозир жавоб олиб бўлмади. Қайта уриниб кўринг ёки ёрдам марказини очинг.', rate: 'Саволлар кўпайиб кетди. Бир дақиқадан кейин қайта уриниб кўринг.', retry: 'Қайта уриниш', questions: ['Қандай эълон бераман?', 'Google орқали кира олмаяпман', 'Эълоним текширувда', 'Сотувчига қандай ёзаман?'] }
+  uz: { title: 'AI yordamchi', open: 'AI yordam', hello: 'Salom! OldiSotdi bo‘yicha qanday yordam bera olaman?', hint: 'Savolingizni yozing…', send: 'Yuborish', close: 'Yopish', clear: 'Suhbatni tozalash', thinking: 'Javob tayyorlanmoqda…', help: 'Yordam markazi', notice: 'AI xato qilishi mumkin. Savollar Google Gemini’ga yuboriladi. Parol, SMS kod yoki karta ma’lumotlarini yozmang.', failed: 'Hozir javob olishning imkoni bo‘lmadi. Qayta urinib ko‘ring yoki yordam markazini oching.', rate: 'Savollar ko‘payib ketdi. Bir daqiqadan keyin qayta urinib ko‘ring.', retry: 'Qayta urinish', questions: ['Qanday e’lon beraman?', 'Google orqali kira olmayapman', 'E’lonim tekshiruvda', 'Sotuvchiga qanday yozaman?'] },
+  ru: { title: 'AI-помощник', open: 'AI-помощь', hello: 'Здравствуйте! Чем помочь по OldiSotdi?', hint: 'Напишите вопрос…', send: 'Отправить', close: 'Закрыть', clear: 'Очистить диалог', thinking: 'Готовим ответ…', help: 'Центр помощи', notice: 'AI может ошибаться. Вопросы отправляются Google Gemini. Не указывайте пароли, SMS-коды и данные карты.', failed: 'Не удалось получить ответ. Повторите попытку или откройте центр помощи.', rate: 'Слишком много вопросов. Повторите через минуту.', retry: 'Повторить', questions: ['Как подать объявление?', 'Не могу войти через Google', 'Объявление на проверке', 'Как написать продавцу?'] },
+  oz: { title: 'AI ёрдамчи', open: 'AI ёрдам', hello: 'Салом! OldiSotdi бўйича қандай ёрдам бера оламан?', hint: 'Саволингизни ёзинг…', send: 'Юбориш', close: 'Ёпиш', clear: 'Суҳбатни тозалаш', thinking: 'Жавоб тайёрланмоқда…', help: 'Ёрдам маркази', notice: 'AI хато қилиши мумкин. Саволлар Google Gemini’га юборилади. Парол, SMS код ёки карта маълумотларини ёзманг.', failed: 'Ҳозир жавоб олиб бўлмади. Қайта уриниб кўринг ёки ёрдам марказини очинг.', rate: 'Саволлар кўпайиб кетди. Бир дақиқадан кейин қайта уриниб кўринг.', retry: 'Қайта уриниш', questions: ['Қандай эълон бераман?', 'Google орқали кира олмаяпман', 'Эълоним текширувда', 'Сотувчига қандай ёзаман?'] }
 };
 
 export function SupportAssistant({ lang, onHelp }: { lang: Language; onHelp: () => void }) {
@@ -45,9 +46,24 @@ export function SupportAssistant({ lang, onHelp }: { lang: Language; onHelp: () 
       if (history[0]?.role === 'assistant') history.shift();
       const response = await fetch('/api/support-chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages: history }), signal: abort.signal });
       const data = await response.json();
-      if (!response.ok || typeof data.answer !== 'string') { setError(response.status === 429 ? 'rate' : 'failed'); return; }
-      setMessages([...next, { role: 'assistant', text: data.answer }].slice(-30));
-    } catch { setError('failed'); }
+      if (response.ok && typeof data.answer === 'string') {
+        setMessages([...next, { role: 'assistant' as const, text: data.answer }].slice(-30));
+        return;
+      }
+      const fallback = findFallbackAnswer(trimmed, lang);
+      if (fallback) {
+        setMessages([...next, { role: 'assistant' as const, text: fallback }].slice(-30));
+      } else {
+        setError(response.status === 429 ? 'rate' : 'failed');
+      }
+    } catch {
+      const fallback = findFallbackAnswer(trimmed, lang);
+      if (fallback) {
+        setMessages([...next, { role: 'assistant' as const, text: fallback }].slice(-30));
+      } else {
+        setError('failed');
+      }
+    }
     finally { window.clearTimeout(timer); inFlight.current = false; setBusy(false); }
   };
 

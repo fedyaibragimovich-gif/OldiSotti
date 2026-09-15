@@ -26,7 +26,7 @@ test('provider gets fixed instructions and bounded conversation, returns only an
  process.env.GEMINI_API_KEY='test-only';
  globalThis.fetch=async(url,options)=>{
   const body=JSON.parse(options.body);
-  assert.match(body.systemInstruction.parts[0].text,/OldiSotti/);
+  assert.match(body.systemInstruction.parts[0].text,/OldiSot[td]i/);
   assert.equal(body.contents[1].role,'model');
   assert.equal(options.headers['x-goog-api-key'],'test-only');
   assert.ok(options.signal);

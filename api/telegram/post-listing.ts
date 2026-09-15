@@ -56,7 +56,7 @@ function buildCaption(listing: Record<string, any>, url: string): string {
     condition ? `📦 ${condition}${delivery}` : delivery ? `🚚 Yetkazib berish bor` : '',
     description ? `\n${description}${String(listing.description || '').length > 320 ? '…' : ''}` : '',
     '',
-    `🔎 <a href="${escapeHtml(url)}">OldiSotti'da e'lonni ko'rish</a>`
+    `🔎 <a href="${escapeHtml(url)}">OldiSotdi'da e'lonni ko'rish</a>`
   ].filter((line) => line !== '');
 
   // Telegram photo captions are limited to 1024 characters.

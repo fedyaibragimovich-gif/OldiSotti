@@ -88,9 +88,23 @@ export function extractBearerToken(req: any): string | null {
   return header.slice(7).trim() || null;
 }
 
+const tokenCache = new Map<string, { user: VerifiedFirebaseUser; expiresAt: number }>();
+
 export async function verifyFirebaseUser(req: any): Promise<VerifiedFirebaseUser | null> {
   const idToken = extractBearerToken(req);
   if (!idToken) return null;
+
+  const now = Date.now();
+  const cached = tokenCache.get(idToken);
+  if (cached && cached.expiresAt > now) {
+    return cached.user;
+  }
+
+  if (tokenCache.size > 1000) {
+    for (const [key, value] of tokenCache.entries()) {
+      if (value.expiresAt <= now) tokenCache.delete(key);
+    }
+  }
 
   try {
     const response = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(FIREBASE_API_KEY)}`, {
@@ -102,11 +116,13 @@ export async function verifyFirebaseUser(req: any): Promise<VerifiedFirebaseUser
     const data = await response.json() as any;
     const user = Array.isArray(data.users) ? data.users[0] : null;
     if (!user?.localId) return null;
-    return {
+    const verifiedUser: VerifiedFirebaseUser = {
       localId: String(user.localId),
       email: typeof user.email === 'string' ? user.email : undefined,
       emailVerified: Boolean(user.emailVerified)
     };
+    tokenCache.set(idToken, { user: verifiedUser, expiresAt: now + 2 * 60 * 1000 });
+    return verifiedUser;
   } catch {
     return null;
   }

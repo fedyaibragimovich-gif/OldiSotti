@@ -1,4 +1,4 @@
-import { Currency } from '../types';
+import type { Currency } from '../types';
 
 // An indicative display rate, not a payment quote.
 export const USD_TO_UZS_RATE = 12750;

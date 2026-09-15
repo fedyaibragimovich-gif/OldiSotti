@@ -14,6 +14,7 @@ import {
   Send,
   ExternalLink,
   Loader2,
+  Cloud,
 } from 'lucide-react';
 import { Listing, Currency, Language, Condition } from '../types';
 import { categories } from '../data/categories';
@@ -61,6 +62,7 @@ export const PostAdModal: React.FC<PostAdModalProps> = ({
   const [isVip, setIsVip] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null);
   const submissionInFlight = useRef(false);
   const imageProcessing = useRef(false);
   const [isProcessingImages, setIsProcessingImages] = useState(false);
@@ -177,13 +179,18 @@ export const PostAdModal: React.FC<PostAdModalProps> = ({
     }
     submissionInFlight.current = true;
     setIsSubmitting(true);
+    setUploadProgress(null);
     setErrorMsg('');
     const listingId = `olx-${crypto.randomUUID()}`;
     let uploadedImages: string[] = [];
     try {
-    const uploadResult = await uploadListingImagesToStorage(listingId, images);
-    uploadedImages = uploadResult.uploadedImages;
-    const storedImages = uploadResult.images;
+      const uploadResult = await uploadListingImagesToStorage(
+        listingId,
+        images,
+        (current, total) => setUploadProgress({ current, total })
+      );
+      uploadedImages = uploadResult.uploadedImages;
+      const storedImages = uploadResult.images;
 
     const newListing: Listing = {
       id: listingId,
@@ -400,6 +407,10 @@ export const PostAdModal: React.FC<PostAdModalProps> = ({
                 {t.photosField} *
               </label>
               <p className="text-xs text-slate-500 dark:text-slate-400 mb-2">{t.photosHint}</p>
+              <div className="flex items-center gap-1.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-1 rounded-lg w-fit mb-3 border border-emerald-200 dark:border-emerald-800/60">
+                <Cloud size={13} className="shrink-0" />
+                <span>Cloud Storage: Rasmlar xavfsiz Google Cloud omboriga yuklanadi</span>
+              </div>
 
               {/* Uploaded images preview strip */}
               <div className="flex flex-wrap gap-2.5 mb-3">
@@ -789,10 +800,19 @@ export const PostAdModal: React.FC<PostAdModalProps> = ({
                   : t.publishBtn}
               </button>
               {isSubmitting && (
-                <p role="status" className="mt-3 text-center text-sm font-medium text-indigo-600 dark:text-indigo-300">
-                  {lang === 'ru' ? 'Сохраняем объявление и фотографии. Пожалуйста, подождите.'
-                    : lang === 'oz' ? 'Эълон ва расмлар сақланмоқда. Илтимос, кутинг.'
-                    : 'E’lon va rasmlar saqlanmoqda. Iltimos, kuting.'}
+                <p role="status" className="mt-3 text-center text-sm font-medium text-indigo-600 dark:text-indigo-300 flex items-center justify-center gap-2">
+                  <Loader2 size={16} className="animate-spin shrink-0" />
+                  {uploadProgress
+                    ? (lang === 'ru'
+                        ? `Загрузка фото в Cloud Storage (${uploadProgress.current}/${uploadProgress.total})...`
+                        : lang === 'oz'
+                        ? `Расмлар Cloud Storage омборига юкланмоқда (${uploadProgress.current}/${uploadProgress.total})...`
+                        : `Rasmlar Cloud Storage omboriga yuklanmoqda (${uploadProgress.current}/${uploadProgress.total})...`)
+                    : (lang === 'ru'
+                        ? 'Сохраняем объявление и фотографии. Пожалуйста, подождите.'
+                        : lang === 'oz'
+                        ? 'Эълон ва расмлар сақланмоқда. Илтимос, кутинг.'
+                        : 'E’lon va rasmlar saqlanmoqda. Iltimos, kuting.')}
                 </p>
               )}
             </div>

@@ -1,5 +1,5 @@
 {
-  "name": "Oldisotti - O'zbekiston e'lonlar doskasi",
+  "name": "OldiSotdi - O'zbekiston e'lonlar doskasi",
   "description": "O'zbekistondagi zamonaviy e'lonlar va oldi-sotdi maydoni: avtomobillar, ko'chmas mulk, elektronika va xizmatlar.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

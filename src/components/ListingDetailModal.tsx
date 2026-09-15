@@ -38,6 +38,7 @@ import { PriceHistoryChart } from './PriceHistoryChart';
 import { SimilarListingsSection } from './SimilarListingsSection';
 import { LocationMap } from './LocationMap';
 import { auth, saveReportToDb, blockSellerInDb } from '../lib/firebase';
+import { injectListingMetaTags, resetMetaTags } from '../utils/metaTags';
 
 const REGION_CENTERS: Record<string, { latitude: number; longitude: number }> = {
   'tashkent-city': { latitude: 41.311081, longitude: 69.240562 },
@@ -253,8 +254,32 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
     }
     setTimeout(() => setCopiedToast(null), 2500);
   };
+  // Dynamically inject OpenGraph and Twitter meta tags when listing modal opens
+  useEffect(() => {
+    injectListingMetaTags(listing, { currency, lang });
+    return () => {
+      resetMetaTags();
+    };
+  }, [listing.id, currency, lang]);
+
   const handleCopyPhone = () => copyText(listing.seller.phone, t.phoneCopied);
-  const handleShare = () => copyText(window.location.href, t.linkCopied);
+  const handleShare = async () => {
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    const shareUrl = `${origin}/?listing=${encodeURIComponent(listing.id)}`;
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      try {
+        await navigator.share({
+          title: `${listing.title} | OldiSotdi`,
+          text: `${listing.title} — ${formatPrice(listing.price, currency, listing.currency)}`,
+          url: shareUrl
+        });
+        return;
+      } catch {
+        // Fallback to clipboard if share was cancelled or failed
+      }
+    }
+    copyText(shareUrl, t.linkCopied);
+  };
 
   const sellerUid = listing.userId || (listing.seller.id !== 'user-self' ? listing.seller.id : '');
 
@@ -690,7 +715,9 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
                         {listing.seller.name}
                       </h4>
                       {listing.seller.isVerified && (
-                        <CheckCircle2 size={16} className="text-teal-600 dark:text-teal-400 shrink-0" title={t.verifiedSeller} />
+                        <span title={t.verifiedSeller} className="inline-flex shrink-0">
+                          <CheckCircle2 size={16} className="text-teal-600 dark:text-teal-400" />
+                        </span>
                       )}
                     </div>
                     <p className="text-[11px] text-slate-400 dark:text-slate-400">

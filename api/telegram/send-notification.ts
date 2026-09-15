@@ -53,7 +53,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const safeBuyer = buyerName.slice(0, 80);
   const safeText = messageText.slice(0, 1500);
   const listingLine = listingId ? `\nE'lon ID: ${listingId}` : '';
-  const text = `📩 OldiSotti xabarnomasi\n\n👤 ${safeBuyer}\n📌 ${safeTitle || 'E\'lon'}${listingLine}\n\n${safeText}`;
+  const text = `📩 OldiSotdi xabarnomasi\n\n👤 ${safeBuyer}\n📌 ${safeTitle || 'E\'lon'}${listingLine}\n\n${safeText}`;
 
   try {
     const telegramResponse = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {

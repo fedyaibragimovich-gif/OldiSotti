@@ -1126,8 +1126,8 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = (props) => {
                     }`}
                   >
                     {telegramTestResult.success
-                      ? `✅ Ulanish muvaffaqiyatli: Bot ${telegramTestResult.botUsername || 'OldiSotti'}, Kanal: ${
-                          telegramTestResult.channelTitle || settingsForm.telegramChannelId || '@OSot_uz'
+                      ? `✅ Ulanish muvaffaqiyatli: Bot ${telegramTestResult.bot?.username || telegramTestResult.bot?.first_name || 'OldiSotti'}, Kanal: ${
+                          telegramTestResult.channel?.title || telegramTestResult.channel?.username || settingsForm.telegramChannelId || '@OSot_uz'
                         }`
                       : `❌ Xatolik: ${telegramTestResult.error}`}
                   </div>

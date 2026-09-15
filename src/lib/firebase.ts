@@ -1,13 +1,48 @@
 import { readListing } from './listingData';
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
-import { getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, onSnapshot, writeBatch, increment, query, where, or, limit, orderBy, deleteField, runTransaction } from 'firebase/firestore';
+import {
+  initializeFirestore,
+  getFirestore,
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  onSnapshot,
+  writeBatch,
+  increment,
+  query,
+  where,
+  or,
+  limit,
+  orderBy,
+  deleteField,
+  runTransaction,
+  startAfter
+} from 'firebase/firestore';
 import { Listing, Conversation, ChatMessage, PlatformSettings, ModerationReport, AppNotification } from '../types';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 export const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 export const auth = getAuth(app);
-export const db = firebaseConfig.firestoreDatabaseId ? getFirestore(app, firebaseConfig.firestoreDatabaseId) : getFirestore(app);
+
+function initFirestoreInstance() {
+  const dbId = firebaseConfig.firestoreDatabaseId || undefined;
+  const isBrowser = typeof window !== 'undefined';
+  try {
+    return initializeFirestore(app, {
+      experimentalForceLongPolling: isBrowser,
+      ignoreUndefinedProperties: true
+    }, dbId);
+  } catch {
+    return dbId ? getFirestore(app, dbId) : getFirestore(app);
+  }
+}
+
+export const db = initFirestoreInstance();
 export const LISTINGS_COLLECTION = 'listings';
 export const CONVERSATIONS_COLLECTION = 'conversations';
 export const SETTINGS_COLLECTION = 'platform_settings';
@@ -45,7 +80,12 @@ function stripUndefinedDeep<T>(value: T): T {
   return value;
 }
 
-export function subscribeToListings(onSuccess: (listings: Listing[]) => void, onError?: (err: Error) => void, onLoading?: () => void) {
+export function subscribeToListings(
+  onSuccess: (listings: Listing[], hasMore?: boolean) => void,
+  onError?: (err: Error) => void,
+  onLoading?: () => void,
+  pageSize: number = 24
+) {
   let stops: (() => void)[] = [];
   const stopAuth = onAuthStateChanged(auth, user => {
     stops.forEach(stop => stop());
@@ -53,22 +93,80 @@ export function subscribeToListings(onSuccess: (listings: Listing[]) => void, on
     onSuccess([]);
     onLoading?.();
     const sources = new Map<number, Listing[]>();
+    const docCounts = new Map<number, number>();
+
     // Public and private queries are separate so unpublished listings never leak.
-    // No arbitrary 300-record ceiling: filters cover all readable listings.
+    // Query limit is applied to protect performance and bandwidth under real traffic!
     const queries = isCurrentAdmin()
-      ? [query(collection(db, LISTINGS_COLLECTION))]
-      : [query(collection(db, LISTINGS_COLLECTION), where('status', '==', 'active')),
-          ...(user && !user.isAnonymous ? [query(collection(db, LISTINGS_COLLECTION), where('userId', '==', user.uid))] : [])];
+      ? [query(collection(db, LISTINGS_COLLECTION), limit(pageSize))]
+      : [
+          query(collection(db, LISTINGS_COLLECTION), where('status', '==', 'active'), limit(pageSize)),
+          ...(user && !user.isAnonymous ? [query(collection(db, LISTINGS_COLLECTION), where('userId', '==', user.uid), limit(pageSize))] : [])
+        ];
+
     queries.forEach((q, index) => {
       stops.push(onSnapshot(q, snapshot => {
         sources.set(index, snapshot.docs.map(d => readListing(d.data(), d.id)).filter((item): item is Listing => item !== null));
+        docCounts.set(index, snapshot.docs.length);
+
         const merged = new Map<string, Listing>();
         sources.forEach(items => items.forEach(item => merged.set(item.id, item)));
-        onSuccess([...merged.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+        const sorted = [...merged.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+        const activeCount = docCounts.get(0) || 0;
+        const hasMore = activeCount >= pageSize;
+        onSuccess(sorted, hasMore);
       }, error => onError?.(error)));
     });
   });
   return () => { stopAuth(); stops.forEach(stop => stop()); };
+}
+
+export interface FetchPageResult {
+  listings: Listing[];
+  hasMore: boolean;
+  lastVisibleCreatedAt?: string;
+}
+
+export async function fetchListingsPage(
+  pageSize: number = 24,
+  lastCreatedAt?: string,
+  categoryId?: string
+): Promise<FetchPageResult> {
+  try {
+    let q = query(
+      collection(db, LISTINGS_COLLECTION),
+      where('status', '==', 'active'),
+      orderBy('createdAt', 'desc')
+    );
+
+    if (categoryId) {
+      q = query(q, where('categoryId', '==', categoryId));
+    }
+
+    if (lastCreatedAt) {
+      q = query(q, startAfter(lastCreatedAt));
+    }
+
+    q = query(q, limit(pageSize + 1));
+
+    const snap = await getDocs(q);
+    const docs = snap.docs;
+    const hasMore = docs.length > pageSize;
+    const pageDocs = hasMore ? docs.slice(0, pageSize) : docs;
+    const listings = pageDocs
+      .map(d => readListing(d.data(), d.id))
+      .filter((item): item is Listing => item !== null);
+
+    const lastItem = listings[listings.length - 1];
+    return {
+      listings,
+      hasMore,
+      lastVisibleCreatedAt: lastItem?.createdAt
+    };
+  } catch (err) {
+    console.error('fetchListingsPage failed:', err);
+    return { listings: [], hasMore: false };
+  }
 }
 
 export async function fetchListingById(id: string): Promise<Listing | null> {
@@ -79,7 +177,7 @@ export async function fetchListingById(id: string): Promise<Listing | null> {
 export async function seedInitialListingsIfEmpty(fallbackListings: Listing[]): Promise<boolean> {
   try {
     if (!isCurrentAdmin()) return false;
-    const existingSnap = await getDocs(collection(db, LISTINGS_COLLECTION));
+    const existingSnap = await getDocs(query(collection(db, LISTINGS_COLLECTION), limit(1)));
     if (!existingSnap.empty) return false;
     const batch = writeBatch(db);
     fallbackListings.forEach((listing) => batch.set(doc(db, LISTINGS_COLLECTION, listing.id), stripUndefinedDeep(listing)));

@@ -12,11 +12,19 @@ export default defineConfig(() => {
     build: {
       rollupOptions: {
         output: {
-          manualChunks: {
-            firebase: ['firebase/app', 'firebase/auth', 'firebase/firestore'],
-            charts: ['recharts'],
-            motion: ['motion'],
-            icons: ['lucide-react'],
+          manualChunks(id) {
+            if (id.includes('node_modules/firebase/')) {
+              return 'firebase';
+            }
+            if (id.includes('node_modules/recharts/') || id.includes('node_modules/d3-')) {
+              return 'charts';
+            }
+            if (id.includes('node_modules/leaflet/')) {
+              return 'leaflet';
+            }
+            if (id.includes('node_modules/lucide-react/')) {
+              return 'icons';
+            }
           },
         },
       },

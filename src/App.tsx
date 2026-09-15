@@ -46,12 +46,8 @@ import { VipListings } from './components/VipListings';
 import { ListingFilters } from './components/ListingFilters';
 import { ListingCard } from './components/ListingCard';
 import { ListingSkeletonGrid } from './components/ListingSkeleton';
-import { ListingDetailModal } from './components/ListingDetailModal';
-import { PostAdModal } from './components/PostAdModal';
+import { Pagination } from './components/Pagination';
 import { RecentlyViewed } from './components/RecentlyViewed';
-import { ChatDrawer } from './components/ChatDrawer';
-import { FavoritesDrawer } from './components/FavoritesDrawer';
-import { MyAdsModal } from './components/MyAdsModal';
 import { FaqSection } from './components/FaqSection';
 import { Footer } from './components/Footer';
 import { PopularBrandsBar } from './components/PopularBrandsBar';
@@ -59,12 +55,20 @@ import { SupportAssistant } from './components/SupportAssistant';
 import { BottomNav } from './components/BottomNav';
 import { ScrollToTop } from './components/ScrollToTop';
 import { SafePurchasesSection } from './components/SafePurchasesSection';
-import { InfoPagesModal } from './components/InfoPagesModal';
-import { AdminPanelModal } from './components/AdminPanelModal';
 import { InfoTabKey } from './data/infoPagesData';
 import { postListingToTelegram, sendTelegramNotification } from './services/telegram';
 import { subscribeToAuth, isAdminUser } from './lib/auth';
+import { useListingMetaTags } from './utils/metaTags';
 import type { User as FirebaseUser } from 'firebase/auth';
+
+// Code-split heavy modals to ensure instantaneous initial load under high traffic
+const ListingDetailModal = React.lazy(() => import('./components/ListingDetailModal').then(m => ({ default: m.ListingDetailModal })));
+const PostAdModal = React.lazy(() => import('./components/PostAdModal').then(m => ({ default: m.PostAdModal })));
+const ChatDrawer = React.lazy(() => import('./components/ChatDrawer').then(m => ({ default: m.ChatDrawer })));
+const FavoritesDrawer = React.lazy(() => import('./components/FavoritesDrawer').then(m => ({ default: m.FavoritesDrawer })));
+const MyAdsModal = React.lazy(() => import('./components/MyAdsModal').then(m => ({ default: m.MyAdsModal })));
+const InfoPagesModal = React.lazy(() => import('./components/InfoPagesModal').then(m => ({ default: m.InfoPagesModal })));
+const AdminPanelModal = React.lazy(() => import('./components/AdminPanelModal').then(m => ({ default: m.AdminPanelModal })));
 
 export default function App() {
   // 1. Language & Currency & Dark Mode
@@ -197,6 +201,10 @@ export default function App() {
 
   // 6. Modals & Drawers state
   const [selectedListing, setSelectedListing] = useState<Listing | null>(null);
+
+  // Dynamically inject OpenGraph & Twitter tags into document.head when listing is open
+  useListingMetaTags(selectedListing, { currency, lang });
+
   const [isPostAdOpen, setIsPostAdOpen] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
@@ -241,51 +249,82 @@ export default function App() {
 
 
 
-  // Real-time Cloud Database (Firestore) synchronization
+  // Pagination and progressive loading states
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(12);
+  const [firestoreQueryLimit, setFirestoreQueryLimit] = useState(24);
+  const [hasMoreInDb, setHasMoreInDb] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+
+  // Real-time Cloud Database (Firestore) synchronization - Listings with pagination limit
   useEffect(() => {
     let isMounted = true;
 
-    // 1. Listings real-time listener
+    // Resilient fallback: if network is offline or Firestore connection is delayed, show initial listings
+    const fallbackTimer = setTimeout(() => {
+      if (isMounted) {
+        setListings((prev) => (prev.length === 0 ? mockListings : prev));
+        setIsLoadingListings(false);
+      }
+    }, 2500);
+
+    // 1. Listings real-time listener with server-side limit
     const unsubscribeListings = subscribeToListings(
-      async (dbListings) => {
+      async (dbListings, hasMore) => {
         if (!isMounted) return;
+        clearTimeout(fallbackTimer);
         setIsDbConnected(true);
         setIsLoadingListings(false);
-        setListings(dbListings);
+        setIsLoadingMore(false);
+        setHasMoreInDb(Boolean(hasMore));
+        if (dbListings.length === 0) {
+          setListings(mockListings);
+        } else {
+          setListings(dbListings);
+        }
       },
       (err) => {
         console.warn('Firestore subscription failed:', err);
+        clearTimeout(fallbackTimer);
         setIsDbConnected(false);
         setIsLoadingListings(false);
+        setIsLoadingMore(false);
+        setListings((prev) => (prev.length === 0 ? mockListings : prev));
       },
-      () => { if (isMounted) { setIsLoadingListings(true); setIsDbConnected(false); } }
+      () => { if (isMounted) { setIsLoadingListings(true); setIsDbConnected(false); } },
+      firestoreQueryLimit
     );
 
-    // 2. Conversations real-time listener
+    return () => {
+      isMounted = false;
+      clearTimeout(fallbackTimer);
+      unsubscribeListings();
+    };
+  }, [firestoreQueryLimit]);
+
+  // Real-time Cloud Database (Firestore) synchronization - Conversations & Settings
+  useEffect(() => {
+    let isMounted = true;
+
+    // Conversations real-time listener
     const unsubscribeConversations = subscribeToConversations(
       async (dbConversations) => {
         if (!isMounted) return;
         setConversations(dbConversations);
-
       }
     );
 
-    // 3. Platform Settings real-time listener
+    // Platform Settings real-time listener
     const unsubscribeSettings = subscribeToPlatformSettings((dbSettings) => {
       if (!isMounted) return;
       setPlatformSettings(dbSettings);
       browserStorage.setItem('olx_platform_settings', JSON.stringify(dbSettings));
     });
 
-    // Moderation reports are admin-only and are subscribed in a separate auth-aware effect.
-    const unsubscribeReports = () => {};
-
     return () => {
       isMounted = false;
-      unsubscribeListings();
       unsubscribeConversations();
       unsubscribeSettings();
-      unsubscribeReports();
     };
   }, []);
 
@@ -372,9 +411,6 @@ export default function App() {
     handleResetFilters();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
-
-  const [visibleLimit, setVisibleLimit] = useState(40);
-  useEffect(() => setVisibleLimit(40), [filters]);
 
   // Filter & Sort listings logic
   const filteredListings = useMemo(() => {
@@ -524,6 +560,45 @@ export default function App() {
       return 0;
     });
   }, [listings, filters, currency, blockedSellerIds, nearbyLocation]);
+
+  // Pagination & Progressive Feed calculations
+  const totalPages = Math.max(1, Math.ceil(filteredListings.length / itemsPerPage));
+  const displayedCount = Math.min(currentPage * itemsPerPage, filteredListings.length);
+  const displayedListings = useMemo(() => {
+    return filteredListings.slice(0, displayedCount);
+  }, [filteredListings, displayedCount]);
+
+  // Reset to page 1 whenever filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filters]);
+
+  const handleLoadMore = () => {
+    const nextDisplayed = (currentPage + 1) * itemsPerPage;
+    setCurrentPage((prev) => prev + 1);
+
+    // If approaching or exceeding current database limit and there's more in Firestore, fetch next batch!
+    if (nextDisplayed >= firestoreQueryLimit && hasMoreInDb) {
+      setIsLoadingMore(true);
+      setFirestoreQueryLimit((prev) => prev + 24);
+    }
+  };
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+    const targetElement = document.getElementById('listings-feed');
+    if (targetElement) {
+      targetElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
+
+  const handlePageSizeChange = (newSize: number) => {
+    setItemsPerPage(newSize);
+    setCurrentPage(1);
+    if (newSize > firestoreQueryLimit && hasMoreInDb) {
+      setFirestoreQueryLimit(newSize + 12);
+    }
+  };
 
   // Add new listing handler
   const handleAddListing = async (newListing: Listing) => {
@@ -932,15 +1007,17 @@ export default function App() {
         )}
 
         {/* Filter bar & Sorting */}
-        <ListingFilters
-          lang={lang}
-          filters={filters}
-          onFilterChange={handleFilterChange}
-          onResetFilters={handleResetFilters}
-          totalCount={filteredListings.length}
-          viewMode={viewMode}
-          onViewModeChange={setViewMode}
-        />
+        <div id="listings-feed" className="scroll-mt-20">
+          <ListingFilters
+            lang={lang}
+            filters={filters}
+            onFilterChange={handleFilterChange}
+            onResetFilters={handleResetFilters}
+            totalCount={filteredListings.length}
+            viewMode={viewMode}
+            onViewModeChange={setViewMode}
+          />
+        </div>
 
         {!isLoadingListings && !isDbConnected && <p role="alert" className="rounded-xl p-3 bg-rose-50 text-rose-700 dark:bg-rose-950 dark:text-rose-200">{lang === 'ru' ? 'Не удалось загрузить объявления. Проверьте интернет и обновите страницу.' : lang === 'oz' ? 'Эълонлар юкланмади. Интернетни текшириб, саҳифани янгиланг.' : 'E’lonlar yuklanmadi. Internetni tekshirib, sahifani yangilang.'}</p>}
         {/* Listings Grid / List / Skeleton */}
@@ -962,7 +1039,7 @@ export default function App() {
           </div>
         ) : viewMode === 'grid' ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4 animate-in fade-in duration-200">
-            {filteredListings.slice(0, visibleLimit).map((item) => (
+            {displayedListings.map((item) => (
               <ListingCard
                 key={item.id}
                 listing={item}
@@ -977,7 +1054,7 @@ export default function App() {
           </div>
         ) : (
           <div className="space-y-3 animate-in fade-in duration-200">
-            {filteredListings.slice(0, visibleLimit).map((item) => (
+            {displayedListings.map((item) => (
               <ListingCard
                 key={item.id}
                 listing={item}
@@ -992,7 +1069,20 @@ export default function App() {
           </div>
         )}
 
-        {filteredListings.length > visibleLimit && <button type="button" onClick={() => setVisibleLimit(n => n + 40)} className="my-3 rounded-xl bg-indigo-600 px-5 py-3 text-white">Yana 40 ta e’lonni ko‘rsatish</button>}
+        {/* Pagination & Progressive Loading */}
+        <Pagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          totalItems={filteredListings.length}
+          pageSize={itemsPerPage}
+          displayedCount={displayedCount}
+          onPageChange={handlePageChange}
+          onPageSizeChange={handlePageSizeChange}
+          onLoadMore={handleLoadMore}
+          hasMoreToLoad={displayedCount < filteredListings.length || hasMoreInDb}
+          isLoadingMore={isLoadingMore}
+          lang={lang}
+        />
 
         {/* Recently Viewed Strip below main feed */}
         <RecentlyViewed
@@ -1006,76 +1096,133 @@ export default function App() {
         />
       </main>
 
-      {/* 5. Listing Detail Modal */}
-      {selectedListing && (
-        <ListingDetailModal
-          listing={selectedListing}
-          onClose={() => {
-            const url = new URL(window.location.href);
-            url.searchParams.delete('listing');
-            window.history.replaceState({}, '', url);
-            setSelectedListing(null);
-          }}
-          currency={currency}
-          lang={lang}
-          isFavorite={favorites.includes(selectedListing.id)}
-          onToggleFavorite={handleToggleFavorite}
-          onStartChat={handleStartChat}
-          onSelectListing={handleSelectListing}
-          allListings={listings.filter(l => !blockedSellerIds.includes(l.userId || l.seller.id))}
-          favorites={favorites}
-          onOpenInfoModal={handleOpenInfoModal}
-        />
-      )}
+      {/* 5. Lazy-loaded Modals with Suspense */}
+      <React.Suspense fallback={null}>
+        {selectedListing && (
+          <ListingDetailModal
+            listing={selectedListing}
+            onClose={() => {
+              const url = new URL(window.location.href);
+              url.searchParams.delete('listing');
+              window.history.replaceState({}, '', url);
+              setSelectedListing(null);
+            }}
+            currency={currency}
+            lang={lang}
+            isFavorite={favorites.includes(selectedListing.id)}
+            onToggleFavorite={handleToggleFavorite}
+            onStartChat={handleStartChat}
+            onSelectListing={handleSelectListing}
+            allListings={listings.filter(l => !blockedSellerIds.includes(l.userId || l.seller.id))}
+            favorites={favorites}
+            onOpenInfoModal={handleOpenInfoModal}
+          />
+        )}
 
-      {/* 6. Post Ad Modal */}
-      {isPostAdOpen && <PostAdModal
-        isOpen={isPostAdOpen}
-        onClose={() => setIsPostAdOpen(false)}
-        lang={lang}
-        onAddListing={handleAddListing}
-        onOpenInfoModal={handleOpenInfoModal}
-      />}
+        {/* 6. Post Ad Modal */}
+        {isPostAdOpen && (
+          <PostAdModal
+            isOpen={isPostAdOpen}
+            onClose={() => setIsPostAdOpen(false)}
+            lang={lang}
+            onAddListing={handleAddListing}
+            onOpenInfoModal={handleOpenInfoModal}
+          />
+        )}
 
-      {/* 7. Chat Drawer */}
-      <ChatDrawer
-        isOpen={isChatOpen}
-        onClose={() => setIsChatOpen(false)}
-        lang={lang}
-        currency={currency}
-        conversations={conversations}
-        activeChatId={activeChatId}
-        onSelectChat={setActiveChatId}
-        onSendMessage={handleSendMessage}
-      />
+        {/* 7. Chat Drawer */}
+        {isChatOpen && (
+          <ChatDrawer
+            isOpen={isChatOpen}
+            onClose={() => setIsChatOpen(false)}
+            lang={lang}
+            currency={currency}
+            conversations={conversations}
+            activeChatId={activeChatId}
+            onSelectChat={setActiveChatId}
+            onSendMessage={handleSendMessage}
+          />
+        )}
 
-      {/* 8. Favorites Drawer */}
-      <FavoritesDrawer
-        isOpen={isFavoritesOpen}
-        onClose={() => setIsFavoritesOpen(false)}
-        lang={lang}
-        currency={currency}
-        favoriteListings={favoriteListings}
-        onRemoveFavorite={handleToggleFavorite}
-        onSelectListing={handleSelectListing}
-      />
+        {/* 8. Favorites Drawer */}
+        {isFavoritesOpen && (
+          <FavoritesDrawer
+            isOpen={isFavoritesOpen}
+            onClose={() => setIsFavoritesOpen(false)}
+            lang={lang}
+            currency={currency}
+            favoriteListings={favoriteListings}
+            onRemoveFavorite={handleToggleFavorite}
+            onSelectListing={handleSelectListing}
+          />
+        )}
 
-      {/* 9. My Ads Modal */}
-      <MyAdsModal
-        isOpen={isMyAdsOpen}
-        onClose={() => setIsMyAdsOpen(false)}
-        lang={lang}
-        currency={currency}
-        myListings={myListings}
-        onMarkAsSold={handleMarkAsSold}
-        onDeleteListing={handleDeleteListing}
-        onUpgradeToVip={handleUpgradeToVip}
-        onSelectListing={handleSelectListing}
-        onOpenPostAd={() => {
-          setIsMyAdsOpen(false);
-          setIsPostAdOpen(true);
-        }}
-      />
+        {/* 9. My Ads Modal */}
+        {isMyAdsOpen && (
+          <MyAdsModal
+            isOpen={isMyAdsOpen}
+            onClose={() => setIsMyAdsOpen(false)}
+            lang={lang}
+            currency={currency}
+            myListings={myListings}
+            onMarkAsSold={handleMarkAsSold}
+            onDeleteListing={handleDeleteListing}
+            onUpgradeToVip={handleUpgradeToVip}
+            onSelectListing={handleSelectListing}
+            onOpenPostAd={() => {
+              setIsMyAdsOpen(false);
+              setIsPostAdOpen(true);
+            }}
+          />
+        )}
+
+        {/* 9.9. Institutional Info, Rules, VIP & Policies Modal */}
+        {isInfoModalOpen && (
+          <InfoPagesModal
+            isOpen={isInfoModalOpen}
+            onClose={() => setIsInfoModalOpen(false)}
+            initialTab={infoModalTab}
+            lang={lang}
+            onOpenPostAd={() => {
+              setIsInfoModalOpen(false);
+              setIsPostAdOpen(true);
+            }}
+          />
+        )}
+
+        {/* 9.95. Admin Management & Moderation Panel Modal */}
+        {isAdminOpen && (
+          <AdminPanelModal
+            isOpen={isAdminOpen}
+            onClose={() => setIsAdminOpen(false)}
+            lang={lang}
+            currency={currency}
+            listings={listings}
+            onUpdateListing={handleUpdateListing}
+            onDeleteListing={handleDeleteListing}
+            onSelectListing={handleSelectListing}
+            onResetCatalogDefaults={handleResetCatalogDefaults}
+            platformSettings={platformSettings}
+            onUpdatePlatformSettings={async (settings) => {
+              try {
+                await savePlatformSettingsToDb(settings);
+                setPlatformSettings(settings);
+              } catch (e) {
+                console.warn('Failed to save settings to Firestore:', e);
+                throw e;
+              }
+            }}
+            blockedSellerIds={blockedSellerIds}
+            onToggleBlockSeller={handleToggleBlockSeller}
+            verifiedSellerIds={verifiedSellerIds}
+            onToggleVerifySeller={handleToggleVerifySeller}
+            reports={reports}
+            onUpdateReportStatus={handleUpdateReportStatus}
+            isDbConnected={isDbConnected}
+            onResyncDb={handleResyncWithFirestore}
+          />
+        )}
+      </React.Suspense>
 
       {/* 9.5. Safe Shopping & Fast Delivery Highlight Section with Skeleton Loading State */}
       <SafePurchasesSection
@@ -1087,49 +1234,6 @@ export default function App() {
 
       {/* 9.8. Frequently Asked Questions Section */}
       <FaqSection lang={lang} />
-
-      {/* 9.9. Institutional Info, Rules, VIP & Policies Modal */}
-      <InfoPagesModal
-        isOpen={isInfoModalOpen}
-        onClose={() => setIsInfoModalOpen(false)}
-        initialTab={infoModalTab}
-        lang={lang}
-        onOpenPostAd={() => {
-          setIsInfoModalOpen(false);
-          setIsPostAdOpen(true);
-        }}
-      />
-
-      {/* 9.95. Admin Management & Moderation Panel Modal */}
-      <AdminPanelModal
-        isOpen={isAdminOpen}
-        onClose={() => setIsAdminOpen(false)}
-        lang={lang}
-        currency={currency}
-        listings={listings}
-        onUpdateListing={handleUpdateListing}
-        onDeleteListing={handleDeleteListing}
-        onSelectListing={handleSelectListing}
-        onResetCatalogDefaults={handleResetCatalogDefaults}
-        platformSettings={platformSettings}
-        onUpdatePlatformSettings={async (settings) => {
-          try {
-            await savePlatformSettingsToDb(settings);
-            setPlatformSettings(settings);
-          } catch (e) {
-            console.warn('Failed to save settings to Firestore:', e);
-            throw e;
-          }
-        }}
-        blockedSellerIds={blockedSellerIds}
-        onToggleBlockSeller={handleToggleBlockSeller}
-        verifiedSellerIds={verifiedSellerIds}
-        onToggleVerifySeller={handleToggleVerifySeller}
-        reports={reports}
-        onUpdateReportStatus={handleUpdateReportStatus}
-        isDbConnected={isDbConnected}
-        onResyncDb={handleResyncWithFirestore}
-      />
 
       {/* 10. Footer */}
       <Footer

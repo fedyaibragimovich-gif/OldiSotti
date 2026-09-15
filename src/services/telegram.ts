@@ -43,8 +43,8 @@ async function readJsonResponse<T extends Record<string, any>>(res: Response): P
 }
 
 export function formatTelegramPostPreview(listing: Listing, appUrl?: string): string {
-  const baseUrl = appUrl || (typeof window !== 'undefined' ? window.location.origin : 'https://oldisotti.uz');
-  return `<a href="${baseUrl}/?listing=${encodeURIComponent(listing.id)}">OldiSotti'da e'lonni ko'rish</a>`;
+  const baseUrl = appUrl || (typeof window !== 'undefined' ? window.location.origin : 'https://oldisotdi.uz');
+  return `<a href="${baseUrl}/?listing=${encodeURIComponent(listing.id)}">OldiSotdi'da e'lonni ko'rish</a>`;
 }
 
 export function createTelegramShareUrl(listing: Listing, appUrl?: string): string {
