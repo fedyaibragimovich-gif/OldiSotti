@@ -8,16 +8,7 @@ interface DefaultMetaSnapshot {
   meta: Map<string, string>;
 }
 
-interface ActiveListingShareData {
-  id: string;
-  title: string;
-  text: string;
-  url: string;
-}
-
 let initialSnapshot: DefaultMetaSnapshot | null = null;
-let activeListingShareData: ActiveListingShareData | null = null;
-let legacyShareCompatibilityInstalled = false;
 
 function getMetaKey(attr: 'name' | 'property', key: string): string {
   return `${attr}:${key}`;
@@ -74,76 +65,6 @@ function sanitizeText(text: string, maxLength = 200): string {
   const clean = text.replace(/\s+/g, ' ').trim();
   if (clean.length <= maxLength) return clean;
   return `${clean.slice(0, maxLength - 1).trim()}…`;
-}
-
-function getLegacyListingId(value?: string): string | null {
-  if (!value || typeof window === 'undefined') return null;
-  try {
-    const url = new URL(value, window.location.origin);
-    if (url.origin !== window.location.origin || url.pathname !== '/') return null;
-    return url.searchParams.get('listing');
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Compatibility for the older detail-modal share handler.
- * It only touches same-origin /?listing=<id> shares, replacing them with
- * the canonical /l/<id> URL and the correctly converted current price.
- */
-function installLegacyListingShareCompatibility(): void {
-  if (
-    legacyShareCompatibilityInstalled ||
-    typeof window === 'undefined' ||
-    typeof navigator === 'undefined'
-  ) {
-    return;
-  }
-
-  legacyShareCompatibilityInstalled = true;
-
-  if (typeof navigator.share === 'function') {
-    const nativeShare = navigator.share.bind(navigator);
-    try {
-      Object.defineProperty(navigator, 'share', {
-        configurable: true,
-        value: (data?: ShareData) => {
-          const legacyId = getLegacyListingId(data?.url ? String(data.url) : undefined);
-          if (!legacyId || !activeListingShareData || activeListingShareData.id !== legacyId) {
-            return nativeShare(data);
-          }
-          return nativeShare({
-            ...data,
-            title: activeListingShareData.title,
-            text: activeListingShareData.text,
-            url: activeListingShareData.url
-          });
-        }
-      });
-    } catch {
-      // Some browsers expose navigator.share as non-configurable.
-    }
-  }
-
-  const clipboard = navigator.clipboard;
-  if (clipboard && typeof clipboard.writeText === 'function') {
-    const nativeWriteText = clipboard.writeText.bind(clipboard);
-    try {
-      Object.defineProperty(clipboard, 'writeText', {
-        configurable: true,
-        value: (text: string) => {
-          const legacyId = getLegacyListingId(text);
-          if (legacyId && activeListingShareData?.id === legacyId) {
-            return nativeWriteText(activeListingShareData.url);
-          }
-          return nativeWriteText(text);
-        }
-      });
-    } catch {
-      // Clipboard methods may be non-configurable; normal copy behavior remains available.
-    }
-  }
 }
 
 export function generateListingMeta(
@@ -203,14 +124,6 @@ export function injectListingMetaTags(
   captureInitialSnapshot();
 
   const meta = generateListingMeta(listing, options);
-  const targetCurrency = options?.currency || listing.currency || 'UZS';
-  activeListingShareData = {
-    id: listing.id,
-    title: `${listing.title} | OldiSotdi`,
-    text: `${listing.title} — ${formatPrice(listing.price, listing.currency, targetCurrency)}`,
-    url: meta.url
-  };
-  installLegacyListingShareCompatibility();
 
   // 1. Browser Title
   document.title = meta.title;
@@ -277,8 +190,6 @@ export function injectListingMetaTags(
  */
 export function resetMetaTags(): void {
   if (typeof document === 'undefined') return;
-
-  activeListingShareData = null;
 
   if (initialSnapshot) {
     document.title = initialSnapshot.title;
