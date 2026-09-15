@@ -34,10 +34,7 @@ export const ListingCard: React.FC<ListingCardProps> = React.memo(({ listing, cu
 
   const handleShareClick = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    const url = new URL(window.location.href);
-    url.hash = '';
-    url.searchParams.set('listing', listing.id);
-    const shareUrl = url.toString();
+    const shareUrl = `${window.location.origin}/l/${encodeURIComponent(listing.id)}`;
     const shareData = { title: listing.title, text: `${listing.title} - ${formatPrice(listing.price, listing.currency, currency)} | OldiSotdi`, url: shareUrl };
     if (typeof navigator !== 'undefined' && navigator.share) {
       try { if (navigator.canShare && !navigator.canShare(shareData)) throw new Error('Cannot share'); await navigator.share(shareData); return; }
