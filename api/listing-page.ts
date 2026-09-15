@@ -1,0 +1,142 @@
+import firebaseConfig from '../firebase-applet-config.json';
+import { mockListings } from '../src/data/mockListings';
+
+type AnyRecord = Record<string, any>;
+
+function escapeHtml(value: unknown): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function decodeFirestoreValue(value: AnyRecord | undefined): any {
+  if (!value || typeof value !== 'object') return undefined;
+  if ('stringValue' in value) return value.stringValue;
+  if ('integerValue' in value) return Number(value.integerValue);
+  if ('doubleValue' in value) return Number(value.doubleValue);
+  if ('booleanValue' in value) return Boolean(value.booleanValue);
+  if ('timestampValue' in value) return value.timestampValue;
+  if ('nullValue' in value) return null;
+  if ('arrayValue' in value) return (value.arrayValue?.values || []).map((item: AnyRecord) => decodeFirestoreValue(item));
+  if ('mapValue' in value) return decodeFirestoreFields(value.mapValue?.fields || {});
+  return undefined;
+}
+
+function decodeFirestoreFields(fields: AnyRecord): AnyRecord {
+  const result: AnyRecord = {};
+  for (const [key, value] of Object.entries(fields || {})) {
+    result[key] = decodeFirestoreValue(value as AnyRecord);
+  }
+  return result;
+}
+
+async function fetchListing(listingId: string): Promise<AnyRecord | null> {
+  const projectId = String(firebaseConfig.projectId || '');
+  const databaseId = String((firebaseConfig as AnyRecord).firestoreDatabaseId || '(default)');
+  const apiKey = String(firebaseConfig.apiKey || '');
+
+  if (projectId && databaseId && apiKey) {
+    const endpoint = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(projectId)}/databases/${encodeURIComponent(databaseId)}/documents/listings/${encodeURIComponent(listingId)}?key=${encodeURIComponent(apiKey)}`;
+    try {
+      const response = await fetch(endpoint, { signal: AbortSignal.timeout(5000) });
+      if (response.ok) {
+        const document = await response.json() as AnyRecord;
+        const listing = decodeFirestoreFields(document.fields || {});
+        if (listing && listing.status === 'active') return { ...listing, id: listingId };
+      }
+    } catch {
+      // Fall through to bundled demo data. Social previews must never break the SPA.
+    }
+  }
+
+  const fallback = mockListings.find((listing) => listing.id === listingId && (!listing.status || listing.status === 'active'));
+  return fallback ? fallback as unknown as AnyRecord : null;
+}
+
+function formatPrice(price: unknown, currency: unknown): string {
+  const amount = Number(price);
+  if (!Number.isFinite(amount)) return '';
+  if (currency === 'USD') return `$ ${new Intl.NumberFormat('en-US').format(amount)}`;
+  return `${new Intl.NumberFormat('uz-UZ').format(amount)} so'm`;
+}
+
+function replaceMeta(html: string, selector: RegExp, replacement: string): string {
+  return selector.test(html) ? html.replace(selector, replacement) : html;
+}
+
+function injectListingMeta(html: string, listing: AnyRecord, canonicalUrl: string): string {
+  const price = formatPrice(listing.price, listing.currency);
+  const title = `${String(listing.title || 'E\'lon')} — ${price} | OldiSotdi`;
+  const descriptionRaw = String(listing.description || `${listing.title || 'E\'lon'} — OldiSotdi`)
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 180);
+  const image = Array.isArray(listing.images) && typeof listing.images[0] === 'string' ? listing.images[0] : '';
+
+  html = replaceMeta(html, /<title>[\s\S]*?<\/title>/i, `<title>${escapeHtml(title)}</title>`);
+  html = replaceMeta(html, /<meta\s+name=["']title["'][^>]*>/i, `<meta name="title" content="${escapeHtml(title)}" />`);
+  html = replaceMeta(html, /<meta\s+name=["']description["'][^>]*>/i, `<meta name="description" content="${escapeHtml(descriptionRaw)}" />`);
+  html = replaceMeta(html, /<link\s+rel=["']canonical["'][^>]*>/i, `<link rel="canonical" href="${escapeHtml(canonicalUrl)}" />`);
+  html = replaceMeta(html, /<meta\s+property=["']og:url["'][^>]*>/i, `<meta property="og:url" content="${escapeHtml(canonicalUrl)}" />`);
+  html = replaceMeta(html, /<meta\s+property=["']og:title["'][^>]*>/i, `<meta property="og:title" content="${escapeHtml(title)}" />`);
+  html = replaceMeta(html, /<meta\s+property=["']og:description["'][^>]*>/i, `<meta property="og:description" content="${escapeHtml(descriptionRaw)}" />`);
+  html = replaceMeta(html, /<meta\s+name=["']twitter:url["'][^>]*>/i, `<meta name="twitter:url" content="${escapeHtml(canonicalUrl)}" />`);
+  html = replaceMeta(html, /<meta\s+name=["']twitter:title["'][^>]*>/i, `<meta name="twitter:title" content="${escapeHtml(title)}" />`);
+  html = replaceMeta(html, /<meta\s+name=["']twitter:description["'][^>]*>/i, `<meta name="twitter:description" content="${escapeHtml(descriptionRaw)}" />`);
+
+  if (image) {
+    html = replaceMeta(html, /<meta\s+property=["']og:image["'][^>]*>/i, `<meta property="og:image" content="${escapeHtml(image)}" />`);
+    html = replaceMeta(html, /<meta\s+property=["']og:image:alt["'][^>]*>/i, `<meta property="og:image:alt" content="${escapeHtml(String(listing.title || 'OldiSotdi e\'loni'))}" />`);
+    html = replaceMeta(html, /<meta\s+name=["']twitter:image["'][^>]*>/i, `<meta name="twitter:image" content="${escapeHtml(image)}" />`);
+  }
+
+  return html;
+}
+
+function deploymentOrigin(): string {
+  const productionHost = process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim();
+  if (productionHost) return `https://${productionHost.replace(/^https?:\/\//, '')}`;
+  return 'https://fedyaibragimovich-gif.vercel.app';
+}
+
+async function fetchBaseHtml(): Promise<string> {
+  const deploymentHost = process.env.VERCEL_URL?.trim();
+  const origin = deploymentHost
+    ? `https://${deploymentHost.replace(/^https?:\/\//, '')}`
+    : deploymentOrigin();
+  const response = await fetch(`${origin}/`, {
+    headers: { 'user-agent': 'OldiSotdi-Listing-Renderer/1.0' },
+    signal: AbortSignal.timeout(5000)
+  });
+  if (!response.ok) throw new Error(`base-html-${response.status}`);
+  return response.text();
+}
+
+export default async function handler(req: any, res: any) {
+  if (req.method !== 'GET' && req.method !== 'HEAD') {
+    res.setHeader('Allow', 'GET, HEAD');
+    return res.status(405).end();
+  }
+
+  const rawId = Array.isArray(req.query?.listing) ? req.query.listing[0] : req.query?.listing;
+  const listingId = typeof rawId === 'string' ? rawId.trim() : '';
+  if (!listingId || listingId.length > 160 || !/^[A-Za-z0-9._:-]+$/.test(listingId)) {
+    return res.status(400).send('Invalid listing id');
+  }
+
+  try {
+    const [html, listing] = await Promise.all([fetchBaseHtml(), fetchListing(listingId)]);
+    const canonicalUrl = `${deploymentOrigin()}/?listing=${encodeURIComponent(listingId)}`;
+    const output = listing ? injectListingMeta(html, listing, canonicalUrl) : html;
+
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Cache-Control', listing ? 'public, s-maxage=60, stale-while-revalidate=300' : 'no-store');
+    if (req.method === 'HEAD') return res.status(200).end();
+    return res.status(200).send(output);
+  } catch {
+    return res.status(503).send('Temporarily unavailable');
+  }
+}
