@@ -23,6 +23,13 @@
   ],
   "rewrites": [
     {
+      "source": "/",
+      "destination": "/api/listing-page",
+      "has": [
+        { "type": "query", "key": "listing" }
+      ]
+    },
+    {
       "source": "/api/(.*)",
       "destination": "/api/$1"
     },
