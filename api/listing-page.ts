@@ -88,6 +88,12 @@ function injectListingMeta(html: string, listing: AnyRecord, canonicalUrl: strin
   return html;
 }
 
+function injectSpaDeepLink(html: string, listingId: string): string {
+  const target = `/?listing=${encodeURIComponent(listingId)}`;
+  const script = `<script>try{history.replaceState({},'',${JSON.stringify(target)})}catch(e){}</script>`;
+  return html.includes('</head>') ? html.replace('</head>', `${script}\n  </head>`) : `${script}${html}`;
+}
+
 function deploymentOrigin(): string {
   const productionHost = process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim();
   if (productionHost) return `https://${productionHost.replace(/^https?:\/\//, '')}`;
@@ -120,9 +126,10 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    const [html, listing] = await Promise.all([fetchBaseHtml(), fetchListing(listingId)]);
-    const canonicalUrl = `${deploymentOrigin()}/?listing=${encodeURIComponent(listingId)}`;
-    const output = listing ? injectListingMeta(html, listing, canonicalUrl) : html;
+    const [baseHtml, listing] = await Promise.all([fetchBaseHtml(), fetchListing(listingId)]);
+    const canonicalUrl = `${deploymentOrigin()}/l/${encodeURIComponent(listingId)}`;
+    const withMeta = listing ? injectListingMeta(baseHtml, listing, canonicalUrl) : baseHtml;
+    const output = injectSpaDeepLink(withMeta, listingId);
 
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.setHeader('Cache-Control', listing ? 'public, s-maxage=60, stale-while-revalidate=300' : 'no-store');

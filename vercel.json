@@ -24,11 +24,8 @@
   ],
   "rewrites": [
     {
-      "source": "/",
-      "destination": "/api/listing-page",
-      "has": [
-        { "type": "query", "key": "listing" }
-      ]
+      "source": "/l/:listing",
+      "destination": "/api/listing-page?listing=:listing"
     },
     {
       "source": "/api/(.*)",
