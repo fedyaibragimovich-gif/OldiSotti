@@ -1,4 +1,4 @@
-import firebaseConfig from '../firebase-applet-config.json';
+import firebaseConfig from '../firebase-applet-config.json' with { type: 'json' };
 import { mockListings } from '../src/data/mockListings';
 
 type AnyRecord = Record<string, any>;
