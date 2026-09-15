@@ -39,6 +39,7 @@ import { SimilarListingsSection } from './SimilarListingsSection';
 import { LocationMap } from './LocationMap';
 import { auth, saveReportToDb, blockSellerInDb } from '../lib/firebase';
 import { injectListingMetaTags, resetMetaTags } from '../utils/metaTags';
+import { toPublicListingId } from '../lib/publicListingId';
 
 const REGION_CENTERS: Record<string, { latitude: number; longitude: number }> = {
   'tashkent-city': { latitude: 41.311081, longitude: 69.240562 },
@@ -265,7 +266,7 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
   const handleCopyPhone = () => copyText(listing.seller.phone, t.phoneCopied);
   const handleShare = async () => {
     const origin = typeof window !== 'undefined' ? window.location.origin : '';
-    const shareUrl = `${origin}/l/${encodeURIComponent(listing.id)}`;
+    const shareUrl = `${origin}/l/${encodeURIComponent(toPublicListingId(listing.id))}`;
     if (typeof navigator !== 'undefined' && navigator.share) {
       try {
         await navigator.share({
