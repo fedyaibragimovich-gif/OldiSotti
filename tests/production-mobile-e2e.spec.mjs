@@ -183,7 +183,7 @@ test('production mobile registration, reset, photo listing and two-account chat'
     await page.locator('#post-ad-description-input').fill(`Production mobile E2E listing ${RUN_ID}`);
     await page.locator('#post-contact-name').fill('OldiSotdi E2E Seller');
     await page.locator('#post-contact-phone').fill('+998 90 123 45 67');
-    await page.locator('form button[type="submit"]').click();
+    await page.getByRole('button', { name: "E'lonni joylashtirish", exact: true }).click();
     await expect(page.getByText(/moderatsiyaga yuborildi|muvaffaqiyatli saqlandi/i)).toBeVisible({ timeout: 60_000 });
 
     await expect.poll(findSellerListing, { timeout: 30_000, intervals: [1000, 2000, 3000] }).not.toBeNull();
