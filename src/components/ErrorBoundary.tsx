@@ -1,5 +1,6 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { AlertOctagon, RotateCcw, Home, RefreshCw } from 'lucide-react';
+import { reportClientError } from '../lib/monitoring';
 
 export interface ErrorBoundaryProps {
   children?: ReactNode;
@@ -27,6 +28,10 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('ErrorBoundary caught an unhandled application error:', error, errorInfo);
+    reportClientError(
+      new Error(`${error.message}\nReact component stack: ${errorInfo.componentStack || 'unavailable'}`),
+      'react-boundary'
+    );
     if (this.props.onError) {
       this.props.onError(error, errorInfo);
     }

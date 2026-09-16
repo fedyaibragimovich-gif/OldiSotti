@@ -135,14 +135,27 @@ async function fetchBaseHtml(): Promise<string> {
   return response.text();
 }
 
+function requestListingId(req: any): string {
+  const forwardedHost = String(req.headers?.['x-forwarded-host'] || req.headers?.host || 'localhost')
+    .split(',')[0]
+    .trim();
+  try {
+    const parsed = new URL(String(req.url || '/'), `https://${forwardedHost || 'localhost'}`);
+    return (parsed.searchParams.get('listing') || '').trim();
+  } catch {
+    return '';
+  }
+}
+
 export default async function handler(req: any, res: any) {
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     res.setHeader('Allow', 'GET, HEAD');
     return res.status(405).end();
   }
 
-  const rawId = Array.isArray(req.query?.listing) ? req.query.listing[0] : req.query?.listing;
-  const requestedId = typeof rawId === 'string' ? rawId.trim() : '';
+  // Parse the raw request with the standards-based WHATWG URL API instead of
+  // req.query, avoiding the legacy node url.parse() path used by some adapters.
+  const requestedId = requestListingId(req);
   if (!requestedId || requestedId.length > 200 || !/^[A-Za-z0-9._:-]+$/.test(requestedId)) {
     return res.status(400).send('Invalid listing id');
   }

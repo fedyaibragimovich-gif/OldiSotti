@@ -81,7 +81,7 @@ function stripUndefinedDeep<T>(value: T): T {
 }
 
 export function subscribeToListings(
-  onSuccess: (listings: Listing[], hasMore?: boolean) => void,
+  onSuccess: (listings: Listing[], hasMore?: boolean, lastPublicCreatedAt?: string) => void,
   onError?: (err: Error) => void,
   onLoading?: () => void,
   pageSize: number = 24
@@ -97,11 +97,19 @@ export function subscribeToListings(
 
     // Public and private queries are separate so unpublished listings never leak.
     // Query limit is applied to protect performance and bandwidth under real traffic!
-    const queries = isCurrentAdmin()
-      ? [query(collection(db, LISTINGS_COLLECTION), limit(pageSize))]
+    const admin = isCurrentAdmin();
+    const queries = admin
+      ? [query(collection(db, LISTINGS_COLLECTION), orderBy('createdAt', 'desc'), limit(LISTINGS_REALTIME_LIMIT))]
       : [
-          query(collection(db, LISTINGS_COLLECTION), where('status', '==', 'active'), limit(pageSize)),
-          ...(user && !user.isAnonymous ? [query(collection(db, LISTINGS_COLLECTION), where('userId', '==', user.uid), limit(pageSize))] : [])
+          query(
+            collection(db, LISTINGS_COLLECTION),
+            where('status', '==', 'active'),
+            orderBy('createdAt', 'desc'),
+            limit(pageSize)
+          ),
+          ...(user && !user.isAnonymous
+            ? [query(collection(db, LISTINGS_COLLECTION), where('userId', '==', user.uid), limit(LISTINGS_REALTIME_LIMIT))]
+            : [])
         ];
 
     queries.forEach((q, index) => {
@@ -113,8 +121,10 @@ export function subscribeToListings(
         sources.forEach(items => items.forEach(item => merged.set(item.id, item)));
         const sorted = [...merged.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
         const activeCount = docCounts.get(0) || 0;
-        const hasMore = activeCount >= pageSize;
-        onSuccess(sorted, hasMore);
+        const publicItems = sources.get(0) || [];
+        const lastPublicCreatedAt = admin ? undefined : publicItems[publicItems.length - 1]?.createdAt;
+        const hasMore = admin ? false : activeCount >= pageSize;
+        onSuccess(sorted, hasMore, lastPublicCreatedAt);
       }, error => onError?.(error)));
     });
   });
@@ -165,7 +175,7 @@ export async function fetchListingsPage(
     };
   } catch (err) {
     console.error('fetchListingsPage failed:', err);
-    return { listings: [], hasMore: false };
+    throw err instanceof Error ? err : new Error('Failed to load the next listings page');
   }
 }
 
