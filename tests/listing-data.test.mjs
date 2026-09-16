@@ -5,6 +5,12 @@ const listing={title:'Phone',description:'Good condition',price:100,currency:'UZ
 test('malformed remote records cannot become renderable listings',()=>{
  for(const value of [null,{}, {...listing,seller:null},{...listing,price:NaN},{...listing,currency:'EUR'},{...listing,images:[{}]}]) assert.equal(readListing(value,'id'),null);
 });
+test('seeded numeric demo documents cannot become renderable marketplace listings',()=>{
+ assert.equal(readListing(listing,'olx-001'),null);
+ assert.equal(readListing(listing,'olx-1789245452859'),null);
+ assert.notEqual(readListing(listing,'olx-f7a80c90-f404-4b78-90e6-c58a92e04243'),null);
+ assert.notEqual(readListing(listing,'oldisotdi-1234'),null);
+});
 test('remote document ID overrides a payload ID and optional fields are normalized',()=>{
  const result=readListing({...listing,id:'forged',brand:{},seller:{...listing.seller,phone:{}},location:{...listing.location,latitude:1000,longitude:0}},'actual');
  assert.equal(result.id,'actual'); assert.equal(result.brand,undefined); assert.equal(result.seller.phone,''); assert.equal(result.location.latitude,undefined);

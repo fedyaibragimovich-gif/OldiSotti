@@ -1,8 +1,15 @@
 import type { Listing } from '../types';
+import { isLegacyDemoListingId } from './publicListingId';
+
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
 const string = (value: unknown) => typeof value === 'string' ? value : '';
 const optionalString = (value: unknown) => typeof value === 'string' ? value : undefined;
+
 export function readListing(value: unknown, id: string): Listing | null {
+  // Numeric olx-* documents are historical seed/demo inventory. Keep the
+  // documents in Firestore for safe cleanup, but never render them as public
+  // marketplace inventory.
+  if (isLegacyDemoListingId(id)) return null;
   if (!record(value) || !record(value.seller) || !record(value.location)) return null;
   if (typeof value.title !== 'string' || !value.title.trim() || typeof value.description !== 'string') return null;
   if (typeof value.price !== 'number' || !Number.isFinite(value.price) || value.price < 0) return null;

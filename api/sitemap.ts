@@ -7,8 +7,6 @@ const LEGACY_OLX_ID = /^olx-(.+)$/i;
 const LEGACY_DEMO_ID = /^olx-(\d+)$/i;
 
 function toPublicListingId(id: string): string {
-  const demoMatch = LEGACY_DEMO_ID.exec(id);
-  if (demoMatch) return `oldisotdi-demo-${demoMatch[1]}`;
   const legacyMatch = LEGACY_OLX_ID.exec(id);
   return legacyMatch ? `oldisotdi-listing-${legacyMatch[1]}` : id;
 }
@@ -55,6 +53,8 @@ async function fetchActiveListingIds(): Promise<string[]> {
   const ids = rows
     .map((row) => row.document?.name?.split('/').pop() || '')
     .filter((id) => /^[A-Za-z0-9._:-]{1,200}$/.test(id))
+    // Numeric olx-* records are seeded demo inventory and must not be indexed.
+    .filter((id) => !LEGACY_DEMO_ID.test(id))
     .map(toPublicListingId);
   return [...new Set(ids)];
 }
