@@ -5,17 +5,23 @@ const FIREBASE_DATABASE_ID = 'ai-studio-bazaarbuilder-41fa17d8-6b10-46d7-a618-e3
 // Firebase web API keys are public client configuration; Firestore Security Rules enforce access.
 const FIREBASE_WEB_API_KEY = 'AIzaSyAITdHp6PssWTS-LWTpjQ49faSn1ozXoOU';
 
+const LEGACY_OLX_ID = /^olx-(.+)$/i;
 const LEGACY_DEMO_ID = /^olx-(\d+)$/i;
 const PUBLIC_DEMO_ID = /^oldisotdi-demo-(\d+)$/i;
+const PUBLIC_LEGACY_ID = /^oldisotdi-listing-(.+)$/i;
 
 function toPublicListingId(id: string): string {
-  const match = LEGACY_DEMO_ID.exec(id);
-  return match ? `oldisotdi-demo-${match[1]}` : id;
+  const demoMatch = LEGACY_DEMO_ID.exec(id);
+  if (demoMatch) return `oldisotdi-demo-${demoMatch[1]}`;
+  const legacyMatch = LEGACY_OLX_ID.exec(id);
+  return legacyMatch ? `oldisotdi-listing-${legacyMatch[1]}` : id;
 }
 
 function toLegacyListingId(id: string): string {
-  const match = PUBLIC_DEMO_ID.exec(id);
-  return match ? `olx-${match[1]}` : id;
+  const demoMatch = PUBLIC_DEMO_ID.exec(id);
+  if (demoMatch) return `olx-${demoMatch[1]}`;
+  const legacyMatch = PUBLIC_LEGACY_ID.exec(id);
+  return legacyMatch ? `olx-${legacyMatch[1]}` : id;
 }
 
 function escapeHtml(value: unknown): string {
@@ -62,11 +68,9 @@ async function fetchListingById(listingId: string): Promise<AnyRecord | null> {
 }
 
 async function fetchListing(requestedId: string): Promise<AnyRecord | null> {
-  // Prefer the requested (new) ID so future migrated documents work directly.
   const direct = await fetchListingById(requestedId);
   if (direct) return direct;
 
-  // Compatibility fallback for demo documents seeded before the rebrand.
   const legacyId = toLegacyListingId(requestedId);
   if (legacyId === requestedId) return null;
   return fetchListingById(legacyId);
@@ -139,11 +143,11 @@ export default async function handler(req: any, res: any) {
 
   const rawId = Array.isArray(req.query?.listing) ? req.query.listing[0] : req.query?.listing;
   const requestedId = typeof rawId === 'string' ? rawId.trim() : '';
-  if (!requestedId || requestedId.length > 160 || !/^[A-Za-z0-9._:-]+$/.test(requestedId)) {
+  if (!requestedId || requestedId.length > 200 || !/^[A-Za-z0-9._:-]+$/.test(requestedId)) {
     return res.status(400).send('Invalid listing id');
   }
 
-  // Never expose the pre-rebrand OLX demo prefix in public URLs.
+  // Every historical OLX-prefixed document is redirected to a branded public alias.
   const publicId = toPublicListingId(requestedId);
   if (publicId !== requestedId) {
     res.setHeader('Location', `/l/${encodeURIComponent(publicId)}`);
@@ -156,9 +160,6 @@ export default async function handler(req: any, res: any) {
     const canonicalUrl = `${deploymentOrigin()}/l/${encodeURIComponent(publicId)}`;
     const output = listing ? injectListingMeta(baseHtml, listing, canonicalUrl) : baseHtml;
 
-    // Client-side deep-link bootstrap in src/main.tsx resolves /l/<public-id>
-    // back to the legacy Firestore document ID when needed. The server never
-    // rewrites the address bar to an internal pre-rebrand identifier.
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.setHeader('Cache-Control', listing ? 'public, s-maxage=60, stale-while-revalidate=300' : 'no-store');
     if (req.method === 'HEAD') return res.status(200).end();
