@@ -1,0 +1,100 @@
+name: Live production performance test
+
+on:
+  push:
+    branches:
+      - perf-live-test-20260916
+
+permissions:
+  contents: read
+
+jobs:
+  lighthouse:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Environment
+        run: |
+          node --version
+          google-chrome --version || chromium --version || true
+
+      - name: HTTP timing samples
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL="https://fedyaibragimovich-gif.vercel.app/"
+          echo "Warm-up"
+          curl -fsSLo /dev/null "$URL"
+          echo "sample,dns,connect,tls,ttfb,total,size_bytes,http_code"
+          for i in 1 2 3 4 5; do
+            curl -fsSLo /dev/null \
+              -w "$i,%{time_namelookup},%{time_connect},%{time_appconnect},%{time_starttransfer},%{time_total},%{size_download},%{http_code}\n" \
+              "$URL"
+          done
+
+      - name: Install Lighthouse
+        run: npm install --global lighthouse@12.8.2
+
+      - name: Run Lighthouse mobile
+        run: |
+          lighthouse "https://fedyaibragimovich-gif.vercel.app/" \
+            --output=json \
+            --output-path=./lh-mobile.json \
+            --only-categories=performance \
+            --chrome-flags="--headless --no-sandbox --disable-dev-shm-usage" \
+            --quiet
+
+      - name: Run Lighthouse desktop
+        run: |
+          lighthouse "https://fedyaibragimovich-gif.vercel.app/" \
+            --preset=desktop \
+            --output=json \
+            --output-path=./lh-desktop.json \
+            --only-categories=performance \
+            --chrome-flags="--headless --no-sandbox --disable-dev-shm-usage" \
+            --quiet
+
+      - name: Print performance results
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          function summarize(file, label) {
+            const r = JSON.parse(fs.readFileSync(file, 'utf8'));
+            const a = r.audits;
+            const value = id => a[id]?.numericValue ?? null;
+            const score = Math.round((r.categories.performance.score || 0) * 100);
+            const out = {
+              profile: label,
+              performance: score,
+              fcp_ms: Math.round(value('first-contentful-paint') || 0),
+              lcp_ms: Math.round(value('largest-contentful-paint') || 0),
+              speed_index_ms: Math.round(value('speed-index') || 0),
+              tbt_ms: Math.round(value('total-blocking-time') || 0),
+              cls: Number((value('cumulative-layout-shift') || 0).toFixed(3)),
+              tti_ms: Math.round(value('interactive') || 0),
+              requests: a['network-requests']?.details?.items?.length ?? null,
+              transfer_bytes: Math.round(value('total-byte-weight') || 0),
+              main_thread_ms: Math.round(value('mainthread-work-breakdown') || 0),
+              bootup_ms: Math.round(value('bootup-time') || 0),
+              unused_js_savings_bytes: Math.round(a['unused-javascript']?.details?.overallSavingsBytes || 0),
+              unused_css_savings_bytes: Math.round(a['unused-css-rules']?.details?.overallSavingsBytes || 0),
+              render_blocking_savings_ms: Math.round(a['render-blocking-resources']?.details?.overallSavingsMs || 0)
+            };
+            console.log('PERF_RESULT ' + JSON.stringify(out));
+          }
+          summarize('lh-mobile.json', 'mobile');
+          summarize('lh-desktop.json', 'desktop');
+          NODE
+
+      - name: Upload Lighthouse reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: lighthouse-live-production
+          path: |
+            lh-mobile.json
+            lh-desktop.json
+          retention-days: 3
