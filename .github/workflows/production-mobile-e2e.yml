@@ -1,0 +1,41 @@
+name: Production mobile E2E
+
+on:
+  push:
+    branches:
+      - feat/launch-hardening-e2e-20260916
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-mobile-e2e
+  cancel-in-progress: false
+
+jobs:
+  mobile-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      BASE_URL: https://fedyaibragimovich-gif.vercel.app
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Install project dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Install Playwright runner
+        run: npm install --no-save --package-lock=false @playwright/test
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run production mobile E2E
+        run: npx playwright test tests/production-mobile-e2e.spec.mjs --browser=chromium --workers=1 --reporter=line
