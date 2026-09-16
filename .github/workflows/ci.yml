@@ -47,6 +47,9 @@ jobs:
       - name: Public listing ID regression tests
         run: node --import tsx --test tests/public-listing-id.test.mjs
 
+      - name: Branding regression tests
+        run: node --test tests/branding-regression.test.mjs
+
       - name: SEO metadata regression tests
         run: node --import tsx --test tests/meta-tags.test.mjs
 
