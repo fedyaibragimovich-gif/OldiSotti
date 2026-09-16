@@ -5,8 +5,25 @@ export interface SiteUrls {
   xDefault: string;
 }
 
-export function buildSiteUrls(origin: string, pathname = '/'): SiteUrls {
+export const PRIMARY_SITE_ORIGIN = 'https://oldi-sotdi.uz';
+
+export function canonicalSiteOrigin(origin: string): string {
   const cleanOrigin = origin.replace(/\/$/, '');
+  try {
+    const hostname = new URL(cleanOrigin).hostname.toLowerCase();
+    // Production, its www alias, and Vercel deployment aliases must agree on
+    // one canonical host. Keep localhost and unrelated development hosts intact.
+    if (hostname === 'oldi-sotdi.uz' || hostname === 'www.oldi-sotdi.uz' || hostname.endsWith('.vercel.app')) {
+      return PRIMARY_SITE_ORIGIN;
+    }
+  } catch {
+    // A malformed origin should not crash the application metadata.
+  }
+  return cleanOrigin;
+}
+
+export function buildSiteUrls(origin: string, pathname = '/'): SiteUrls {
+  const cleanOrigin = canonicalSiteOrigin(origin);
   const cleanPath = pathname.startsWith('/') ? pathname : `/${pathname}`;
   const canonical = `${cleanOrigin}${cleanPath}`;
   return {
@@ -26,6 +43,7 @@ export function syncSiteOriginMetadata(): void {
   if (typeof window === 'undefined' || typeof document === 'undefined') return;
 
   const urls = buildSiteUrls(window.location.origin, window.location.pathname || '/');
+  const homepage = buildSiteUrls(window.location.origin).canonical;
   setMeta('link[rel="canonical"]', 'href', urls.canonical);
   setMeta('link[rel="alternate"][hreflang="uz"]', 'href', urls.uz);
   setMeta('link[rel="alternate"][hreflang="ru"]', 'href', urls.ru);
@@ -38,9 +56,9 @@ export function syncSiteOriginMetadata(): void {
   try {
     const data = JSON.parse(schema.textContent);
     if (data && data['@type'] === 'WebSite') {
-      data.url = `${window.location.origin.replace(/\/$/, '')}/`;
+      data.url = homepage;
       if (data.potentialAction?.target) {
-        data.potentialAction.target = `${window.location.origin.replace(/\/$/, '')}/?q={search_term_string}`;
+        data.potentialAction.target = `${homepage}?q={search_term_string}`;
       }
       schema.textContent = JSON.stringify(data);
     }
