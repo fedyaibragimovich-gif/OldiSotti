@@ -112,11 +112,19 @@ async function openProfile(page) {
   await page.locator('#bottom-nav-profile-btn').click();
 }
 
+function emailInput(page) {
+  return page.locator('input[name="email"][type="email"]');
+}
+
+function passwordInput(page) {
+  return page.locator('input[name="password"][type="password"]');
+}
+
 async function registerFromUi(page, email) {
   await openProfile(page);
   await page.getByRole('button', { name: "Ro'yxatdan o'tish", exact: true }).click();
-  await page.getByLabel('Email').fill(email);
-  await page.getByLabel('Parol').fill(PASSWORD);
+  await emailInput(page).fill(email);
+  await passwordInput(page).fill(PASSWORD);
   await page.locator('form').getByRole('button', { name: "Ro'yxatdan o'tish", exact: true }).click();
   await expect(page.getByText('OldiSotdi akkauntingiz')).toBeHidden({ timeout: 20_000 });
 }
@@ -131,8 +139,8 @@ async function logoutFromUi(page) {
 async function loginFromUi(page, email) {
   await openProfile(page);
   await page.getByRole('button', { name: 'Kirish', exact: true }).click();
-  await page.getByLabel('Email').fill(email);
-  await page.getByLabel('Parol').fill(PASSWORD);
+  await emailInput(page).fill(email);
+  await passwordInput(page).fill(PASSWORD);
   await page.locator('form').getByRole('button', { name: 'Kirish', exact: true }).click();
   await expect(page.getByText('OldiSotdi akkauntingiz')).toBeHidden({ timeout: 20_000 });
 }
@@ -159,10 +167,10 @@ test('production mobile registration, reset, photo listing and two-account chat'
     await logoutFromUi(page);
     await openProfile(page);
     await page.getByRole('button', { name: 'Kirish', exact: true }).click();
-    await page.getByLabel('Email').fill(SELLER_EMAIL);
+    await emailInput(page).fill(SELLER_EMAIL);
     await page.getByRole('button', { name: 'Parolni unutdingizmi?' }).click();
     await expect(page.getByText(/Parolni tiklash havolasi emailingizga yuborildi/i)).toBeVisible({ timeout: 20_000 });
-    await page.getByLabel('Parol').fill(PASSWORD);
+    await passwordInput(page).fill(PASSWORD);
     await page.locator('form').getByRole('button', { name: 'Kirish', exact: true }).click();
     await expect(page.getByText('OldiSotdi akkauntingiz')).toBeHidden({ timeout: 20_000 });
 
@@ -171,7 +179,6 @@ test('production mobile registration, reset, photo listing and two-account chat'
     await expect(page.locator('#post-ad-title-input')).toBeVisible({ timeout: 20_000 });
     await page.locator('#post-ad-title-input').fill(LISTING_TITLE);
     await page.locator('input[type="file"]').setInputFiles({ name: 'e2e-mobile.png', mimeType: 'image/png', buffer: PNG_1X1 });
-    await expect(page.locator('img').filter({ has: page.locator('xpath=..') }).first()).toBeVisible().catch(() => {});
     await page.locator('input[type="number"]').first().fill('125000');
     await page.locator('#post-ad-description-input').fill(`Production mobile E2E listing ${RUN_ID}`);
     await page.locator('#post-contact-name').fill('OldiSotdi E2E Seller');
@@ -179,7 +186,8 @@ test('production mobile registration, reset, photo listing and two-account chat'
     await page.locator('form').getByRole('button', { name: /Joylash|E'lonni joylash|Nashr/i }).click();
     await expect(page.getByText(/moderatsiyaga yuborildi|muvaffaqiyatli saqlandi/i)).toBeVisible({ timeout: 60_000 });
 
-    const listing = await expect.poll(findSellerListing, { timeout: 30_000, intervals: [1000, 2000, 3000] }).not.toBeNull().then(async () => findSellerListing());
+    await expect.poll(findSellerListing, { timeout: 30_000, intervals: [1000, 2000, 3000] }).not.toBeNull();
+    const listing = await findSellerListing();
     expect(listing, 'Production listing was not persisted in Firestore').not.toBeNull();
     listingId = listing.id;
     expect(Array.isArray(listing.images) && listing.images.some((url) => String(url).includes('firebasestorage.googleapis.com')), 'Photo was not persisted in Firebase Storage').toBeTruthy();
@@ -201,7 +209,8 @@ test('production mobile registration, reset, photo listing and two-account chat'
     await page.getByRole('button', { name: 'Yuborish' }).click();
     await expect(page.getByText(BUYER_MESSAGE, { exact: true })).toBeVisible({ timeout: 20_000 });
 
-    const conversation = await expect.poll(findConversation, { timeout: 20_000, intervals: [1000, 2000] }).not.toBeNull().then(async () => findConversation());
+    await expect.poll(findConversation, { timeout: 20_000, intervals: [1000, 2000] }).not.toBeNull();
+    const conversation = await findConversation();
     expect(conversation, 'Buyer conversation was not persisted').not.toBeNull();
 
     // Close chat before logging out.
