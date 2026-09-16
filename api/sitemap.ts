@@ -3,11 +3,14 @@ const FIREBASE_DATABASE_ID = 'ai-studio-bazaarbuilder-41fa17d8-6b10-46d7-a618-e3
 // Firebase web API keys are public client configuration; Firestore rules enforce access.
 const FIREBASE_WEB_API_KEY = 'AIzaSyAITdHp6PssWTS-LWTpjQ49faSn1ozXoOU';
 
+const LEGACY_OLX_ID = /^olx-(.+)$/i;
 const LEGACY_DEMO_ID = /^olx-(\d+)$/i;
 
 function toPublicListingId(id: string): string {
-  const match = LEGACY_DEMO_ID.exec(id);
-  return match ? `oldisotdi-demo-${match[1]}` : id;
+  const demoMatch = LEGACY_DEMO_ID.exec(id);
+  if (demoMatch) return `oldisotdi-demo-${demoMatch[1]}`;
+  const legacyMatch = LEGACY_OLX_ID.exec(id);
+  return legacyMatch ? `oldisotdi-listing-${legacyMatch[1]}` : id;
 }
 
 function xmlEscape(value: string): string {
@@ -51,7 +54,7 @@ async function fetchActiveListingIds(): Promise<string[]> {
   const rows = await response.json() as Array<{ document?: { name?: string } }>;
   const ids = rows
     .map((row) => row.document?.name?.split('/').pop() || '')
-    .filter((id) => /^[A-Za-z0-9._:-]{1,160}$/.test(id))
+    .filter((id) => /^[A-Za-z0-9._:-]{1,200}$/.test(id))
     .map(toPublicListingId);
   return [...new Set(ids)];
 }
