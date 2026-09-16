@@ -47,6 +47,9 @@ jobs:
       - name: Production inventory regression tests
         run: node --test tests/production-inventory.test.mjs
 
+      - name: Progressive pagination regression tests
+        run: node --test tests/progressive-pagination.test.mjs
+
       - name: Public listing ID regression tests
         run: node --import tsx --test tests/public-listing-id.test.mjs
 
