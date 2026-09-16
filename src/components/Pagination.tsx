@@ -31,10 +31,10 @@ export const Pagination: React.FC<PaginationProps> = ({
 }) => {
   if (totalItems <= 0) return null;
 
-  const startItem = Math.min((currentPage - 1) * pageSize + 1, totalItems);
-  const endItem = Math.min(currentPage * pageSize, totalItems);
+  const visibleCount = Math.min(displayedCount, totalItems);
 
-  // Generate page numbers with ellipsis
+  // This control uses progressive/cumulative loading: stage 2 means that
+  // items from stages 1 and 2 are visible together, not only the second slice.
   const getPageNumbers = () => {
     const pages: (number | string)[] = [];
     if (totalPages <= 7) {
@@ -42,14 +42,14 @@ export const Pagination: React.FC<PaginationProps> = ({
     } else {
       pages.push(1);
       if (currentPage > 3) pages.push('...');
-      
+
       const start = Math.max(2, currentPage - 1);
       const end = Math.min(totalPages - 1, currentPage + 1);
-      
+
       for (let i = start; i <= end; i++) {
         if (!pages.includes(i)) pages.push(i);
       }
-      
+
       if (currentPage < totalPages - 2) pages.push('...');
       pages.push(totalPages);
     }
@@ -58,12 +58,12 @@ export const Pagination: React.FC<PaginationProps> = ({
 
   const getLabel = () => {
     if (lang === 'ru') {
-      return `Показано ${startItem}–${endItem} из ${totalItems} объявлений`;
+      return `Показано ${visibleCount} из ${totalItems} объявлений`;
     }
     if (lang === 'oz') {
-      return `Жами ${totalItems} та эълондан ${startItem}–${endItem} таси кўрсатилмоқда`;
+      return `Жами ${totalItems} та эълондан ${visibleCount} таси кўрсатилмоқда`;
     }
-    return `Jami ${totalItems} ta e'londan ${startItem}–${endItem} tasi ko'rsatilmoqda`;
+    return `Jami ${totalItems} ta e'londan ${visibleCount} tasi ko'rsatilmoqda`;
   };
 
   const getLoadMoreLabel = () => {
@@ -110,27 +110,27 @@ export const Pagination: React.FC<PaginationProps> = ({
         </div>
       )}
 
-      {/* 2. Secondary Bar: Status info + Page navigation + Page size */}
+      {/* 2. Secondary Bar: cumulative status + loading-stage navigation + batch size */}
       <div className="w-full flex flex-col md:flex-row items-center justify-between gap-4 text-xs font-medium text-slate-600 dark:text-slate-400">
         {/* Total stats */}
         <div className="text-center md:text-left">
           <span className="font-semibold text-slate-900 dark:text-slate-100">{getLabel()}</span>
           {totalPages > 1 && (
             <span className="text-slate-400 dark:text-slate-500 ml-1.5">
-              ({lang === 'ru' ? 'Стр.' : 'Sahifa'} {currentPage} / {totalPages})
+              ({lang === 'ru' ? 'Этап' : lang === 'oz' ? 'Босқич' : 'Bosqich'} {currentPage} / {totalPages})
             </span>
           )}
         </div>
 
-        {/* Numeric page navigator (shown if multiple pages) */}
+        {/* Progressive loading-stage navigator */}
         {totalPages > 1 && (
-          <nav aria-label="Pagination" className="flex items-center gap-1 sm:gap-1.5">
+          <nav aria-label="Progressive loading stages" className="flex items-center gap-1 sm:gap-1.5">
             {/* First & Prev */}
             <button
               type="button"
               onClick={() => onPageChange(1)}
               disabled={currentPage === 1}
-              aria-label="First page"
+              aria-label="First loading stage"
               className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             >
               <ChevronsLeft size={16} />
@@ -139,20 +139,20 @@ export const Pagination: React.FC<PaginationProps> = ({
               type="button"
               onClick={() => onPageChange(currentPage - 1)}
               disabled={currentPage === 1}
-              aria-label="Previous page"
+              aria-label="Previous loading stage"
               className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             >
               <ChevronLeft size={16} />
             </button>
 
-            {/* Page numbers */}
+            {/* Stage numbers */}
             {getPageNumbers().map((p, idx) =>
               typeof p === 'number' ? (
                 <button
                   key={idx}
                   type="button"
                   onClick={() => onPageChange(p)}
-                  aria-current={p === currentPage ? 'page' : undefined}
+                  aria-current={p === currentPage ? 'step' : undefined}
                   className={`min-w-[36px] h-9 px-2 rounded-xl font-bold text-xs transition-all cursor-pointer ${
                     p === currentPage
                       ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
@@ -173,7 +173,7 @@ export const Pagination: React.FC<PaginationProps> = ({
               type="button"
               onClick={() => onPageChange(currentPage + 1)}
               disabled={currentPage === totalPages}
-              aria-label="Next page"
+              aria-label="Next loading stage"
               className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             >
               <ChevronRight size={16} />
@@ -182,7 +182,7 @@ export const Pagination: React.FC<PaginationProps> = ({
               type="button"
               onClick={() => onPageChange(totalPages)}
               disabled={currentPage === totalPages}
-              aria-label="Last page"
+              aria-label="Last loading stage"
               className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             >
               <ChevronsRight size={16} />
@@ -190,7 +190,7 @@ export const Pagination: React.FC<PaginationProps> = ({
           </nav>
         )}
 
-        {/* Page size options */}
+        {/* Batch size options */}
         {onPageSizeChange && totalItems > 12 && (
           <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
             <span>{lang === 'ru' ? 'Показывать по:' : lang === 'oz' ? 'Кўрсатиш:' : "Ko'rsatish:"}</span>
