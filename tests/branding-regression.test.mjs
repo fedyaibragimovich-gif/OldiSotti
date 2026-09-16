@@ -23,8 +23,18 @@ test('Telegram share helpers use canonical branded listing routes', async () => 
   }
 });
 
-test('sitemap aliases historical OLX IDs instead of publishing them directly', async () => {
+test('sitemap excludes seeded numeric demo inventory while preserving historical real aliases', async () => {
   const source = await readFile('api/sitemap.ts', 'utf8');
+  assert.match(source, /\.filter\(\(id\) => !LEGACY_DEMO_ID\.test\(id\)\)/);
   assert.match(source, /oldisotdi-listing-/);
-  assert.match(source, /oldisotdi-demo-/);
+  assert.doesNotMatch(source, /oldisotdi-demo-/);
+});
+
+test('listing renderer returns noindex 404 for seeded demo and missing listings', async () => {
+  const source = await readFile('api/listing-page.ts', 'utf8');
+  assert.match(source, /isSeededDemoId\(requestedId\)/);
+  assert.match(source, /X-Robots-Tag', 'noindex'/);
+  assert.match(source, /return res\.status\(404\)\.send\('Listing not found'\)/);
+  assert.match(source, /if \(!listing\)/);
+  assert.match(source, /return res\.status\(404\)\.send\(baseHtml\)/);
 });
