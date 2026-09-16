@@ -13,16 +13,54 @@ export default defineConfig(() => {
       rollupOptions: {
         output: {
           manualChunks(id) {
-            if (id.includes('node_modules/firebase/')) {
-              return 'firebase';
+            const normalizedId = id.replace(/\\/g, '/');
+
+            if (
+              normalizedId.includes('node_modules/@firebase/firestore') ||
+              normalizedId.includes('node_modules/firebase/firestore')
+            ) {
+              return 'firebase-firestore';
             }
-            if (id.includes('node_modules/recharts/') || id.includes('node_modules/d3-')) {
+            if (
+              normalizedId.includes('node_modules/@firebase/auth') ||
+              normalizedId.includes('node_modules/firebase/auth')
+            ) {
+              return 'firebase-auth';
+            }
+            if (
+              normalizedId.includes('node_modules/@firebase/storage') ||
+              normalizedId.includes('node_modules/firebase/storage')
+            ) {
+              return 'firebase-storage';
+            }
+            if (
+              normalizedId.includes('node_modules/@firebase/app-check') ||
+              normalizedId.includes('node_modules/firebase/app-check')
+            ) {
+              return 'firebase-app-check';
+            }
+            if (
+              normalizedId.includes('node_modules/@firebase/app') ||
+              normalizedId.includes('node_modules/firebase/app') ||
+              normalizedId.includes('node_modules/@firebase/component') ||
+              normalizedId.includes('node_modules/@firebase/logger') ||
+              normalizedId.includes('node_modules/@firebase/util')
+            ) {
+              return 'firebase-core';
+            }
+            if (
+              normalizedId.includes('node_modules/firebase/') ||
+              normalizedId.includes('node_modules/@firebase/')
+            ) {
+              return 'firebase-misc';
+            }
+            if (normalizedId.includes('node_modules/recharts/') || normalizedId.includes('node_modules/d3-')) {
               return 'charts';
             }
-            if (id.includes('node_modules/leaflet/')) {
+            if (normalizedId.includes('node_modules/leaflet/')) {
               return 'leaflet';
             }
-            if (id.includes('node_modules/lucide-react/')) {
+            if (normalizedId.includes('node_modules/lucide-react/')) {
               return 'icons';
             }
           },
