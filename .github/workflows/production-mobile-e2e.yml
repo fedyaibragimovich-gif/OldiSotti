@@ -1,9 +1,6 @@
 name: Production mobile E2E
 
 on:
-  push:
-    branches:
-      - feat/launch-hardening-e2e-20260916
   workflow_dispatch:
 
 permissions:
