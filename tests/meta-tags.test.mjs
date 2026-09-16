@@ -29,15 +29,21 @@ const sampleListing = {
   }
 };
 
-test('generateListingMeta creates formatted title, description, and canonical url', () => {
+test('generateListingMeta creates formatted title, description, and canonical /l/ url', () => {
   const meta = generateListingMeta(sampleListing, { baseUrl: 'https://oldisotdi.uz' });
   assert.ok(meta.title.includes('iPhone 15 Pro Max'));
   assert.ok(meta.title.includes('1,100') || meta.title.includes('1 100'));
   assert.ok(meta.title.endsWith('OldiSotdi'));
-  assert.equal(meta.url, 'https://oldisotdi.uz/?listing=test-101');
+  assert.equal(meta.url, 'https://oldisotdi.uz/l/test-101');
   assert.equal(meta.image, 'https://example.com/iphone-front.jpg');
   assert.ok(meta.description.includes('Yunusobod tumani'));
   assert.ok(meta.description.includes('Holati yangidek'));
+});
+
+test('legacy seeded IDs are never exposed by listing metadata', () => {
+  const meta = generateListingMeta({ ...sampleListing, id: 'olx-42' }, { baseUrl: 'https://oldisotdi.uz/' });
+  assert.equal(meta.url, 'https://oldisotdi.uz/l/oldisotdi-demo-42');
+  assert.equal(meta.url.includes('olx-'), false);
 });
 
 test('generateListingMeta falls back to high quality default image when images array is empty', () => {
@@ -47,7 +53,6 @@ test('generateListingMeta falls back to high quality default image when images a
 });
 
 test('injectListingMetaTags modifies document head and resetMetaTags restores defaults', () => {
-  // Mock minimal DOM
   const metaMap = new Map();
   const createdElements = [];
 
@@ -119,7 +124,6 @@ test('injectListingMetaTags modifies document head and resetMetaTags restores de
     location: { origin: 'https://oldisotdi.uz', href: 'https://oldisotdi.uz/' }
   };
 
-  // 1. Inject tags
   injectListingMetaTags(sampleListing, { currency: 'USD', lang: 'uz', baseUrl: 'https://oldisotdi.uz' });
 
   assert.ok(document.title.includes('iPhone 15 Pro Max'));
@@ -127,9 +131,8 @@ test('injectListingMetaTags modifies document head and resetMetaTags restores de
   assert.ok(ogTitle.getAttribute('content').includes('iPhone 15 Pro Max'));
   const ogImage = document.querySelector('meta[property="og:image"]');
   assert.equal(ogImage.getAttribute('content'), 'https://example.com/iphone-front.jpg');
-  assert.equal(canonicalLink.href, 'https://oldisotdi.uz/?listing=test-101');
+  assert.equal(canonicalLink.href, 'https://oldisotdi.uz/l/test-101');
 
-  // 2. Reset tags
   resetMetaTags();
 
   assert.equal(document.title, "OldiSotdi - O'zbekiston e'lonlar doskasi");
