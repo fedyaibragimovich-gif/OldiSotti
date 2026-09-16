@@ -10,6 +10,32 @@ test('restricted browser storage does not break preference access', () => {
   assert.deepEqual(readStoredIds('olx_favorites'), []);
 });
 
+test('legacy marketplace keys migrate to the OldiSotdi namespace', () => {
+  const values = new Map([
+    ['olx_lang', 'ru'],
+    ['oldisotti_currency', 'USD'],
+  ]);
+  globalThis.window = {
+    localStorage: {
+      getItem: (key) => values.has(key) ? values.get(key) : null,
+      setItem: (key, value) => values.set(key, value),
+      removeItem: (key) => values.delete(key),
+    }
+  };
+
+  assert.equal(browserStorage.getItem('olx_lang'), 'ru');
+  assert.equal(values.get('oldisotdi_lang'), 'ru');
+  assert.equal(values.has('olx_lang'), false);
+
+  assert.equal(browserStorage.getItem('oldisotti_currency'), 'USD');
+  assert.equal(values.get('oldisotdi_currency'), 'USD');
+  assert.equal(values.has('oldisotti_currency'), false);
+
+  browserStorage.setItem('olx_dark_mode', 'true');
+  assert.equal(values.get('oldisotdi_dark_mode'), 'true');
+  assert.equal(values.has('olx_dark_mode'), false);
+});
+
 test('invalid persisted favorites recover; valid IDs retain their order', () => {
   let raw;
   globalThis.window = { localStorage: { getItem: () => raw } };

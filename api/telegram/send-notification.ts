@@ -11,6 +11,17 @@ type VercelResponse = {
   json: (body: unknown) => void;
 };
 
+const LEGACY_OLX_ID = /^olx-(.+)$/i;
+const LEGACY_DEMO_ID = /^olx-(\d+)$/i;
+
+function toPublicListingId(id: string): string {
+  const normalized = String(id || '').trim();
+  const demoMatch = LEGACY_DEMO_ID.exec(normalized);
+  if (demoMatch) return `oldisotdi-demo-${demoMatch[1]}`;
+  const legacyMatch = LEGACY_OLX_ID.exec(normalized);
+  return legacyMatch ? `oldisotdi-listing-${legacyMatch[1]}` : normalized;
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ success: false, error: 'Method not allowed' });
@@ -31,7 +42,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const listingTitle = String(body.listingTitle || '').trim();
   const buyerName = String(body.buyerName || 'Foydalanuvchi').trim();
   const messageText = String(body.messageText || '').trim();
-  const listingId = String(body.listingId || '').trim();
+  const listingId = toPublicListingId(String(body.listingId || '').trim());
 
   if (!sellerTelegram || !messageText) {
     return res.status(400).json({ success: false, error: 'sellerTelegram and messageText are required' });

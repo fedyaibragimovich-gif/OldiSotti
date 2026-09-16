@@ -83,3 +83,10 @@ test('new conversations cannot target unpublished listings', async () => {
  await assertFails(setDoc(doc(db,'conversations/new'),{buyerId:'buyer',sellerUserId:'seller',listingId:'private',messages:[]}));
  await assertSucceeds(setDoc(doc(db,'conversations/new'),{buyerId:'buyer',sellerUserId:'seller',listingId:'phone',messages:[]}));
 });
+test('public platform settings fail closed if a legacy Telegram bot token exists', async () => {
+ await assertSucceeds(getDoc(doc(env.unauthenticatedContext().firestore(),'platform_settings/global_config')));
+ await env.withSecurityRulesDisabled(async ctx => {
+  await setDoc(doc(ctx.firestore(),'platform_settings/legacy_secret'),{autoApproveListings:false,telegramBotToken:'legacy-secret'});
+ });
+ await assertFails(getDoc(doc(env.unauthenticatedContext().firestore(),'platform_settings/legacy_secret')));
+});

@@ -1,5 +1,8 @@
 import { Listing } from '../types';
 import { auth } from '../lib/firebase';
+import { toPublicListingId } from '../lib/publicListingId';
+
+const FALLBACK_PUBLIC_ORIGIN = 'https://fedyaibragimovich-gif.vercel.app';
 
 export interface TelegramPostResponse {
   success: boolean;
@@ -42,15 +45,21 @@ async function readJsonResponse<T extends Record<string, any>>(res: Response): P
   }
 }
 
+function normalizeAppOrigin(appUrl?: string): string {
+  const origin = appUrl || (typeof window !== 'undefined' ? window.location.origin : FALLBACK_PUBLIC_ORIGIN);
+  return origin.replace(/\/$/, '');
+}
+
+function listingPublicUrl(listing: Listing, appUrl?: string): string {
+  return `${normalizeAppOrigin(appUrl)}/l/${encodeURIComponent(toPublicListingId(listing.id))}`;
+}
+
 export function formatTelegramPostPreview(listing: Listing, appUrl?: string): string {
-  const baseUrl = appUrl || (typeof window !== 'undefined' ? window.location.origin : 'https://oldisotdi.uz');
-  return `<a href="${baseUrl}/?listing=${encodeURIComponent(listing.id)}">OldiSotdi'da e'lonni ko'rish</a>`;
+  return `<a href="${listingPublicUrl(listing, appUrl)}">OldiSotdi'da e'lonni ko'rish</a>`;
 }
 
 export function createTelegramShareUrl(listing: Listing, appUrl?: string): string {
-  const baseUrl = appUrl || (typeof window !== 'undefined' ? window.location.origin : 'https://oldisotti.uz');
-  const url = `${baseUrl}/?listing=${listing.id}`;
-  return `https://t.me/share/url?url=${encodeURIComponent(url)}`;
+  return `https://t.me/share/url?url=${encodeURIComponent(listingPublicUrl(listing, appUrl))}`;
 }
 
 /** Bot credentials are never accepted from the browser. */
@@ -61,7 +70,7 @@ export async function postListingToTelegram(
   try {
     const headers = await getAuthHeaders();
     if (!headers) return { success: false, error: 'Telegramga yuborish uchun akkauntga kiring.' };
-    const baseUrl = options?.appUrl || (typeof window !== 'undefined' ? window.location.origin : 'https://oldisotti.uz');
+    const baseUrl = normalizeAppOrigin(options?.appUrl);
     const res = await fetch('/api/telegram/post-listing', {
       method: 'POST',
       headers,

@@ -44,6 +44,18 @@ jobs:
       - name: Listing data regression tests
         run: node --import tsx --test tests/listing-data.test.mjs
 
+      - name: Public listing ID regression tests
+        run: node --import tsx --test tests/public-listing-id.test.mjs
+
+      - name: Branding regression tests
+        run: node --test tests/branding-regression.test.mjs
+
+      - name: SEO metadata regression tests
+        run: node --import tsx --test tests/meta-tags.test.mjs
+
+      - name: Error boundary regression tests
+        run: node --import tsx --test tests/error-boundary.test.mjs
+
       - name: Service worker regression tests
         run: node --test tests/service-worker.test.mjs
 

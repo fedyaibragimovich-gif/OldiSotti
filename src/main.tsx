@@ -3,9 +3,16 @@ import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary.tsx';
 import { translations } from './data/translations.ts';
+import { mockListings } from './data/mockListings.ts';
 import { toLegacyListingId, toPublicListingId } from './lib/publicListingId.ts';
 import './index.css';
 import './performance.css';
+
+// Demo inventory is useful in local development, but must never be presented as
+// real marketplace inventory when production Firestore is empty or unavailable.
+if (import.meta.env.PROD) {
+  mockListings.splice(0, mockListings.length);
+}
 
 // Keep user-facing copy consistently branded as OldiSotdi while legacy
 // translation keys/storage identifiers remain compatible for existing users.
@@ -100,50 +107,28 @@ if (typeof window !== 'undefined') {
     window.setTimeout(openDeepLinkedListing, 250);
   }
 
-  // Transitional UI compatibility: old demo IDs can remain in Firestore until
-  // their references (favorites/chats/reports) are migrated, but users should
-  // never see the old prefix in the interface.
-  const normalizeLegacyDemoText = (root: Node) => {
-    const replaceText = (node: Node) => {
-      if (node.nodeType !== Node.TEXT_NODE || !node.nodeValue) return;
-      node.nodeValue = node.nodeValue.replace(/\bolx-(\d+)\b/gi, (_match, digits) => `oldisotdi-demo-${digits}`);
-    };
-
-    replaceText(root);
-    if (root.nodeType === Node.ELEMENT_NODE || root.nodeType === Node.DOCUMENT_FRAGMENT_NODE) {
-      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-      let current = walker.nextNode();
-      while (current) {
-        replaceText(current);
-        current = walker.nextNode();
-      }
-    }
-  };
-
+  // Keep the public /l/<id> URL only while a listing modal is open. This
+  // observer watches structural changes only; unlike the previous compatibility
+  // shim it never scans/re-writes all text nodes in the document.
   let hadListingModal = false;
-  const observer = new MutationObserver((mutations) => {
-    for (const mutation of mutations) {
-      mutation.addedNodes.forEach(normalizeLegacyDemoText);
-      if (mutation.type === 'characterData') normalizeLegacyDemoText(mutation.target);
-    }
+  const appRoot = document.getElementById('root');
+  if (appRoot) {
+    const observer = new MutationObserver(() => {
+      const listingModalOpen = Boolean(document.querySelector('[id^="price-alert-card-"]'));
+      if (listingModalOpen) {
+        hadListingModal = true;
+        return;
+      }
 
-    const listingModalOpen = Boolean(document.querySelector('[id^="price-alert-card-"]'));
-    if (listingModalOpen) {
-      hadListingModal = true;
-      return;
-    }
+      if (hadListingModal && /^\/l\//i.test(window.location.pathname)) {
+        const homeUrl = new URL(window.location.href);
+        homeUrl.pathname = '/';
+        homeUrl.searchParams.delete('listing');
+        window.history.replaceState(window.history.state, '', homeUrl);
+        hadListingModal = false;
+      }
+    });
 
-    // Closing a listing opened at /l/<id> should return to the marketplace home
-    // instead of leaving a stale listing URL that would reopen on refresh.
-    if (hadListingModal && /^\/l\//i.test(window.location.pathname)) {
-      const homeUrl = new URL(window.location.href);
-      homeUrl.pathname = '/';
-      homeUrl.searchParams.delete('listing');
-      window.history.replaceState(window.history.state, '', homeUrl);
-      hadListingModal = false;
-    }
-  });
-
-  observer.observe(document.body, { childList: true, subtree: true, characterData: true });
-  normalizeLegacyDemoText(document.body);
+    observer.observe(appRoot, { childList: true, subtree: true });
+  }
 }

@@ -223,7 +223,7 @@ service cloud.firestore {
     }
 
     match /platform_settings/{settingId} {
-      allow read: if true;
+      allow read: if isAdmin() || !resource.data.keys().hasAny(['telegramBotToken']);
       allow write: if isAdmin() && !request.resource.data.keys().hasAny(['telegramBotToken']);
     }
 

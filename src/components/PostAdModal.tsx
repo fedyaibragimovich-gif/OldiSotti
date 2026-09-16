@@ -181,7 +181,7 @@ export const PostAdModal: React.FC<PostAdModalProps> = ({
     setIsSubmitting(true);
     setUploadProgress(null);
     setErrorMsg('');
-    const listingId = `olx-${crypto.randomUUID()}`;
+    const listingId = `oldisotdi-${crypto.randomUUID()}`;
     let uploadedImages: string[] = [];
     try {
       const uploadResult = await uploadListingImagesToStorage(

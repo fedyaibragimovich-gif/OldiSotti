@@ -1,20 +1,32 @@
-# OldiSotti Security Audit
+# OldiSotdi security status
 
-## Scope
-Audit of the Firebase/Firestore configuration at commit `c911859e0a16927d5e87372248d9da308e7546e6`.
+Last reviewed: 16 September 2026.
 
-## Critical findings
+## Historical note
 
-### 1. Firestore rules allow unrestricted access
-The current `firestore.rules` grants public read/write access to conversations, users, moderation reports, and platform settings. Listing updates/deletes are also unrestricted.
+The original version of this document described an older commit where Firestore access was overly permissive. Those critical rules have since been replaced. Do not use the old finding as a description of the current `main` branch.
 
-This must be replaced before production deployment with authenticated, ownership-based rules and admin-only rules for moderation/platform settings.
+## Current controls
 
-### 2. Client-side Firebase configuration is committed
-`firebase-applet-config.json` contains the Firebase project configuration. Firebase web API keys are not secret credentials by themselves, but they must be protected by strict Firestore/Storage/Auth rules and appropriate Firebase API restrictions.
+- Public users can read active listings; owners can read their own listings; admin access is explicitly gated.
+- New listings require an authenticated non-anonymous user, validated ownership/content, safe initial status, and cannot self-grant VIP/TOP/verification flags.
+- Owner listing updates are field-limited; view increments are constrained to +1 on active listings.
+- Conversations are limited to participants/admin, with sender, unread-counter and message-shape validation.
+- Moderation reports are created by authenticated users and readable/updatable only by admin.
+- Notifications are scoped to the recipient, with constrained message-notification creation and read-state updates.
+- Blocked-seller documents are scoped to the owning user.
+- Storage uploads are owner-only, limited to JPEG/PNG/WebP images up to 10 MB; public listing images are readable and deletion is owner/admin controlled.
+- Firebase web configuration is client configuration, not a server secret. Security depends on Firestore/Storage/Auth rules and provider/API configuration.
+- Production responses include HSTS, `nosniff`, frame/referrer protections, COOP compatible with Google sign-in popups, and a restrictive Permissions Policy.
 
-## Recommended next step
-Implement authenticated access control first, then verify Storage rules, Authentication configuration, listing ownership, chat participant checks, and admin authorization before exposing the application publicly.
+## Remaining launch checks
 
-## Important
-This audit intentionally does not expose credential values. If any server-side secret was ever committed elsewhere in Git history, rotate it immediately.
+The following cannot be proven from repository source alone and must be verified on the live Firebase/Vercel configuration before a broad public announcement:
+
+1. Firebase Authentication Authorized Domains includes every production/custom domain actually used.
+2. Email/password, Google popup login and password-reset flows work on the final production domain.
+3. A real user can upload allowed images and cannot write another user's Storage path.
+4. Firestore and Storage rules deployed in the Firebase project match the tested repository rules.
+5. No server-side credential or bot token is present in client-delivered bundles or committed source.
+
+See `PRODUCTION_READINESS_2026_09_16.md` for the final release gate. Payment integration and the support assistant are outside this audit pass.
