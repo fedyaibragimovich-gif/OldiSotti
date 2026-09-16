@@ -50,6 +50,9 @@ jobs:
       - name: Progressive pagination regression tests
         run: node --test tests/progressive-pagination.test.mjs
 
+      - name: Cursor pagination regression tests
+        run: node --test tests/cursor-pagination.test.mjs
+
       - name: Public listing ID regression tests
         run: node --import tsx --test tests/public-listing-id.test.mjs
 
