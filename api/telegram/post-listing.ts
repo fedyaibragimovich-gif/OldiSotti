@@ -17,6 +17,29 @@ type TelegramResult = {
   description?: string;
 };
 
+const FALLBACK_PUBLIC_ORIGIN = 'https://fedyaibragimovich-gif.vercel.app';
+const LEGACY_OLX_ID = /^olx-(.+)$/i;
+const LEGACY_DEMO_ID = /^olx-(\d+)$/i;
+
+function toPublicListingId(id: string): string {
+  const normalized = String(id || '').trim();
+  const demoMatch = LEGACY_DEMO_ID.exec(normalized);
+  if (demoMatch) return `oldisotdi-demo-${demoMatch[1]}`;
+  const legacyMatch = LEGACY_OLX_ID.exec(normalized);
+  return legacyMatch ? `oldisotdi-listing-${legacyMatch[1]}` : normalized;
+}
+
+function normalizePublicOrigin(value: unknown): string {
+  const candidate = String(value || '').trim() || FALLBACK_PUBLIC_ORIGIN;
+  try {
+    const parsed = new URL(candidate);
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return FALLBACK_PUBLIC_ORIGIN;
+    return parsed.origin;
+  } catch {
+    return FALLBACK_PUBLIC_ORIGIN;
+  }
+}
+
 function escapeHtml(value: unknown): string {
   return String(value ?? '')
     .replace(/&/g, '&amp;')
@@ -59,7 +82,6 @@ function buildCaption(listing: Record<string, any>, url: string): string {
     `🔎 <a href="${escapeHtml(url)}">OldiSotdi'da e'lonni ko'rish</a>`
   ].filter((line) => line !== '');
 
-  // Telegram photo captions are limited to 1024 characters.
   return lines.join('\n').slice(0, 1000);
 }
 
@@ -158,16 +180,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const listing = body.listing as Record<string, any> | undefined;
-  const baseUrl = String(body.appUrl || '').trim() || 'https://oldisotti.uz';
-  const url = listing
-    ? `${baseUrl}/?listing=${encodeURIComponent(String(listing.id || ''))}`
-    : String(body.url || '').trim();
-
-  if (!url) return res.status(400).json({ success: false, error: 'listing url is required' });
   if (!listing) return res.status(400).json({ success: false, error: 'listing is required' });
   if (listing.status && listing.status !== 'active') {
     return res.status(409).json({ success: false, error: 'Only active listings can be published to Telegram' });
   }
+
+  const listingId = String(listing.id || '').trim();
+  if (!listingId) return res.status(400).json({ success: false, error: 'listing id is required' });
+  const baseUrl = normalizePublicOrigin(body.appUrl);
+  const url = `${baseUrl}/l/${encodeURIComponent(toPublicListingId(listingId))}`;
 
   const caption = buildCaption(listing, url);
   const firstImage = Array.isArray(listing.images) ? String(listing.images[0] || '') : '';
