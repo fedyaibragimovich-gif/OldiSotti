@@ -59,6 +59,9 @@ jobs:
       - name: SEO metadata regression tests
         run: node --import tsx --test tests/meta-tags.test.mjs
 
+      - name: Launch hardening regression tests
+        run: node --import tsx --test tests/launch-hardening.test.mjs
+
       - name: Error boundary regression tests
         run: node --import tsx --test tests/error-boundary.test.mjs
 
