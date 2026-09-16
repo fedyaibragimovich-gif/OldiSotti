@@ -5,6 +5,8 @@ import { ErrorBoundary } from './components/ErrorBoundary.tsx';
 import { translations } from './data/translations.ts';
 import { mockListings } from './data/mockListings.ts';
 import { toLegacyListingId, toPublicListingId } from './lib/publicListingId.ts';
+import { initializeProductionMonitoring } from './lib/monitoring.ts';
+import { syncSiteOriginMetadata } from './lib/siteMetadata.ts';
 import './index.css';
 import './performance.css';
 
@@ -28,6 +30,8 @@ for (const locale of Object.values(localizedCopy)) {
 let pendingDeepLinkListingId: string | null = null;
 
 if (typeof window !== 'undefined') {
+  if (import.meta.env.PROD) initializeProductionMonitoring();
+
   const nativeReplaceState = window.history.replaceState.bind(window.history);
   const listingPathPattern = /^\/l\/([^/]+)\/?$/i;
 
@@ -56,6 +60,11 @@ if (typeof window !== 'undefined') {
   } catch {
     pendingDeepLinkListingId = null;
   }
+
+  // Canonical, hreflang, OpenGraph URL and WebSite JSON-LD must follow whichever
+  // production hostname is serving the app. This makes a future custom domain
+  // SEO-safe immediately instead of leaving old vercel.app canonicals behind.
+  syncSiteOriginMetadata();
 
   // App.tsx historically writes ?listing=<internal-id> when a card is opened.
   // Transparently convert that navigation to /l/<public-id> without changing
@@ -125,6 +134,7 @@ if (typeof window !== 'undefined') {
         homeUrl.pathname = '/';
         homeUrl.searchParams.delete('listing');
         window.history.replaceState(window.history.state, '', homeUrl);
+        syncSiteOriginMetadata();
         hadListingModal = false;
       }
     });
