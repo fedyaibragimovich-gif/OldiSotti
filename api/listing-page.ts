@@ -11,17 +11,17 @@ const PUBLIC_DEMO_ID = /^oldisotdi-demo-(\d+)$/i;
 const PUBLIC_LEGACY_ID = /^oldisotdi-listing-(.+)$/i;
 
 function toPublicListingId(id: string): string {
-  const demoMatch = LEGACY_DEMO_ID.exec(id);
-  if (demoMatch) return `oldisotdi-demo-${demoMatch[1]}`;
   const legacyMatch = LEGACY_OLX_ID.exec(id);
   return legacyMatch ? `oldisotdi-listing-${legacyMatch[1]}` : id;
 }
 
 function toLegacyListingId(id: string): string {
-  const demoMatch = PUBLIC_DEMO_ID.exec(id);
-  if (demoMatch) return `olx-${demoMatch[1]}`;
   const legacyMatch = PUBLIC_LEGACY_ID.exec(id);
   return legacyMatch ? `olx-${legacyMatch[1]}` : id;
+}
+
+function isSeededDemoId(id: string): boolean {
+  return LEGACY_DEMO_ID.test(id) || PUBLIC_DEMO_ID.test(id);
 }
 
 function escapeHtml(value: unknown): string {
@@ -147,7 +147,14 @@ export default async function handler(req: any, res: any) {
     return res.status(400).send('Invalid listing id');
   }
 
-  // Every historical OLX-prefixed document is redirected to a branded public alias.
+  // Seeded numeric demo inventory must never be exposed as a public listing.
+  if (isSeededDemoId(requestedId)) {
+    res.setHeader('X-Robots-Tag', 'noindex');
+    res.setHeader('Cache-Control', 'public, s-maxage=300');
+    return res.status(404).send('Listing not found');
+  }
+
+  // Historical real OLX-prefixed UUID documents keep working through a branded alias.
   const publicId = toPublicListingId(requestedId);
   if (publicId !== requestedId) {
     res.setHeader('Location', `/l/${encodeURIComponent(publicId)}`);
@@ -157,11 +164,19 @@ export default async function handler(req: any, res: any) {
 
   try {
     const [baseHtml, listing] = await Promise.all([fetchBaseHtml(), fetchListing(requestedId)]);
+    if (!listing) {
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.setHeader('X-Robots-Tag', 'noindex');
+      res.setHeader('Cache-Control', 'no-store');
+      if (req.method === 'HEAD') return res.status(404).end();
+      return res.status(404).send(baseHtml);
+    }
+
     const canonicalUrl = `${deploymentOrigin()}/l/${encodeURIComponent(publicId)}`;
-    const output = listing ? injectListingMeta(baseHtml, listing, canonicalUrl) : baseHtml;
+    const output = injectListingMeta(baseHtml, listing, canonicalUrl);
 
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.setHeader('Cache-Control', listing ? 'public, s-maxage=60, stale-while-revalidate=300' : 'no-store');
+    res.setHeader('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
     if (req.method === 'HEAD') return res.status(200).end();
     return res.status(200).send(output);
   } catch {
