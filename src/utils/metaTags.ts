@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import type { Listing, Currency, Language } from '../types';
 import { formatPrice } from './formatters.ts';
+import { toPublicListingId } from '../lib/publicListingId.ts';
 
 interface DefaultMetaSnapshot {
   title: string;
@@ -8,6 +9,7 @@ interface DefaultMetaSnapshot {
   meta: Map<string, string>;
 }
 
+const FALLBACK_PUBLIC_ORIGIN = 'https://fedyaibragimovich-gif.vercel.app';
 let initialSnapshot: DefaultMetaSnapshot | null = null;
 
 function getMetaKey(attr: 'name' | 'property', key: string): string {
@@ -31,7 +33,7 @@ function captureInitialSnapshot() {
 
   initialSnapshot = {
     title: document.title || "OldiSotdi - O'zbekiston e'lonlar doskasi",
-    canonical: canonicalEl?.getAttribute('href') || 'https://oldisotdi.uz/',
+    canonical: canonicalEl?.getAttribute('href') || `${FALLBACK_PUBLIC_ORIGIN}/`,
     meta: metaMap
   };
 }
@@ -76,7 +78,6 @@ export function generateListingMeta(
 
   const title = `${listing.title} — ${priceFormatted} | OldiSotdi`;
 
-  // Build a concise, rich social snippet
   const conditionLabel = listing.condition === 'new'
     ? (options?.lang === 'ru' ? 'Новый' : options?.lang === 'oz' ? 'Янги' : 'Yangi')
     : (options?.lang === 'ru' ? 'Б/у' : options?.lang === 'oz' ? 'Ишлатилган' : 'Ishlatilgan');
@@ -88,17 +89,16 @@ export function generateListingMeta(
   const descSnippet = sanitizeText(listing.description, 160);
   const fullDescription = `${priceFormatted} • ${conditionLabel} • ${locationLabel}. ${descSnippet}`;
 
-  // Primary image
   const defaultImage = 'https://images.unsplash.com/photo-1557804506-669a67965ba0?auto=format&fit=crop&w=1200&h=630&q=80';
   let primaryImage = listing.images && listing.images.length > 0 ? listing.images[0] : defaultImage;
 
-  const origin = options?.baseUrl || (typeof window !== 'undefined' ? window.location.origin : 'https://oldisotdi.uz');
+  const origin = (options?.baseUrl || (typeof window !== 'undefined' ? window.location.origin : FALLBACK_PUBLIC_ORIGIN)).replace(/\/$/, '');
 
   if (primaryImage.startsWith('/')) {
     primaryImage = `${origin}${primaryImage}`;
   }
 
-  const listingUrl = `${origin}/l/${encodeURIComponent(listing.id)}`;
+  const listingUrl = `${origin}/l/${encodeURIComponent(toPublicListingId(listing.id))}`;
 
   return {
     title,
@@ -125,14 +125,11 @@ export function injectListingMetaTags(
 
   const meta = generateListingMeta(listing, options);
 
-  // 1. Browser Title
   document.title = meta.title;
 
-  // 2. Standard Meta Tags
   setOrUpdateMetaTag('name', 'title', meta.title);
   setOrUpdateMetaTag('name', 'description', meta.description);
 
-  // 3. OpenGraph Tags
   setOrUpdateMetaTag('property', 'og:type', 'product');
   setOrUpdateMetaTag('property', 'og:site_name', 'OldiSotdi');
   setOrUpdateMetaTag('property', 'og:url', meta.url);
@@ -146,17 +143,14 @@ export function injectListingMetaTags(
   setOrUpdateMetaTag('property', 'product:price:amount', meta.price);
   setOrUpdateMetaTag('property', 'product:price:currency', meta.currency);
 
-  // 4. Twitter Card Tags
   setOrUpdateMetaTag('name', 'twitter:card', 'summary_large_image');
   setOrUpdateMetaTag('name', 'twitter:url', meta.url);
   setOrUpdateMetaTag('name', 'twitter:title', meta.title);
   setOrUpdateMetaTag('name', 'twitter:description', meta.description);
   setOrUpdateMetaTag('name', 'twitter:image', meta.image);
 
-  // 5. Canonical Link
   setOrUpdateCanonical(meta.url);
 
-  // 6. JSON-LD Structured Data for Rich Results
   try {
     let jsonLdScript = document.getElementById('listing-jsonld') as HTMLScriptElement | null;
     if (!jsonLdScript) {
@@ -195,7 +189,6 @@ export function resetMetaTags(): void {
     document.title = initialSnapshot.title;
     setOrUpdateCanonical(initialSnapshot.canonical);
 
-    // Revert all captured tags
     initialSnapshot.meta.forEach((content, fullKey) => {
       const [attr, ...rest] = fullKey.split(':') as ['name' | 'property', string[]];
       const key = rest.join(':');
@@ -203,10 +196,9 @@ export function resetMetaTags(): void {
     });
   } else {
     document.title = "OldiSotdi - O'zbekiston e'lonlar doskasi";
-    setOrUpdateCanonical('https://oldisotdi.uz/');
+    setOrUpdateCanonical(`${FALLBACK_PUBLIC_ORIGIN}/`);
   }
 
-  // Remove the product JSON-LD script tag
   const jsonLdScript = document.getElementById('listing-jsonld');
   if (jsonLdScript) {
     jsonLdScript.remove();
