@@ -3,9 +3,16 @@ import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary.tsx';
 import { translations } from './data/translations.ts';
+import { mockListings } from './data/mockListings.ts';
 import { toLegacyListingId, toPublicListingId } from './lib/publicListingId.ts';
 import './index.css';
 import './performance.css';
+
+// Demo inventory is useful in local development, but must never be presented as
+// real marketplace inventory when production Firestore is empty or unavailable.
+if (import.meta.env.PROD) {
+  mockListings.splice(0, mockListings.length);
+}
 
 // Keep user-facing copy consistently branded as OldiSotdi while legacy
 // translation keys/storage identifiers remain compatible for existing users.
