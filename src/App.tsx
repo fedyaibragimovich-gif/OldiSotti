@@ -18,6 +18,7 @@ import { initialPlatformSettings, initialModerationReports } from './data/adminD
 import { AlertTriangle } from 'lucide-react';
 import {
   subscribeToListings,
+  fetchListingsPage,
   fetchListingById,
   seedInitialListingsIfEmpty,
   saveListingToDb,
@@ -249,18 +250,30 @@ export default function App() {
 
 
 
-  // Pagination and progressive loading states
+  // Pagination and progressive loading states. The newest public page stays realtime;
+  // older pages are fetched once with a Firestore startAfter() cursor so loading
+  // 48/72/96 items never re-reads the preceding documents.
+  const FIRESTORE_PAGE_SIZE = 24;
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(12);
-  const [firestoreQueryLimit, setFirestoreQueryLimit] = useState(24);
   const [hasMoreInDb, setHasMoreInDb] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const olderListingsRef = useRef<Listing[]>([]);
+  const listingCursorRef = useRef<string | null>(null);
+  const cursorPagingStartedRef = useRef(false);
+  const loadingMoreRef = useRef(false);
 
-  // Real-time Cloud Database (Firestore) synchronization - Listings with pagination limit
+  const mergeListingsById = (primary: Listing[], secondary: Listing[]) => {
+    const merged = new Map<string, Listing>();
+    [...secondary, ...primary].forEach((item) => merged.set(item.id, item));
+    return [...merged.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  };
+
+  // Real-time first page + private own listings. Older public pages are appended
+  // through fetchListingsPage() instead of increasing the realtime query limit.
   useEffect(() => {
     let isMounted = true;
 
-    // Resilient fallback: if network is offline or Firestore connection is delayed, show initial listings
     const fallbackTimer = setTimeout(() => {
       if (isMounted) {
         setListings((prev) => (prev.length === 0 ? mockListings : prev));
@@ -268,19 +281,23 @@ export default function App() {
       }
     }, 2500);
 
-    // 1. Listings real-time listener with server-side limit
     const unsubscribeListings = subscribeToListings(
-      async (dbListings, hasMore) => {
+      async (dbListings, hasMore, lastPublicCreatedAt) => {
         if (!isMounted) return;
         clearTimeout(fallbackTimer);
         setIsDbConnected(true);
         setIsLoadingListings(false);
         setIsLoadingMore(false);
-        setHasMoreInDb(Boolean(hasMore));
-        if (dbListings.length === 0) {
+
+        if (!cursorPagingStartedRef.current) {
+          listingCursorRef.current = lastPublicCreatedAt || null;
+          setHasMoreInDb(Boolean(hasMore));
+        }
+
+        if (dbListings.length === 0 && olderListingsRef.current.length === 0) {
           setListings(mockListings);
         } else {
-          setListings(dbListings);
+          setListings(mergeListingsById(dbListings, olderListingsRef.current));
         }
       },
       (err) => {
@@ -292,7 +309,7 @@ export default function App() {
         setListings((prev) => (prev.length === 0 ? mockListings : prev));
       },
       () => { if (isMounted) { setIsLoadingListings(true); setIsDbConnected(false); } },
-      firestoreQueryLimit
+      FIRESTORE_PAGE_SIZE
     );
 
     return () => {
@@ -300,7 +317,43 @@ export default function App() {
       clearTimeout(fallbackTimer);
       unsubscribeListings();
     };
-  }, [firestoreQueryLimit]);
+  }, []);
+
+  // A login/logout switches the private owner query. Public cursor pages are reset
+  // as well so data belonging to the previous session can never linger in memory.
+  useEffect(() => {
+    olderListingsRef.current = [];
+    listingCursorRef.current = null;
+    cursorPagingStartedRef.current = false;
+    loadingMoreRef.current = false;
+    setHasMoreInDb(false);
+    setIsLoadingMore(false);
+    setCurrentPage(1);
+  }, [currentUser?.uid]);
+
+  const loadNextFirestorePage = async () => {
+    if (loadingMoreRef.current || !hasMoreInDb || !listingCursorRef.current || isAdminUser(currentUser)) return;
+    loadingMoreRef.current = true;
+    cursorPagingStartedRef.current = true;
+    setIsLoadingMore(true);
+    try {
+      const previousCursor = listingCursorRef.current;
+      const page = await fetchListingsPage(FIRESTORE_PAGE_SIZE, previousCursor);
+      const existingIds = new Set(olderListingsRef.current.map((item) => item.id));
+      const newUniqueCount = page.listings.filter((item) => !existingIds.has(item.id)).length;
+      olderListingsRef.current = mergeListingsById(page.listings, olderListingsRef.current);
+      setListings((prev) => mergeListingsById(page.listings, prev));
+      if (page.lastVisibleCreatedAt) listingCursorRef.current = page.lastVisibleCreatedAt;
+      const cursorAdvanced = Boolean(page.lastVisibleCreatedAt && page.lastVisibleCreatedAt !== previousCursor);
+      setHasMoreInDb(Boolean(page.hasMore && (newUniqueCount > 0 || cursorAdvanced)));
+    } catch (err) {
+      console.warn('Could not load the next Firestore cursor page:', err);
+      // Keep hasMoreInDb true so the user can retry after a transient failure.
+    } finally {
+      loadingMoreRef.current = false;
+      setIsLoadingMore(false);
+    }
+  };
 
   // Real-time Cloud Database (Firestore) synchronization - Conversations & Settings
   useEffect(() => {
@@ -577,10 +630,10 @@ export default function App() {
     const nextDisplayed = (currentPage + 1) * itemsPerPage;
     setCurrentPage((prev) => prev + 1);
 
-    // If approaching or exceeding current database limit and there's more in Firestore, fetch next batch!
-    if (nextDisplayed >= firestoreQueryLimit && hasMoreInDb) {
-      setIsLoadingMore(true);
-      setFirestoreQueryLimit((prev) => prev + 24);
+    // Preload the next server page only when the UI is about to exhaust the
+    // currently loaded filtered results. startAfter() prevents cumulative reads.
+    if (nextDisplayed >= filteredListings.length && hasMoreInDb) {
+      void loadNextFirestorePage();
     }
   };
 
@@ -595,8 +648,8 @@ export default function App() {
   const handlePageSizeChange = (newSize: number) => {
     setItemsPerPage(newSize);
     setCurrentPage(1);
-    if (newSize > firestoreQueryLimit && hasMoreInDb) {
-      setFirestoreQueryLimit(newSize + 12);
+    if (newSize > filteredListings.length && hasMoreInDb) {
+      void loadNextFirestorePage();
     }
   };
 
