@@ -54,6 +54,13 @@ export default defineConfig(() => {
             ) {
               return 'firebase-misc';
             }
+            if (
+              normalizedId.includes('node_modules/react/') ||
+              normalizedId.includes('node_modules/react-dom/') ||
+              normalizedId.includes('node_modules/scheduler/')
+            ) {
+              return 'react-vendor';
+            }
             if (normalizedId.includes('node_modules/recharts/') || normalizedId.includes('node_modules/d3-')) {
               return 'charts';
             }
@@ -62,6 +69,11 @@ export default defineConfig(() => {
             }
             if (normalizedId.includes('node_modules/lucide-react/')) {
               return 'icons';
+            }
+            // Keep third-party code stable across app deployments so repeat visits
+            // can reuse the browser/CDN cache even when OldiSotdi source changes.
+            if (normalizedId.includes('node_modules/')) {
+              return 'vendor';
             }
           },
         },
