@@ -43,8 +43,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({
   onResetToHome,
   darkMode = false,
   onToggleDarkMode,
-  onOpenAdmin,
-  isDbConnected = false
+  onOpenAdmin
 }) => {
   const t = getTranslation(lang);
   const [langDropdownOpen, setLangDropdownOpen] = useState(false);
@@ -130,11 +129,6 @@ export const Header: React.FC<HeaderProps> = React.memo(({
               {darkMode ? <><Sun size={16} className="text-amber-400 shrink-0" /><span className="hidden md:inline text-amber-500 dark:text-amber-400 font-semibold">{t.dayMode}</span></> : <><Moon size={16} className="text-indigo-600 dark:text-indigo-400 shrink-0" /><span className="hidden md:inline text-slate-700 dark:text-slate-200 font-semibold">{t.nightMode}</span></>}
             </button>
           )}
-
-          <div id="cloud-db-status-badge" className={`hidden md:flex items-center gap-1.5 rounded-xl px-2 sm:px-2.5 py-1.5 text-xs font-semibold border transition-all select-none ${isDbConnected ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200/80 dark:border-emerald-800/70' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200/80 dark:border-slate-700'}`} title={isDbConnected ? "Firestore bulutli ma'lumotlar bazasi ulangan va real-vaqt rejimida sinxronlanmoqda" : "Ma'lumotlar bazasi ulanmoqda..."}>
-            <span className={`w-2 h-2 rounded-full ${isDbConnected ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
-            <span className="hidden lg:inline">{isDbConnected ? 'Firestore Jonli' : 'Baza'}</span>
-          </div>
 
           {onOpenAdmin && isAdmin && (
             <button id="header-admin-btn" type="button" onClick={onOpenAdmin} className="flex items-center gap-1.5 rounded-xl px-2 sm:px-2.5 py-1.5 text-xs sm:text-sm font-bold bg-indigo-50 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/80 border border-indigo-200/80 dark:border-indigo-800/80 transition-all cursor-pointer shadow-2xs" title={t.adminPanel} aria-label={t.adminPanel}>
