@@ -17,6 +17,7 @@ import {
   ConfirmationResult
 } from 'firebase/auth';
 import { auth } from './firebase';
+import { normalizePhoneOtp, normalizeUzbekPhoneToE164 } from './phoneAuth';
 
 export const ADMIN_UID = 'Q81AQDKw7GXYeNgdrnp2qvYgyS02';
 export const ADMIN_EMAILS = ['fedya.ibragimovich@gmail.com'];
@@ -189,9 +190,16 @@ export const sendPhoneVerificationCode = async (
   containerId: string = 'recaptcha-container'
 ): Promise<ConfirmationResult> => {
   await persistAuthSession();
+  const normalizedPhone = normalizeUzbekPhoneToE164(phoneNumber);
+  if (!normalizedPhone) {
+    throw Object.assign(new Error('Uzbekistan phone number must contain 9 local digits.'), {
+      code: 'auth/invalid-phone-number'
+    });
+  }
+
   const verifier = setupRecaptcha(containerId);
   try {
-    return await signInWithPhoneNumber(auth, phoneNumber, verifier);
+    return await signInWithPhoneNumber(auth, normalizedPhone, verifier);
   } finally {
     // The verifier is only needed to request the SMS. Keeping it alive after
     // Firebase returns a ConfirmationResult causes stale/duplicate containers
@@ -205,8 +213,8 @@ export const confirmPhoneVerificationCode = async (
   verificationCode: string
 ) => {
   await persistAuthSession();
-  const normalizedCode = verificationCode.replace(/\D/g, '').slice(0, 6);
-  if (normalizedCode.length !== 6) {
+  const normalizedCode = normalizePhoneOtp(verificationCode);
+  if (!normalizedCode) {
     throw Object.assign(new Error('Verification code must contain 6 digits.'), {
       code: 'auth/invalid-verification-code'
     });
