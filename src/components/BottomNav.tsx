@@ -32,6 +32,9 @@ interface BottomNavProps {
   onOpenAuth?: (mode: 'login' | 'register') => void;
 }
 
+const isInternalPhonePasswordEmail = (email?: string | null) =>
+  Boolean(email && /^phone-998\d{9}@auth\.oldi-sotdi\.uz$/i.test(email));
+
 export const BottomNav: React.FC<BottomNavProps> = React.memo(({
   lang,
   unreadCount,
@@ -94,7 +97,9 @@ export const BottomNav: React.FC<BottomNavProps> = React.memo(({
     }
   };
 
-  const displayName = user?.displayName || user?.email?.split('@')[0] || 'Foydalanuvchi';
+  const safeEmail = user?.email && !isInternalPhonePasswordEmail(user.email) ? user.email : null;
+  const accountIdentifier = user?.phoneNumber || safeEmail || '';
+  const displayName = user?.displayName || (user?.phoneNumber ? 'Foydalanuvchi' : safeEmail?.split('@')[0]) || 'Foydalanuvchi';
   const initials = displayName.slice(0, 2).toUpperCase();
 
   return (
@@ -116,7 +121,7 @@ export const BottomNav: React.FC<BottomNavProps> = React.memo(({
                 <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-tr from-indigo-600 to-blue-600 text-white font-black text-sm shadow-md">{initials}</div>
                 <div className="min-w-0">
                   <h4 className="font-bold text-base truncate">{displayName}</h4>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{user?.email || 'Akkauntga kiring'}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{accountIdentifier || 'Akkauntga kiring'}</p>
                 </div>
               </div>
               <button type="button" onClick={() => setProfileModalOpen(false)} className="p-1.5 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 cursor-pointer"><X size={18} /></button>
