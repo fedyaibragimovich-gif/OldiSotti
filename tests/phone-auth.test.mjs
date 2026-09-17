@@ -21,6 +21,7 @@ test('OTP accepts exactly six numeric digits', () => {
   assert.equal(normalizePhoneOtp('123456'), '123456');
   assert.equal(normalizePhoneOtp('12 34-56'), '123456');
   assert.equal(normalizePhoneOtp('12345'), null);
+  assert.equal(normalizePhoneOtp('1234567'), null);
   assert.equal(normalizePhoneOtp('abcdef'), null);
 });
 
