@@ -113,20 +113,63 @@ export const logoutUser = async () => {
 };
 
 let appRecaptchaVerifier: RecaptchaVerifier | null = null;
+let appRecaptchaContainer: HTMLElement | null = null;
+let appOwnsRecaptchaContainer = false;
 
-export const setupRecaptcha = (containerId: string = 'recaptcha-container'): RecaptchaVerifier => {
+const disposeRecaptcha = () => {
   if (appRecaptchaVerifier) {
     try {
       appRecaptchaVerifier.clear();
     } catch {
-      // ignore
+      // ignore cleanup failures
     }
     appRecaptchaVerifier = null;
   }
 
+  if (appOwnsRecaptchaContainer && appRecaptchaContainer?.isConnected) {
+    appRecaptchaContainer.remove();
+  }
+  appRecaptchaContainer = null;
+  appOwnsRecaptchaContainer = false;
+};
+
+const ensureRecaptchaContainer = (containerId: string): HTMLElement => {
+  if (typeof document === 'undefined') {
+    throw new Error('Phone authentication requires a browser environment.');
+  }
+
+  const existing = document.getElementById(containerId);
+  if (existing) {
+    appRecaptchaContainer = existing;
+    appOwnsRecaptchaContainer = false;
+    return existing;
+  }
+
+  // During the OTP step the visible form no longer renders its original
+  // recaptcha div. Resending must still work, so create a temporary off-screen
+  // host and remove it again when the verification flow finishes.
+  const fallback = document.createElement('div');
+  fallback.id = containerId;
+  fallback.setAttribute('aria-hidden', 'true');
+  fallback.style.position = 'fixed';
+  fallback.style.left = '-10000px';
+  fallback.style.top = '-10000px';
+  fallback.style.width = '1px';
+  fallback.style.height = '1px';
+  fallback.style.overflow = 'hidden';
+  document.body.appendChild(fallback);
+
+  appRecaptchaContainer = fallback;
+  appOwnsRecaptchaContainer = true;
+  return fallback;
+};
+
+export const setupRecaptcha = (containerId: string = 'recaptcha-container'): RecaptchaVerifier => {
+  disposeRecaptcha();
   auth.languageCode = 'uz';
 
-  appRecaptchaVerifier = new RecaptchaVerifier(auth, containerId, {
+  const container = ensureRecaptchaContainer(containerId);
+  appRecaptchaVerifier = new RecaptchaVerifier(auth, container, {
     size: 'invisible',
     callback: () => {
       // reCAPTCHA solved
@@ -140,14 +183,7 @@ export const setupRecaptcha = (containerId: string = 'recaptcha-container'): Rec
 };
 
 export const clearRecaptcha = () => {
-  if (appRecaptchaVerifier) {
-    try {
-      appRecaptchaVerifier.clear();
-    } catch {
-      // ignore
-    }
-    appRecaptchaVerifier = null;
-  }
+  disposeRecaptcha();
 };
 
 export const sendPhoneVerificationCode = async (
@@ -168,4 +204,3 @@ export const confirmPhoneVerificationCode = async (
 };
 
 export type { ConfirmationResult };
-
