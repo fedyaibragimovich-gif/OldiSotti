@@ -34,7 +34,10 @@ function initFirestoreInstance() {
   const isBrowser = typeof window !== 'undefined';
   try {
     return initializeFirestore(app, {
-      experimentalForceLongPolling: isBrowser,
+      // Prefer Firestore's normal streaming transport and only fall back to
+      // long-polling when the browser/network actually requires it. Forcing
+      // long-polling on every mobile connection adds avoidable startup latency.
+      experimentalAutoDetectLongPolling: isBrowser,
       ignoreUndefinedProperties: true
     }, dbId);
   } catch {
@@ -53,6 +56,7 @@ export const BLOCKED_SELLERS_COLLECTION = 'blocked_sellers';
 const ADMIN_UID = 'Q81AQDKw7GXYeNgdrnp2qvYgyS02';
 const ADMIN_EMAIL = 'fedya.ibragimovich@gmail.com';
 const LISTINGS_REALTIME_LIMIT = 300;
+const PUBLIC_INITIAL_PAGE_LIMIT = 12;
 const CONVERSATIONS_REALTIME_LIMIT = 100;
 const NOTIFICATIONS_REALTIME_LIMIT = 50;
 
@@ -96,8 +100,10 @@ export function subscribeToListings(
     const docCounts = new Map<number, number>();
 
     // Public and private queries are separate so unpublished listings never leak.
-    // Query limit is applied to protect performance and bandwidth under real traffic!
+    // The first public paint only needs the 12 cards visible in the UI. Older
+    // results continue to load through the existing cursor pagination path.
     const admin = isCurrentAdmin();
+    const publicPageSize = Math.min(Math.max(1, pageSize), PUBLIC_INITIAL_PAGE_LIMIT);
     const queries = admin
       ? [query(collection(db, LISTINGS_COLLECTION), orderBy('createdAt', 'desc'), limit(LISTINGS_REALTIME_LIMIT))]
       : [
@@ -105,7 +111,7 @@ export function subscribeToListings(
             collection(db, LISTINGS_COLLECTION),
             where('status', '==', 'active'),
             orderBy('createdAt', 'desc'),
-            limit(pageSize)
+            limit(publicPageSize)
           ),
           ...(user && !user.isAnonymous
             ? [query(collection(db, LISTINGS_COLLECTION), where('userId', '==', user.uid), limit(LISTINGS_REALTIME_LIMIT))]
@@ -123,7 +129,7 @@ export function subscribeToListings(
         const activeCount = docCounts.get(0) || 0;
         const publicItems = sources.get(0) || [];
         const lastPublicCreatedAt = admin ? undefined : publicItems[publicItems.length - 1]?.createdAt;
-        const hasMore = admin ? false : activeCount >= pageSize;
+        const hasMore = admin ? false : activeCount >= publicPageSize;
         onSuccess(sorted, hasMore, lastPublicCreatedAt);
       }, error => onError?.(error)));
     });
