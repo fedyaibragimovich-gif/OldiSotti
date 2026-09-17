@@ -6,11 +6,17 @@ import {
   ArrowLeftRight,
   Sun,
   Moon,
-  ShieldCheck
+  ShieldCheck,
+  Plus,
+  User,
+  LogOut,
+  Layers,
+  Loader2
 } from 'lucide-react';
 import { Language, Currency } from '../types';
 import { getTranslation } from '../data/translations';
-import { subscribeToAuth, isAdminUser } from '../lib/auth';
+import { subscribeToAuth, isAdminUser, logoutUser } from '../lib/auth';
+import type { User as FirebaseUser } from 'firebase/auth';
 import { NotificationCenter } from './NotificationCenter';
 
 interface HeaderProps {
@@ -27,6 +33,7 @@ interface HeaderProps {
   onOpenChat?: () => void;
   onOpenPostAd?: () => void;
   onOpenMyAds?: () => void;
+  onOpenAuth?: (mode?: 'login' | 'register') => void;
   selectedCategoryId?: string;
   onSelectCategory?: (categoryId: string) => void;
   onOpenAdmin?: () => void;
@@ -43,26 +50,52 @@ export const Header: React.FC<HeaderProps> = React.memo(({
   onResetToHome,
   darkMode = false,
   onToggleDarkMode,
-  onOpenAdmin
+  onOpenAdmin,
+  onOpenPostAd,
+  onOpenMyAds,
+  onOpenAuth
 }) => {
   const t = getTranslation(lang);
   const [langDropdownOpen, setLangDropdownOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const langContainerRef = useRef<HTMLDivElement>(null);
+  const userMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    return subscribeToAuth((user) => setIsAdmin(isAdminUser(user)));
+    return subscribeToAuth((user) => {
+      setCurrentUser(user);
+      setIsAdmin(isAdminUser(user));
+    });
   }, []);
 
-  // Close language dropdown on outside click/touch or page scroll
+  const handleHeaderLogout = async () => {
+    try {
+      setIsLoggingOut(true);
+      await logoutUser();
+      setUserMenuOpen(false);
+    } catch (err) {
+      console.error('Logout failed:', err);
+    } finally {
+      setIsLoggingOut(false);
+    }
+  };
+
+  // Close dropdowns on outside click/touch or page scroll
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent | TouchEvent) => {
       if (langContainerRef.current && !langContainerRef.current.contains(event.target as Node)) {
         setLangDropdownOpen(false);
       }
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setUserMenuOpen(false);
+      }
     };
     const handleScroll = () => {
       setLangDropdownOpen(false);
+      setUserMenuOpen(false);
     };
 
     document.addEventListener('mousedown', handleClickOutside);
@@ -146,6 +179,88 @@ export const Header: React.FC<HeaderProps> = React.memo(({
             </div>
             <span className="hidden md:inline font-bold">{t.favorites}</span>
           </button>
+
+          {/* User Account Menu / Login (Desktop) */}
+          <div ref={userMenuRef} className="relative hidden md:block">
+            {currentUser && !currentUser.isAnonymous ? (
+              <>
+                <button
+                  id="header-user-menu-btn"
+                  type="button"
+                  onClick={() => setUserMenuOpen(!userMenuOpen)}
+                  className="flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200/70 dark:hover:bg-slate-700 border border-slate-200/80 dark:border-slate-700 transition-colors font-bold text-xs sm:text-sm cursor-pointer"
+                  title={currentUser.displayName || currentUser.email || currentUser.phoneNumber || t.myProfile}
+                >
+                  <div className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-white text-[10px] font-black">
+                    {(currentUser.displayName || currentUser.email || currentUser.phoneNumber || 'U').slice(0, 1).toUpperCase()}
+                  </div>
+                  <span className="max-w-[90px] truncate hidden lg:inline text-xs font-semibold">
+                    {currentUser.displayName || currentUser.email?.split('@')[0] || currentUser.phoneNumber || t.myProfile}
+                  </span>
+                  <ChevronDown size={12} className="text-slate-400" />
+                </button>
+
+                {userMenuOpen && (
+                  <div className="absolute right-0 mt-1.5 w-56 rounded-2xl bg-white dark:bg-slate-900 py-2 shadow-xl border border-slate-200 dark:border-slate-800 z-50 animate-in fade-in zoom-in-95 duration-150 text-slate-900 dark:text-white">
+                    <div className="px-3.5 py-2 border-b border-slate-100 dark:border-slate-800">
+                      <p className="text-xs font-bold truncate">{currentUser.displayName || (currentUser.phoneNumber ? 'Foydalanuvchi' : 'Foydalanuvchi')}</p>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">{currentUser.email || currentUser.phoneNumber}</p>
+                    </div>
+
+                    {onOpenMyAds && (
+                      <button
+                        type="button"
+                        id="header-menu-my-ads-btn"
+                        onClick={() => { setUserMenuOpen(false); onOpenMyAds(); }}
+                        className="w-full flex items-center gap-2.5 px-3.5 py-2 text-xs font-semibold text-left text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                      >
+                        <Layers size={15} className="text-indigo-600 dark:text-indigo-400" />
+                        <span>{t.myAds}</span>
+                      </button>
+                    )}
+
+                    <div className="pt-1 mt-1 border-t border-slate-100 dark:border-slate-800">
+                      <button
+                        type="button"
+                        id="header-menu-logout-btn"
+                        disabled={isLoggingOut}
+                        onClick={handleHeaderLogout}
+                        className="w-full flex items-center gap-2.5 px-3.5 py-2 text-xs font-bold text-left text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors cursor-pointer disabled:opacity-50"
+                      >
+                        {isLoggingOut ? <Loader2 size={15} className="animate-spin" /> : <LogOut size={15} />}
+                        <span>{isLoggingOut ? (lang === 'ru' ? 'Выход...' : lang === 'oz' ? 'Чиқилмоқда...' : 'Chiqilmoqda...') : t.logout}</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : onOpenAuth ? (
+              <button
+                id="header-login-btn"
+                type="button"
+                onClick={() => onOpenAuth('login')}
+                className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 hover:text-indigo-600 dark:hover:text-indigo-400 text-slate-700 dark:text-slate-200 border border-slate-200/80 dark:border-slate-700 transition-colors font-bold text-xs sm:text-sm cursor-pointer"
+              >
+                <User size={15} />
+                <span>{lang === 'ru' ? 'Войти' : lang === 'oz' ? 'Кириш' : 'Kirish'}</span>
+              </button>
+            ) : null}
+          </div>
+
+          {onOpenPostAd && (
+            <button
+              id="header-post-ad-btn"
+              type="button"
+              onClick={onOpenPostAd}
+              className="hidden sm:flex items-center gap-1.5 rounded-xl px-2.5 sm:px-3 py-1.5 text-xs sm:text-sm font-bold bg-indigo-600 hover:bg-indigo-700 text-white transition-all shadow-2xs hover:shadow-indigo-600/25 cursor-pointer shrink-0"
+              title={lang === 'ru' ? 'Подать объявление' : lang === 'oz' ? 'Эълон бериш' : "E'lon berish"}
+            >
+              <Plus size={16} strokeWidth={2.5} />
+              <span className="font-bold">
+                {lang === 'ru' ? 'Подать объявление' : lang === 'oz' ? 'Эълон бериш' : "E'lon berish"}
+              </span>
+            </button>
+          )}
         </div>
       </div>
     </header>

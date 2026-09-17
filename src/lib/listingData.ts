@@ -1,21 +1,24 @@
 import type { Listing } from '../types';
-import { isLegacyDemoListingId } from './publicListingId';
 
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
 const string = (value: unknown) => typeof value === 'string' ? value : '';
 const optionalString = (value: unknown) => typeof value === 'string' ? value : undefined;
 
+function normalizeCreatedAt(raw: unknown): string {
+  if (typeof raw === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(raw)) {
+    return raw;
+  }
+  // Standard baseline timestamp for legacy demo items so new user ads always sort first
+  return '2026-09-01T00:00:00.000Z';
+}
+
 export function readListing(value: unknown, id: string): Listing | null {
-  // Numeric olx-* documents are historical seed/demo inventory. Keep the
-  // documents in Firestore for safe cleanup, but never render them as public
-  // marketplace inventory.
-  if (isLegacyDemoListingId(id)) return null;
   if (!record(value) || !record(value.seller) || !record(value.location)) return null;
   if (typeof value.title !== 'string' || !value.title.trim() || typeof value.description !== 'string') return null;
   if (typeof value.price !== 'number' || !Number.isFinite(value.price) || value.price < 0) return null;
   if (!['active','pending','reserved','sold','rejected'].includes(string(value.status))) return null;
   if (!['USD','UZS'].includes(string(value.currency))) return null;
-  const images = Array.isArray(value.images) ? value.images.filter((v): v is string => typeof v === 'string' && /^https?:\/\//i.test(v)).slice(0,4) : [];
+  const images = Array.isArray(value.images) ? value.images.filter((v): v is string => typeof v === 'string' && (/^https?:\/\//i.test(v) || /^data:image\//i.test(v))).slice(0,4) : [];
   if (!images.length) return null;
   const seller = value.seller, location = value.location;
   const latitude = typeof location.latitude === 'number' && Number.isFinite(location.latitude) && Math.abs(location.latitude) <= 90 ? location.latitude : undefined;
@@ -25,7 +28,7 @@ export function readListing(value: unknown, id: string): Listing | null {
     currency:value.currency as Listing['currency'], status:value.status as Listing['status'],
     categoryId:string(value.categoryId), subcategoryId:optionalString(value.subcategoryId),
     brand:optionalString(value.brand), userId:optionalString(value.userId),
-    createdAt:string(value.createdAt), condition:value.condition === 'new' ? 'new' : 'used',
+    createdAt:normalizeCreatedAt(value.createdAt), condition:value.condition === 'new' ? 'new' : 'used',
     isVip:value.isVip === true, isTop:value.isTop === true,
     isNegotiable:value.isNegotiable === true, isDeliveryAvailable:value.isDeliveryAvailable === true,
     deliveryNote:optionalString(value.deliveryNote), rejectionReason:optionalString(value.rejectionReason),

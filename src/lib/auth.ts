@@ -11,7 +11,10 @@ import {
   browserLocalPersistence,
   browserSessionPersistence,
   inMemoryPersistence,
-  User
+  User,
+  RecaptchaVerifier,
+  signInWithPhoneNumber,
+  ConfirmationResult
 } from 'firebase/auth';
 import { auth } from './firebase';
 
@@ -105,10 +108,64 @@ export const loginWithGoogle = () => {
 };
 
 export const logoutUser = async () => {
-  if (typeof window !== 'undefined') {
-    const confirmed = window.confirm('Akkauntdan chiqmoqchimisiz?');
-    if (!confirmed) return false;
-  }
   await signOut(auth);
   return true;
 };
+
+let appRecaptchaVerifier: RecaptchaVerifier | null = null;
+
+export const setupRecaptcha = (containerId: string = 'recaptcha-container'): RecaptchaVerifier => {
+  if (appRecaptchaVerifier) {
+    try {
+      appRecaptchaVerifier.clear();
+    } catch {
+      // ignore
+    }
+    appRecaptchaVerifier = null;
+  }
+
+  auth.languageCode = 'uz';
+
+  appRecaptchaVerifier = new RecaptchaVerifier(auth, containerId, {
+    size: 'invisible',
+    callback: () => {
+      // reCAPTCHA solved
+    },
+    'expired-callback': () => {
+      // Response expired
+    }
+  });
+
+  return appRecaptchaVerifier;
+};
+
+export const clearRecaptcha = () => {
+  if (appRecaptchaVerifier) {
+    try {
+      appRecaptchaVerifier.clear();
+    } catch {
+      // ignore
+    }
+    appRecaptchaVerifier = null;
+  }
+};
+
+export const sendPhoneVerificationCode = async (
+  phoneNumber: string,
+  containerId: string = 'recaptcha-container'
+): Promise<ConfirmationResult> => {
+  await persistAuthSession();
+  const verifier = setupRecaptcha(containerId);
+  return signInWithPhoneNumber(auth, phoneNumber, verifier);
+};
+
+export const confirmPhoneVerificationCode = async (
+  confirmationResult: ConfirmationResult,
+  verificationCode: string
+) => {
+  await persistAuthSession();
+  return confirmationResult.confirm(verificationCode);
+};
+
+export type { ConfirmationResult };
+

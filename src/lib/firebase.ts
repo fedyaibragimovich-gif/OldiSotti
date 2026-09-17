@@ -56,7 +56,7 @@ export const BLOCKED_SELLERS_COLLECTION = 'blocked_sellers';
 const ADMIN_UID = 'Q81AQDKw7GXYeNgdrnp2qvYgyS02';
 const ADMIN_EMAIL = 'fedya.ibragimovich@gmail.com';
 const LISTINGS_REALTIME_LIMIT = 300;
-const PUBLIC_INITIAL_PAGE_LIMIT = 12;
+const PUBLIC_INITIAL_PAGE_LIMIT = 300;
 const CONVERSATIONS_REALTIME_LIMIT = 100;
 const NOTIFICATIONS_REALTIME_LIMIT = 50;
 
@@ -293,7 +293,7 @@ export async function saveListingToDb(listing: Listing): Promise<void> {
         autoApproveListings = (settingsSnap.data() as Partial<PlatformSettings>).autoApproveListings === true;
       }
     } catch {
-      // Default to the current public behavior if settings cannot be read.
+      // Default to false so newly posted ads are pending and must pass moderation.
     }
 
     const safeSeller = {

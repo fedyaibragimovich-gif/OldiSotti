@@ -10,15 +10,14 @@ import {
   X,
   ChevronRight,
   ShieldCheck,
-  Mail,
-  Lock,
-  Chrome
+  Loader2
 } from 'lucide-react';
 import { Language } from '../types';
 import { getTranslation } from '../data/translations';
 import { useVirtualKeyboard } from '../hooks/useVirtualKeyboard';
-import { subscribeToAuth, isAdminUser, loginWithEmail, registerWithEmail, loginWithGoogle, logoutUser, resetPassword } from '../lib/auth';
+import { subscribeToAuth, isAdminUser, logoutUser } from '../lib/auth';
 import type { User as FirebaseUser } from 'firebase/auth';
+import { AuthModal } from './AuthModal';
 
 interface BottomNavProps {
   lang: Language;
@@ -30,9 +29,8 @@ interface BottomNavProps {
   onFavoritesClick: () => void;
   onMyAdsClick: () => void;
   onOpenAdmin?: () => void;
+  onOpenAuth?: (mode: 'login' | 'register') => void;
 }
-
-const REMEMBERED_EMAIL_KEY = 'oldisotti_remembered_email';
 
 export const BottomNav: React.FC<BottomNavProps> = React.memo(({
   lang,
@@ -43,7 +41,8 @@ export const BottomNav: React.FC<BottomNavProps> = React.memo(({
   onPostAdClick,
   onFavoritesClick,
   onMyAdsClick,
-  onOpenAdmin
+  onOpenAdmin,
+  onOpenAuth
 }) => {
   const t = getTranslation(lang);
   const isKeyboardOpen = useVirtualKeyboard();
@@ -51,26 +50,9 @@ export const BottomNav: React.FC<BottomNavProps> = React.memo(({
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [user, setUser] = useState<FirebaseUser | null>(null);
-  const [authLoading, setAuthLoading] = useState(false);
-  const authInFlight = useRef(false);
-  const [forgotLoading, setForgotLoading] = useState(false);
-  const [authError, setAuthError] = useState('');
-  const [forgotMessage, setForgotMessage] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [rememberEmail, setRememberEmail] = useState(true);
   const profileRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => subscribeToAuth(setUser), []);
-
-  useEffect(() => {
-    try {
-      const savedEmail = window.localStorage.getItem(REMEMBERED_EMAIL_KEY);
-      if (savedEmail) setEmail(savedEmail);
-    } catch {
-      // localStorage may be unavailable in private/restricted browsing modes.
-    }
-  }, []);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -88,110 +70,27 @@ export const BottomNav: React.FC<BottomNavProps> = React.memo(({
     oz: { home: 'Асосий', messages: 'Хабарлар', postAd: 'Эълон', favorites: 'Сараланган', profile: 'Профил', myAds: 'Менинг эълонларим', logout: 'Чиқиш', login: 'Кириш', register: 'Рўйхатдан ўтиш' }
   }[lang] || { home: 'Asosiy', messages: 'Xabarlar', postAd: "E'lon", favorites: 'Saralangan', profile: 'Profil', myAds: "Mening e'lonlarim", logout: 'Chiqish', login: 'Kirish', register: "Ro'yxatdan o'tish" };
 
-  const friendlyAuthError = (error: any) => {
-    const code = error?.code || '';
-    if (code.includes('invalid-credential') || code.includes('wrong-password') || code.includes('user-not-found')) return 'Email yoki parol noto‘g‘ri.';
-    if (code.includes('email-already-in-use')) return 'Bu email allaqachon ro‘yxatdan o‘tgan.';
-    if (code.includes('weak-password')) return 'Parol kamida 6 ta belgidan iborat bo‘lishi kerak.';
-    if (code.includes('invalid-email')) return 'Email manzilini tekshiring.';
-    if (code.includes('popup-blocked')) return 'Google oynasi bloklandi. Brauzerda popup oynalarga ruxsat bering va qayta bosing.';
-    if (code.includes('unauthorized-domain')) return 'Bu sayt manzilida Google orqali kirishga ruxsat berilmagan. Asosiy sayt manzilidan kiring.';
-    if (code.includes('operation-not-allowed')) return 'Google orqali kirish hozir sozlanmagan. Email orqali kiring.';
-    if (code.includes('operation-not-supported') || code.includes('web-storage-unsupported')) return 'Saytni Chrome yoki Safari brauzerida ochib qayta urinib ko‘ring.';
-    if (code.includes('network-request-failed')) return 'Internet aloqasini tekshiring va qayta urinib ko‘ring.';
-    if (code.includes('account-exists-with-different-credential')) return 'Bu email boshqa kirish usuli bilan ro‘yxatdan o‘tgan. Avval o‘sha usul orqali kiring.';
-    if (code.includes('too-many-requests')) return 'Juda ko‘p urinish bo‘ldi. Birozdan keyin qayta urinib ko‘ring.';
-    if (code.includes('popup-closed')) return 'Google oynasi yopildi.';
-    return 'Kirishda xatolik yuz berdi. Qayta urinib ko‘ring.';
-  };
-
   const openAuth = (mode: 'login' | 'register') => {
-    setAuthMode(mode);
-    setAuthError('');
-    setForgotMessage('');
-    setPassword('');
-    if (mode === 'register') setEmail('');
     setProfileModalOpen(false);
-    setAuthModalOpen(true);
-  };
-
-  const submitAuth = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (authInFlight.current) return;
-    authInFlight.current = true;
-    setAuthLoading(true);
-    setAuthError('');
-    setForgotMessage('');
-    const normalizedEmail = email.trim();
-    try {
-      if (authMode === 'login') {
-        if (rememberEmail) {
-          try { window.localStorage.setItem(REMEMBERED_EMAIL_KEY, normalizedEmail); } catch { /* ignore */ }
-        } else {
-          try { window.localStorage.removeItem(REMEMBERED_EMAIL_KEY); } catch { /* ignore */ }
-        }
-        await loginWithEmail(normalizedEmail, password);
-      } else {
-        await registerWithEmail(normalizedEmail, password);
-      }
-      setAuthModalOpen(false);
-      setPassword('');
-    } catch (error) {
-      setAuthError(friendlyAuthError(error));
-    } finally {
-      authInFlight.current = false;
-      setAuthLoading(false);
+    if (onOpenAuth) {
+      onOpenAuth(mode);
+    } else {
+      setAuthMode(mode);
+      setAuthModalOpen(true);
     }
   };
 
-  const handleForgotPassword = async () => {
-    if (authInFlight.current) return;
-    const normalizedEmail = email.trim();
-    setAuthError('');
-    setForgotMessage('');
-    if (!normalizedEmail || !/^\S+@\S+\.\S+$/.test(normalizedEmail)) {
-      setAuthError('Avval to‘g‘ri email manzilingizni kiriting.');
-      return;
-    }
-    authInFlight.current = true;
-    setForgotLoading(true);
-    try {
-      await resetPassword(normalizedEmail);
-      setForgotMessage('Parolni tiklash havolasi emailingizga yuborildi. Emailingizni tekshiring.');
-    } catch (error: any) {
-      const code = error?.code || '';
-      if (code.includes('too-many-requests')) setAuthError('Juda ko‘p urinish bo‘ldi. Birozdan keyin qayta urinib ko‘ring.');
-      else if (code.includes('invalid-email')) setAuthError('Email manzilini tekshiring.');
-      else setAuthError('Parolni tiklashda xatolik yuz berdi. Qayta urinib ko‘ring.');
-    } finally {
-      authInFlight.current = false;
-      setForgotLoading(false);
-    }
-  };
-
-  const handleGoogle = async () => {
-    if (authInFlight.current) return;
-    authInFlight.current = true;
-    setAuthLoading(true);
-    setAuthError('');
-    setForgotMessage('');
-    try {
-      await loginWithGoogle();
-      setAuthModalOpen(false);
-    } catch (error) {
-      setAuthError(friendlyAuthError(error));
-    } finally {
-      authInFlight.current = false;
-      setAuthLoading(false);
-    }
-  };
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   const handleLogout = async () => {
     try {
-      const loggedOut = await logoutUser();
-      if (loggedOut) setProfileModalOpen(false);
-    } catch {
-      setAuthError('Chiqishda xatolik yuz berdi.');
+      setIsLoggingOut(true);
+      await logoutUser();
+      setProfileModalOpen(false);
+    } catch (err) {
+      console.error('Logout error:', err);
+    } finally {
+      setIsLoggingOut(false);
     }
   };
 
@@ -200,51 +99,13 @@ export const BottomNav: React.FC<BottomNavProps> = React.memo(({
 
   return (
     <>
-      {authModalOpen && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-950/65 backdrop-blur-sm">
-          <div className="w-full max-w-sm rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 shadow-2xl text-slate-900 dark:text-white">
-            <div className="flex items-center justify-between mb-5">
-              <div>
-                <h3 className="text-xl font-black">{authMode === 'login' ? navLabels.login : navLabels.register}</h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">OldiSotdi akkauntingiz</p>
-              </div>
-              <button type="button" onClick={() => setAuthModalOpen(false)} className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"><X size={18} /></button>
-            </div>
-
-            <form onSubmit={submitAuth} className="space-y-3" autoComplete="on">
-              <div className="relative">
-                <Mail size={17} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input value={email} onChange={e => { setEmail(e.target.value); setForgotMessage(''); }} aria-label="Email" type="email" name="email" autoComplete="username email" required placeholder="Email" className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 pl-10 pr-3 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500" />
-              </div>
-              <div className="relative">
-                <Lock size={17} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input value={password} onChange={e => setPassword(e.target.value)} aria-label={lang === 'ru' ? 'Пароль' : 'Parol'} type="password" name="password" autoComplete={authMode === 'login' ? 'current-password' : 'new-password'} required minLength={6} placeholder="Parol" className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 pl-10 pr-3 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500" />
-              </div>
-              {authMode === 'login' && (
-                <>
-                  <label className="flex items-center gap-2 px-1 py-1 text-xs text-slate-600 dark:text-slate-300 cursor-pointer select-none">
-                    <input type="checkbox" checked={rememberEmail} onChange={e => setRememberEmail(e.target.checked)} className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
-                    <span>Emailni eslab qolish</span>
-                  </label>
-                  <button disabled={authLoading || forgotLoading} type="button" onClick={handleForgotPassword} className="w-full text-right text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline disabled:opacity-60 cursor-pointer">
-                    {forgotLoading ? 'Yuborilmoqda…' : 'Parolni unutdingizmi?'}
-                  </button>
-                </>
-              )}
-              {authError && <div className="rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900 p-3 text-xs font-semibold text-rose-700 dark:text-rose-300">{authError}</div>}
-              {forgotMessage && <div className="rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900 p-3 text-xs font-semibold text-emerald-700 dark:text-emerald-300">{forgotMessage}</div>}
-              <button disabled={authLoading || forgotLoading} type="submit" className="w-full rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white py-3 font-bold text-sm cursor-pointer">{authLoading ? 'Kutilmoqda…' : (authMode === 'login' ? navLabels.login : navLabels.register)}</button>
-            </form>
-
-            <div className="flex items-center gap-3 my-4"><div className="h-px flex-1 bg-slate-200 dark:bg-slate-700" /><span className="text-[11px] text-slate-400">yoki</span><div className="h-px flex-1 bg-slate-200 dark:bg-slate-700" /></div>
-            <button disabled={authLoading || forgotLoading} type="button" onClick={handleGoogle} className="w-full flex items-center justify-center gap-2 rounded-xl border border-slate-200 dark:border-slate-700 py-3 text-sm font-bold hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-60 cursor-pointer"><Chrome size={17} /> Google bilan davom etish</button>
-
-            <p className="mt-3 text-center text-[10px] text-slate-400">Parolni saqlashni tasdiqlash oynasi brauzeringiz tomonidan ko‘rsatiladi.</p>
-            <button type="button" onClick={() => { setAuthMode(authMode === 'login' ? 'register' : 'login'); setAuthError(''); setForgotMessage(''); }} className="w-full mt-3 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer">
-              {authMode === 'login' ? navLabels.register : navLabels.login}
-            </button>
-          </div>
-        </div>
+      {!onOpenAuth && (
+        <AuthModal
+          isOpen={authModalOpen}
+          onClose={() => setAuthModalOpen(false)}
+          lang={lang}
+          initialMode={authMode}
+        />
       )}
 
       {profileModalOpen && (
@@ -289,7 +150,16 @@ export const BottomNav: React.FC<BottomNavProps> = React.memo(({
                   </button>
                 </div>
                 <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
-                  <button type="button" onClick={handleLogout} className="w-full flex items-center justify-center gap-2 p-3 text-xs font-bold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-xl transition-colors cursor-pointer"><LogOut size={15} /><span>{navLabels.logout}</span></button>
+                  <button
+                    type="button"
+                    id="bottom-profile-logout-btn"
+                    disabled={isLoggingOut}
+                    onClick={handleLogout}
+                    className="w-full flex items-center justify-center gap-2 p-3 text-xs font-bold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-xl transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    {isLoggingOut ? <Loader2 size={15} className="animate-spin" /> : <LogOut size={15} />}
+                    <span>{isLoggingOut ? (lang === 'ru' ? 'Выход...' : lang === 'oz' ? 'Чиқилмоқда...' : 'Chiqilmoqda...') : navLabels.logout}</span>
+                  </button>
                 </div>
               </>
             )}

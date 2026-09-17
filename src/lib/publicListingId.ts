@@ -1,6 +1,6 @@
 const LEGACY_OLX_ID = /^olx-(.+)$/i;
-const LEGACY_DEMO_ID = /^olx-(\d+)$/i;
-const PUBLIC_DEMO_ID = /^oldisotdi-demo-(\d+)$/i;
+const LEGACY_DEMO_ID = /^olx-0*(?:[1-9]|1\d|20)$/i;
+const PUBLIC_DEMO_ID = /^oldisotdi-demo-0*(?:[1-9]|1\d|20)$/i;
 const PUBLIC_LEGACY_ID = /^oldisotdi-listing-(.+)$/i;
 
 /**

@@ -64,6 +64,7 @@ import type { User as FirebaseUser } from 'firebase/auth';
 
 import { ListingDetailModal } from './components/ListingDetailModal';
 import { PostAdModal } from './components/PostAdModal';
+import { AuthModal } from './components/AuthModal';
 import { ChatDrawer } from './components/ChatDrawer';
 import { FavoritesDrawer } from './components/FavoritesDrawer';
 import { MyAdsModal } from './components/MyAdsModal';
@@ -213,6 +214,57 @@ export default function App() {
   const [isMyAdsOpen, setIsMyAdsOpen] = useState(false);
   const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
   const [infoModalTab, setInfoModalTab] = useState<InfoTabKey>('help');
+
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [authModalInitialMode, setAuthModalInitialMode] = useState<'login' | 'register'>('login');
+  const [authModalReason, setAuthModalReason] = useState<string | null>(null);
+  const [pendingPostAdAfterAuth, setPendingPostAdAfterAuth] = useState(false);
+
+  const handleOpenPostAd = () => {
+    if (!currentUser || currentUser.isAnonymous) {
+      setAuthModalReason(
+        lang === 'ru'
+          ? 'Для подачи объявления войдите в свой аккаунт'
+          : lang === 'oz'
+          ? 'Эълон бериш учун аввал аккаунтингизга киринг'
+          : "E'lon berish uchun avval akkauntingizga kiring"
+      );
+      setAuthModalInitialMode('login');
+      setPendingPostAdAfterAuth(true);
+      setIsAuthModalOpen(true);
+      return;
+    }
+    setIsPostAdOpen(true);
+  };
+
+  const handleAuthSuccess = () => {
+    setIsAuthModalOpen(false);
+    if (pendingPostAdAfterAuth) {
+      setPendingPostAdAfterAuth(false);
+      setIsPostAdOpen(true);
+    }
+  };
+
+  const handleCloseAuthModal = () => {
+    setIsAuthModalOpen(false);
+    setAuthModalReason(null);
+    setPendingPostAdAfterAuth(false);
+  };
+
+  const handleOpenAuth = (mode?: 'login' | 'register') => {
+    setAuthModalReason(null);
+    setPendingPostAdAfterAuth(false);
+    setAuthModalInitialMode(mode || 'login');
+    setIsAuthModalOpen(true);
+  };
+
+  useEffect(() => {
+    if (currentUser && !currentUser.isAnonymous && pendingPostAdAfterAuth) {
+      setPendingPostAdAfterAuth(false);
+      setIsAuthModalOpen(false);
+      setIsPostAdOpen(true);
+    }
+  }, [currentUser, pendingPostAdAfterAuth]);
 
   // 7. Admin Panel state & Platform Settings
   const [isAdminOpen, setIsAdminOpen] = useState<boolean>(false);
@@ -607,10 +659,10 @@ export default function App() {
         return priceBInUzs - priceAInUzs;
       }
 
-      // Default: 'newest' (VIP first, then order)
+      // Default: 'newest' (VIP first, then order by creation timestamp)
       if (a.isVip && !b.isVip) return -1;
       if (!a.isVip && b.isVip) return 1;
-      return 0;
+      return b.createdAt.localeCompare(a.createdAt);
     });
   }, [listings, filters, currency, blockedSellerIds, nearbyLocation]);
 
@@ -655,7 +707,7 @@ export default function App() {
 
   // Add new listing handler
   const handleAddListing = async (newListing: Listing) => {
-    const status = platformSettings.autoApproveListings ? 'active' : 'pending';
+    const status = platformSettings.autoApproveListings === true ? 'active' : 'pending';
     newListing.status = status;
     const finalizedListing: Listing = {
       ...newListing,
@@ -990,8 +1042,9 @@ export default function App() {
           setIsChatOpen(true);
         }}
         onOpenFavorites={() => setIsFavoritesOpen(true)}
-        onOpenPostAd={() => setIsPostAdOpen(true)}
+        onOpenPostAd={handleOpenPostAd}
         onOpenMyAds={() => setIsMyAdsOpen(true)}
+        onOpenAuth={handleOpenAuth}
         onOpenAdmin={() => setIsAdminOpen(true)}
         onResetToHome={handleResetToHome}
         darkMode={darkMode}
@@ -1189,8 +1242,19 @@ export default function App() {
             lang={lang}
             onAddListing={handleAddListing}
             onOpenInfoModal={handleOpenInfoModal}
+            onRequireAuth={handleOpenPostAd}
           />
         )}
+
+        {/* 6.5. Authentication Modal */}
+        <AuthModal
+          isOpen={isAuthModalOpen}
+          onClose={handleCloseAuthModal}
+          lang={lang}
+          initialMode={authModalInitialMode}
+          reasonMessage={authModalReason}
+          onSuccess={handleAuthSuccess}
+        />
 
         {/* 7. Chat Drawer */}
         {isChatOpen && (
@@ -1233,7 +1297,7 @@ export default function App() {
             onSelectListing={handleSelectListing}
             onOpenPostAd={() => {
               setIsMyAdsOpen(false);
-              setIsPostAdOpen(true);
+              handleOpenPostAd();
             }}
           />
         )}
@@ -1247,7 +1311,7 @@ export default function App() {
             lang={lang}
             onOpenPostAd={() => {
               setIsInfoModalOpen(false);
-              setIsPostAdOpen(true);
+              handleOpenPostAd();
             }}
           />
         )}
@@ -1289,7 +1353,7 @@ export default function App() {
       {/* 9.5. Safe Shopping & Fast Delivery Highlight Section with Skeleton Loading State */}
       <SafePurchasesSection
         lang={lang}
-        onOpenPostAd={() => setIsPostAdOpen(true)}
+        onOpenPostAd={handleOpenPostAd}
         onExplore={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
         onOpenInfoModal={handleOpenInfoModal}
       />
@@ -1319,10 +1383,11 @@ export default function App() {
           setActiveChatId(conversations[0]?.id || null);
           setIsChatOpen(true);
         }}
-        onPostAdClick={() => setIsPostAdOpen(true)}
+        onPostAdClick={handleOpenPostAd}
         onFavoritesClick={() => setIsFavoritesOpen(true)}
         onMyAdsClick={() => setIsMyAdsOpen(true)}
         onOpenAdmin={() => setIsAdminOpen(true)}
+        onOpenAuth={handleOpenAuth}
       />
     </div>
   );

@@ -178,7 +178,7 @@ service cloud.firestore {
 
     match /listings/{listingId} {
       allow get: if !exists(/databases/$(database)/documents/listings/$(listingId));
-      allow read: if resource.data.status == 'active' || isAdmin() || (signedIn() && resource.data.userId == request.auth.uid);
+      allow read: if resource.data.status in ['active', 'reserved', 'sold'] || isAdmin() || (signedIn() && resource.data.userId == request.auth.uid);
       allow create: if isAdmin() || isSafeNewListing();
       allow update: if isAdmin() || isOwnerListingUpdate() || isViewIncrementOnly();
       allow delete: if isAdmin() || (signedIn() && resource.data.userId == request.auth.uid);

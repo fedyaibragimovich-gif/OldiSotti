@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import {
   X,
   Upload,
@@ -31,6 +31,7 @@ interface PostAdModalProps {
   lang: Language;
   onAddListing: (newListing: Listing) => Promise<void> | void;
   onOpenInfoModal?: (tab: InfoTabKey) => void;
+  onRequireAuth?: () => void;
 }
 
 export const PostAdModal: React.FC<PostAdModalProps> = ({
@@ -38,9 +39,24 @@ export const PostAdModal: React.FC<PostAdModalProps> = ({
   onClose,
   lang,
   onAddListing,
-  onOpenInfoModal
+  onOpenInfoModal,
+  onRequireAuth
 }) => {
   const t = getTranslation(lang);
+
+  useEffect(() => {
+    if (isOpen && (!auth.currentUser || auth.currentUser.isAnonymous)) {
+      onClose();
+      onRequireAuth?.();
+    } else if (isOpen && auth.currentUser) {
+      if (!contactPhone && auth.currentUser.phoneNumber) {
+        setContactPhone(auth.currentUser.phoneNumber);
+      }
+      if (!contactName && auth.currentUser.displayName) {
+        setContactName(auth.currentUser.displayName);
+      }
+    }
+  }, [isOpen, onClose, onRequireAuth]);
 
   const [title, setTitle] = useState('');
   const [categoryId, setCategoryId] = useState('cat-transport');
@@ -227,7 +243,7 @@ export const PostAdModal: React.FC<PostAdModalProps> = ({
         rating: 0,
         activeAdsCount: 1
       },
-      status: 'active',
+      status: 'pending',
       isDeliveryAvailable,
       deliveryNote: isDeliveryAvailable && deliveryNote.trim() ? deliveryNote.trim() : undefined
     };
