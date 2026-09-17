@@ -40,6 +40,9 @@ interface HeaderProps {
   isDbConnected?: boolean;
 }
 
+const isInternalPhonePasswordEmail = (email?: string | null) =>
+  Boolean(email && /^phone-998\d{9}@auth\.oldi-sotdi\.uz$/i.test(email));
+
 export const Header: React.FC<HeaderProps> = React.memo(({
   lang,
   onLanguageChange,
@@ -83,7 +86,6 @@ export const Header: React.FC<HeaderProps> = React.memo(({
     }
   };
 
-  // Close dropdowns on outside click/touch or page scroll
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent | TouchEvent) => {
       if (langContainerRef.current && !langContainerRef.current.contains(event.target as Node)) {
@@ -109,11 +111,15 @@ export const Header: React.FC<HeaderProps> = React.memo(({
     };
   }, []);
 
+  const safeEmail = currentUser?.email && !isInternalPhonePasswordEmail(currentUser.email)
+    ? currentUser.email
+    : null;
+  const accountIdentifier = currentUser?.phoneNumber || safeEmail || '';
+  const accountLabel = currentUser?.displayName || (currentUser?.phoneNumber ? 'Foydalanuvchi' : safeEmail?.split('@')[0]) || t.myProfile;
+
   return (
     <header className="sticky top-0 z-30 bg-white dark:bg-slate-900 border-b border-slate-200/90 dark:border-slate-800 shadow-2xs w-full max-w-full transition-colors duration-200 transform-gpu">
-      {/* Main navigation header with logo, currency, language, mode, and favorites */}
       <div className="mx-auto flex max-w-7xl items-center justify-between px-2 sm:px-4 py-2 sm:py-3 w-full gap-1.5 sm:gap-2">
-        {/* Left: Original OldiSotdi Brand Logo */}
         <div className="flex items-center space-x-1.5 sm:space-x-3 shrink-0">
           <button
             id="brand-home-logo"
@@ -180,7 +186,6 @@ export const Header: React.FC<HeaderProps> = React.memo(({
             <span className="hidden md:inline font-bold">{t.favorites}</span>
           </button>
 
-          {/* User Account Menu / Login (Desktop) */}
           <div ref={userMenuRef} className="relative hidden md:block">
             {currentUser && !currentUser.isAnonymous ? (
               <>
@@ -189,13 +194,13 @@ export const Header: React.FC<HeaderProps> = React.memo(({
                   type="button"
                   onClick={() => setUserMenuOpen(!userMenuOpen)}
                   className="flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200/70 dark:hover:bg-slate-700 border border-slate-200/80 dark:border-slate-700 transition-colors font-bold text-xs sm:text-sm cursor-pointer"
-                  title={currentUser.displayName || currentUser.email || currentUser.phoneNumber || t.myProfile}
+                  title={accountIdentifier || accountLabel}
                 >
                   <div className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-white text-[10px] font-black">
-                    {(currentUser.displayName || currentUser.email || currentUser.phoneNumber || 'U').slice(0, 1).toUpperCase()}
+                    {accountLabel.slice(0, 1).toUpperCase()}
                   </div>
                   <span className="max-w-[90px] truncate hidden lg:inline text-xs font-semibold">
-                    {currentUser.displayName || currentUser.email?.split('@')[0] || currentUser.phoneNumber || t.myProfile}
+                    {accountLabel}
                   </span>
                   <ChevronDown size={12} className="text-slate-400" />
                 </button>
@@ -203,8 +208,8 @@ export const Header: React.FC<HeaderProps> = React.memo(({
                 {userMenuOpen && (
                   <div className="absolute right-0 mt-1.5 w-56 rounded-2xl bg-white dark:bg-slate-900 py-2 shadow-xl border border-slate-200 dark:border-slate-800 z-50 animate-in fade-in zoom-in-95 duration-150 text-slate-900 dark:text-white">
                     <div className="px-3.5 py-2 border-b border-slate-100 dark:border-slate-800">
-                      <p className="text-xs font-bold truncate">{currentUser.displayName || (currentUser.phoneNumber ? 'Foydalanuvchi' : 'Foydalanuvchi')}</p>
-                      <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">{currentUser.email || currentUser.phoneNumber}</p>
+                      <p className="text-xs font-bold truncate">{accountLabel}</p>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">{accountIdentifier}</p>
                     </div>
 
                     {onOpenMyAds && (

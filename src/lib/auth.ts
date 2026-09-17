@@ -14,10 +14,17 @@ import {
   User,
   RecaptchaVerifier,
   signInWithPhoneNumber,
-  ConfirmationResult
+  ConfirmationResult,
+  EmailAuthProvider,
+  linkWithCredential,
+  updatePassword
 } from 'firebase/auth';
 import { auth } from './firebase';
-import { normalizePhoneOtp, normalizeUzbekPhoneToE164 } from './phoneAuth';
+import {
+  normalizePhoneOtp,
+  normalizeUzbekPhoneToE164,
+  phoneToPasswordEmail
+} from './phoneAuth';
 
 export const ADMIN_UID = 'Q81AQDKw7GXYeNgdrnp2qvYgyS02';
 export const ADMIN_EMAILS = ['fedya.ibragimovich@gmail.com'];
@@ -28,10 +35,11 @@ export const isAdminUser = (user: User | null): boolean => {
   return Boolean(user.email && user.emailVerified && ADMIN_EMAILS.includes(user.email.toLowerCase()));
 };
 
+const makeAuthError = (code: string, message: string) => Object.assign(new Error(message), { code });
+
 // Prefer durable browser-local persistence for every sign-in flow. This keeps
-// phone-auth users signed in across browser/app restarts so SMS is normally
-// only needed again after explicit logout, cleared site data, or a new device.
-// Restricted browsers still get the safest available fallback.
+// users signed in across browser/app restarts. Restricted browsers still get
+// the safest available fallback.
 const persistAuthSession = async () => {
   try {
     await setPersistence(auth, browserLocalPersistence);
@@ -120,6 +128,24 @@ export const logoutUser = async () => {
   return true;
 };
 
+export const loginWithPhonePassword = async (phoneNumber: string, password: string) => {
+  await persistAuthSession();
+  const normalizedPhone = normalizeUzbekPhoneToE164(phoneNumber);
+  if (!normalizedPhone) {
+    throw makeAuthError('auth/invalid-phone-number', 'Uzbekistan phone number must contain 9 local digits.');
+  }
+  if (password.length < 6) {
+    throw makeAuthError('auth/weak-password', 'Password must contain at least 6 characters.');
+  }
+
+  const passwordEmail = phoneToPasswordEmail(normalizedPhone);
+  if (!passwordEmail) {
+    throw makeAuthError('auth/invalid-phone-number', 'Unable to create phone sign-in identifier.');
+  }
+
+  return signInWithEmailAndPassword(auth, passwordEmail, password);
+};
+
 let appRecaptchaVerifier: RecaptchaVerifier | null = null;
 let ownedRecaptchaContainer: HTMLElement | null = null;
 let recaptchaContainerId: string | null = null;
@@ -201,9 +227,7 @@ export const sendPhoneVerificationCode = async (
   await persistAuthSession();
   const normalizedPhone = normalizeUzbekPhoneToE164(phoneNumber);
   if (!normalizedPhone) {
-    throw Object.assign(new Error('Uzbekistan phone number must contain 9 local digits.'), {
-      code: 'auth/invalid-phone-number'
-    });
+    throw makeAuthError('auth/invalid-phone-number', 'Uzbekistan phone number must contain 9 local digits.');
   }
 
   const verifier = setupRecaptcha(containerId);
@@ -223,11 +247,63 @@ export const confirmPhoneVerificationCode = async (
   await persistAuthSession();
   const normalizedCode = normalizePhoneOtp(verificationCode);
   if (!normalizedCode) {
-    throw Object.assign(new Error('Verification code must contain 6 digits.'), {
-      code: 'auth/invalid-verification-code'
-    });
+    throw makeAuthError('auth/invalid-verification-code', 'Verification code must contain 6 digits.');
   }
   return confirmationResult.confirm(normalizedCode);
+};
+
+// Registration/password recovery flow:
+// 1. Firebase verifies ownership of the +998 number through SMS.
+// 2. The verified phone user is linked to a deterministic internal email alias
+//    and Firebase's password provider. The alias is never shown to the user.
+// 3. Future sign-ins use phone + password without sending another SMS.
+// Existing legacy phone-only users are upgraded after a successful OTP.
+export const confirmPhoneAndSetPassword = async (
+  confirmationResult: ConfirmationResult,
+  verificationCode: string,
+  phoneNumber: string,
+  password: string
+) => {
+  await persistAuthSession();
+
+  const normalizedPhone = normalizeUzbekPhoneToE164(phoneNumber);
+  if (!normalizedPhone) {
+    throw makeAuthError('auth/invalid-phone-number', 'Uzbekistan phone number must contain 9 local digits.');
+  }
+  const normalizedCode = normalizePhoneOtp(verificationCode);
+  if (!normalizedCode) {
+    throw makeAuthError('auth/invalid-verification-code', 'Verification code must contain 6 digits.');
+  }
+  if (password.length < 6) {
+    throw makeAuthError('auth/weak-password', 'Password must contain at least 6 characters.');
+  }
+
+  const credential = await confirmationResult.confirm(normalizedCode);
+  const user = credential.user;
+  if (user.phoneNumber && user.phoneNumber !== normalizedPhone) {
+    throw makeAuthError('auth/phone-number-mismatch', 'Verified phone number does not match the requested number.');
+  }
+
+  const passwordEmail = phoneToPasswordEmail(normalizedPhone);
+  if (!passwordEmail) {
+    throw makeAuthError('auth/invalid-phone-number', 'Unable to create phone sign-in identifier.');
+  }
+
+  const hasPasswordProvider = user.providerData.some((provider) => provider.providerId === 'password');
+  if (hasPasswordProvider) {
+    if (user.email && user.email.toLowerCase() !== passwordEmail.toLowerCase()) {
+      throw makeAuthError(
+        'auth/phone-password-conflict',
+        'This phone account already has a different password identity.'
+      );
+    }
+    await updatePassword(user, password);
+  } else {
+    const passwordCredential = EmailAuthProvider.credential(passwordEmail, password);
+    await linkWithCredential(user, passwordCredential);
+  }
+
+  return credential;
 };
 
 export type { ConfirmationResult };

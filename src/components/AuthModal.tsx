@@ -1,29 +1,27 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
-  X,
-  Mail,
-  Lock,
-  Chrome,
   AlertCircle,
-  Sparkles,
-  LogIn,
-  UserPlus,
-  Phone,
   ArrowLeft,
-  RotateCw,
   CheckCircle2,
-  Smartphone
+  Chrome,
+  Lock,
+  Mail,
+  Phone,
+  RotateCw,
+  Smartphone,
+  X
 } from 'lucide-react';
 import { Language } from '../types';
 import {
-  loginWithEmail,
-  registerWithEmail,
-  loginWithGoogle,
-  resetPassword,
-  sendPhoneVerificationCode,
-  confirmPhoneVerificationCode,
   clearRecaptcha,
-  ConfirmationResult
+  confirmPhoneAndSetPassword,
+  ConfirmationResult,
+  loginWithEmail,
+  loginWithGoogle,
+  loginWithPhonePassword,
+  registerWithEmail,
+  resetPassword,
+  sendPhoneVerificationCode
 } from '../lib/auth';
 
 export interface AuthModalProps {
@@ -38,21 +36,17 @@ export interface AuthModalProps {
 const REMEMBERED_EMAIL_KEY = 'oldisotti_remembered_email';
 const REMEMBERED_PHONE_KEY = 'oldisotti_remembered_phone';
 
-// Format 9-digit input as: (90) 123-45-67
-const formatUzbekPhone = (val: string): string => {
-  let cleaned = val.replace(/\D/g, '');
-  if (cleaned.startsWith('998')) {
-    cleaned = cleaned.slice(3);
-  }
-  if (cleaned.length > 9) {
-    cleaned = cleaned.slice(0, 9);
-  }
+const formatUzbekPhone = (value: string): string => {
+  let digits = String(value || '').replace(/\D/g, '');
+  if (digits.startsWith('998')) digits = digits.slice(3);
+  if (digits.length === 10 && digits.startsWith('0')) digits = digits.slice(1);
+  digits = digits.slice(0, 9);
 
-  if (cleaned.length === 0) return '';
-  if (cleaned.length <= 2) return `(${cleaned}`;
-  if (cleaned.length <= 5) return `(${cleaned.slice(0, 2)}) ${cleaned.slice(2)}`;
-  if (cleaned.length <= 7) return `(${cleaned.slice(0, 2)}) ${cleaned.slice(2, 5)}-${cleaned.slice(5)}`;
-  return `(${cleaned.slice(0, 2)}) ${cleaned.slice(2, 5)}-${cleaned.slice(5, 7)}-${cleaned.slice(7, 9)}`;
+  if (!digits) return '';
+  if (digits.length <= 2) return `(${digits}`;
+  if (digits.length <= 5) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+  if (digits.length <= 7) return `(${digits.slice(0, 2)}) ${digits.slice(2, 5)}-${digits.slice(5)}`;
+  return `(${digits.slice(0, 2)}) ${digits.slice(2, 5)}-${digits.slice(5, 7)}-${digits.slice(7, 9)}`;
 };
 
 export const AuthModal: React.FC<AuthModalProps> = ({
@@ -63,18 +57,26 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   reasonMessage,
   onSuccess
 }) => {
+  const t = (uz: string, ru: string, oz?: string) => {
+    if (lang === 'ru') return ru;
+    if (lang === 'oz') return oz || uz;
+    return uz;
+  };
+
   const [authMethod, setAuthMethod] = useState<'phone' | 'email'>('phone');
   const [authMode, setAuthMode] = useState<'login' | 'register'>(initialMode);
+  const [phoneResetMode, setPhoneResetMode] = useState(false);
   const [authLoading, setAuthLoading] = useState(false);
-  const authInFlight = useRef(false);
   const [forgotLoading, setForgotLoading] = useState(false);
+  const authInFlight = useRef(false);
+
   const [authError, setAuthError] = useState('');
   const [forgotMessage, setForgotMessage] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [rememberEmail, setRememberEmail] = useState(true);
 
-  // Phone Auth State
   const [phoneStep, setPhoneStep] = useState<'enter_phone' | 'enter_otp'>('enter_phone');
   const [rawPhone, setRawPhone] = useState('');
   const [otpCode, setOtpCode] = useState('');
@@ -85,279 +87,207 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       setAuthMode(initialMode);
+      setPhoneResetMode(false);
       setAuthError('');
       setForgotMessage('');
       setPassword('');
+      setConfirmPassword('');
       setPhoneStep('enter_phone');
       setConfirmationResult(null);
       setOtpCode('');
+      setCountdown(0);
       try {
         const savedEmail = window.localStorage.getItem(REMEMBERED_EMAIL_KEY);
         if (savedEmail) setEmail(savedEmail);
         const savedPhone = window.localStorage.getItem(REMEMBERED_PHONE_KEY);
         if (savedPhone) setRawPhone(formatUzbekPhone(savedPhone));
       } catch {
-        // LocalStorage may be unavailable
+        // Local storage may be unavailable in privacy mode.
       }
     } else {
       clearRecaptcha();
     }
   }, [isOpen, initialMode]);
 
-  // Countdown timer for OTP resend
   useEffect(() => {
     if (countdown <= 0) return;
-    const timer = setInterval(() => {
-      setCountdown((prev) => (prev > 0 ? prev - 1 : 0));
+    const timer = window.setInterval(() => {
+      setCountdown((previous) => (previous > 0 ? previous - 1 : 0));
     }, 1000);
-    return () => clearInterval(timer);
+    return () => window.clearInterval(timer);
   }, [countdown]);
 
-  // Auto-focus OTP input on step change
   useEffect(() => {
-    if (phoneStep === 'enter_otp') {
-      setTimeout(() => otpInputRef.current?.focus(), 150);
-    }
+    if (phoneStep !== 'enter_otp') return;
+    const timer = window.setTimeout(() => otpInputRef.current?.focus(), 150);
+    return () => window.clearTimeout(timer);
   }, [phoneStep]);
 
-  // Handle ESC key press
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen && !authLoading) {
-        onClose();
-      }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && isOpen && !authLoading) onClose();
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
   }, [isOpen, authLoading, onClose]);
 
   if (!isOpen) return null;
 
-  const labels = {
-    uz: {
-      phoneTab: 'Telefon',
-      emailTab: 'Email',
-      login: 'Kirish',
-      register: "Ro'yxatdan o'tish",
-      subTitle: 'OldiSotdi akkauntingiz',
-      phoneSubtitle: 'SMS orqali xavfsiz va tez kirish',
-      phoneLabel: 'Telefon raqamingiz',
-      phonePlaceholder: '(90) 123-45-67',
-      sendCodeBtn: 'SMS kod olish',
-      sendingCode: 'SMS yuborilmoqda…',
-      otpTitle: 'SMS kodni kiriting',
-      otpSubtitle: 'raqamiga yuborilgan 6 xonali tasdiqlash kodini kiriting',
-      otpPlaceholder: '• • • • • •',
-      verifyBtn: 'Tasdiqlash va kirish',
-      verifying: 'Tekshirilmoqda…',
-      resendCode: 'Kodni qayta yuborish',
-      resendIn: (sec: number) => `Qayta yuborish: ${sec}s`,
-      changeNumber: "Raqamni o'zgartirish",
-      phoneHelpText: "Raqamingizga bepul tasdiqlash kodi yuboriladi.",
-      emailPlaceholder: 'Email manzilingiz',
-      passwordPlaceholder: 'Parol (kamida 6 ta belgi)',
-      rememberMe: 'Emailni eslab qolish',
-      forgotPassword: 'Parolni unutdingizmi?',
-      or: 'yoki',
-      googleBtn: 'Google bilan davom etish',
-      browserNotice: 'Kirganingizdan so‘ng barcha eʼlonlaringiz va yozishmalaringiz saqlanadi.',
-      switchToRegister: "Akkauntingiz yo'qmi? Ro'yxatdan o'ting",
-      switchToLogin: 'Akkauntingiz bormi? Tizimga kiring',
-      sending: 'Yuborilmoqda…',
-      loading: 'Kutilmoqda…'
-    },
-    ru: {
-      phoneTab: 'Телефон',
-      emailTab: 'Email',
-      login: 'Войти',
-      register: 'Регистрация',
-      subTitle: 'Добро пожаловать в OldiSotdi',
-      phoneSubtitle: 'Быстрый и безопасный вход по SMS',
-      phoneLabel: 'Номер телефона',
-      phonePlaceholder: '(90) 123-45-67',
-      sendCodeBtn: 'Получить SMS-код',
-      sendingCode: 'Отправка SMS…',
-      otpTitle: 'Введите SMS-код',
-      otpSubtitle: 'введите 6-значный проверочный код, отправленный на номер',
-      otpPlaceholder: '• • • • • •',
-      verifyBtn: 'Подтвердить и войти',
-      verifying: 'Проверка…',
-      resendCode: 'Отправить код повторно',
-      resendIn: (sec: number) => `Повторно через: ${sec}с`,
-      changeNumber: 'Изменить номер',
-      phoneHelpText: 'На ваш номер поступит бесплатный проверочный SMS-код.',
-      emailPlaceholder: 'Ваш email',
-      passwordPlaceholder: 'Пароль (минимум 6 символов)',
-      rememberMe: 'Запомнить email',
-      forgotPassword: 'Забыли пароль?',
-      or: 'или',
-      googleBtn: 'Продолжить с Google',
-      browserNotice: 'После входа все ваши объявления и переписки будут сохранены.',
-      switchToRegister: 'Нет аккаунта? Зарегистрируйтесь',
-      switchToLogin: 'Уже есть аккаунт? Войдите',
-      sending: 'Отправка…',
-      loading: 'Подождите…'
-    },
-    oz: {
-      phoneTab: 'Телефон',
-      emailTab: 'Email',
-      login: 'Кириш',
-      register: 'Рўйхатдан ўтиш',
-      subTitle: 'OldiSotdi платформасига хуш келибсиз',
-      phoneSubtitle: 'SMS орқали хавфсиз ва тез кириш',
-      phoneLabel: 'Телефон рақамингиз',
-      phonePlaceholder: '(90) 123-45-67',
-      sendCodeBtn: 'SMS код олиш',
-      sendingCode: 'SMS юборилмоқда…',
-      otpTitle: 'SMS кодни киритинг',
-      otpSubtitle: 'рақамига юборилган 6 хонали тасдиқлаш кодини киритинг',
-      otpPlaceholder: '• • • • • •',
-      verifyBtn: 'Тасдиқлаш ва кириш',
-      verifying: 'Текширилмоқда…',
-      resendCode: 'Кодни қайта юбориш',
-      resendIn: (sec: number) => `Қайта юбориш: ${sec}с`,
-      changeNumber: 'Рақамни ўзгартириш',
-      phoneHelpText: 'Рақамингизга бепул тасдиқлаш коди юборилади.',
-      emailPlaceholder: 'Email манзилингиз',
-      passwordPlaceholder: 'Парол (камида 6 та белги)',
-      rememberMe: 'Emailни эслаб қолиш',
-      forgotPassword: 'Паролни унутдингизми?',
-      or: 'ёки',
-      googleBtn: 'Google билан давом этиш',
-      browserNotice: 'Кирганингиздан сўнг барча эълонларингиз ва ёзишмаларингиз сақланади.',
-      switchToRegister: 'Аккаунтингиз йўқми? Рўйхатдан ўтинг',
-      switchToLogin: 'Аккаунтингиз борми? Тизимга киринг',
-      sending: 'Юборилмоқда…',
-      loading: 'Кутилмоқда…'
+  const phoneDigits = rawPhone.replace(/\D/g, '').slice(-9);
+  const phoneIsValid = phoneDigits.length === 9;
+
+  const validatePassword = (requireConfirmation: boolean) => {
+    if (password.length < 6) {
+      setAuthError(t(
+        'Parol kamida 6 ta belgidan iborat bo‘lishi kerak.',
+        'Пароль должен содержать не менее 6 символов.',
+        'Парол камида 6 та белгидан иборат бўлиши керак.'
+      ));
+      return false;
     }
-  }[lang] || {
-    phoneTab: 'Telefon',
-    emailTab: 'Email',
-    login: 'Kirish',
-    register: "Ro'yxatdan o'tish",
-    subTitle: 'OldiSotdi platformasiga xush kelibsiz',
-    phoneSubtitle: 'SMS orqali xavfsiz va tez kirish',
-    phoneLabel: 'Telefon raqamingiz',
-    phonePlaceholder: '(90) 123-45-67',
-    sendCodeBtn: 'SMS kod olish',
-    sendingCode: 'SMS yuborilmoqda…',
-    otpTitle: 'SMS kodni kiriting',
-    otpSubtitle: 'raqamiga yuborilgan 6 xonali tasdiqlash kodini kiriting',
-    otpPlaceholder: '• • • • • •',
-    verifyBtn: 'Tasdiqlash va kirish',
-    verifying: 'Tekshirilmoqda…',
-    resendCode: 'Kodni qayta yuborish',
-    resendIn: (sec: number) => `Qayta yuborish: ${sec}s`,
-    changeNumber: "Raqamni o'zgartirish",
-    phoneHelpText: "Raqamingizga bepul tasdiqlash kodi yuboriladi.",
-    emailPlaceholder: 'Email manzilingiz',
-    passwordPlaceholder: 'Parol (kamida 6 ta belgi)',
-    rememberMe: 'Emailni eslab qolish',
-    forgotPassword: 'Parolni unutdingizmi?',
-    or: 'yoki',
-    googleBtn: 'Google bilan davom etish',
-    browserNotice: 'Kirganingizdan so‘ng barcha eʼlonlaringiz va yozishmalaringiz saqlanadi.',
-    switchToRegister: "Akkauntingiz yo'qmi? Ro'yxatdan o'ting",
-    switchToLogin: 'Akkauntingiz bormi? Tizimga kiring',
-    sending: 'Yuborilmoqda…',
-    loading: 'Kutilmoqda…'
+    if (requireConfirmation && password !== confirmPassword) {
+      setAuthError(t(
+        'Parollar bir xil emas. Parolni qayta tekshiring.',
+        'Пароли не совпадают. Проверьте подтверждение пароля.',
+        'Пароллар бир хил эмас. Паролни қайта текширинг.'
+      ));
+      return false;
+    }
+    return true;
   };
 
-  const friendlyAuthError = (error: any) => {
-    const code = error?.code || '';
+  const friendlyAuthError = (error: any, method: 'phone' | 'email' = authMethod) => {
+    const code = String(error?.code || '');
     if (code.includes('invalid-credential') || code.includes('wrong-password') || code.includes('user-not-found')) {
-      return lang === 'ru' ? 'Неверный email или пароль.' : 'Email yoki parol noto‘g‘ri.';
+      if (method === 'phone') {
+        return t(
+          'Telefon raqami yoki parol noto‘g‘ri. Agar bu raqam bilan avval faqat SMS orqali kirgan bo‘lsangiz, “Ro‘yxatdan o‘tish” orqali bir marta parol yarating.',
+          'Неверный номер телефона или пароль. Если раньше вы входили только по SMS, один раз создайте пароль через «Регистрация».',
+          'Телефон рақами ёки парол нотўғри. Агар аввал фақат SMS орқали кирган бўлсангиз, «Рўйхатдан ўтиш» орқали бир марта парол яратинг.'
+        );
+      }
+      return t('Email yoki parol noto‘g‘ri.', 'Неверный email или пароль.', 'Email ёки парол нотўғри.');
     }
-    if (code.includes('email-already-in-use')) {
-      return lang === 'ru' ? 'Этот email уже зарегистрирован.' : 'Bu email allaqachon ro‘yxatdan o‘tgan.';
+    if (code.includes('email-already-in-use') || code.includes('credential-already-in-use')) {
+      return method === 'phone'
+        ? t('Bu telefon raqami boshqa akkauntga biriktirilgan.', 'Этот номер телефона уже привязан к другому аккаунту.', 'Бу телефон рақами бошқа аккаунтга бириктирилган.')
+        : t('Bu email allaqachon ro‘yxatdan o‘tgan.', 'Этот email уже зарегистрирован.', 'Бу email аллақачон рўйхатдан ўтган.');
+    }
+    if (code.includes('phone-password-conflict')) {
+      return t(
+        'Bu akkaunt boshqa kirish usuli bilan bog‘langan. Email yoki Google orqali kiring.',
+        'Этот аккаунт связан с другим способом входа. Войдите через Email или Google.',
+        'Бу аккаунт бошқа кириш усули билан боғланган. Email ёки Google орқали киринг.'
+      );
     }
     if (code.includes('weak-password')) {
-      return lang === 'ru' ? 'Пароль должен содержать не менее 6 символов.' : 'Parol kamida 6 ta belgidan iborat bo‘lishi kerak.';
+      return t('Parol kamida 6 ta belgidan iborat bo‘lishi kerak.', 'Пароль должен содержать не менее 6 символов.', 'Парол камида 6 та белгидан иборат бўлиши керак.');
     }
     if (code.includes('invalid-email')) {
-      return lang === 'ru' ? 'Проверьте правильность email адреса.' : 'Email manzilini tekshiring.';
+      return t('Email manzilini tekshiring.', 'Проверьте правильность email.', 'Email манзилини текширинг.');
     }
-    if (code.includes('invalid-phone-number')) {
-      return lang === 'ru' ? 'Неверный номер телефона. Проверьте 9-значный номер.' : 'Telefon raqami noto‘g‘ri kiritildi. 9 xonali raqamni tekshiring.';
-    }
-    if (code.includes('missing-phone-number')) {
-      return lang === 'ru' ? 'Введите номер телефона.' : 'Telefon raqamingizni kiriting.';
-    }
-    if (code.includes('quota-exceeded')) {
-      return lang === 'ru' ? 'Лимит SMS исчерпан. Пожалуйста, войдите через Email или Google.' : 'SMS yuborish limiti tugadi. Iltimos, Email yoki Google orqali kiring.';
+    if (code.includes('invalid-phone-number') || code.includes('missing-phone-number')) {
+      return t('To‘liq 9 xonali O‘zbekiston telefon raqamini kiriting.', 'Введите полный 9-значный номер Узбекистана.', 'Тўлиқ 9 хонали Ўзбекистон телефон рақамини киритинг.');
     }
     if (code.includes('invalid-verification-code')) {
-      return lang === 'ru' ? 'Неверный SMS-код подтверждения.' : 'SMS tasdiqlash kodi noto‘g‘ri. Qayta tekshiring.';
+      return t('SMS tasdiqlash kodi noto‘g‘ri.', 'Неверный SMS-код подтверждения.', 'SMS тасдиқлаш коди нотўғри.');
     }
     if (code.includes('code-expired')) {
-      return lang === 'ru' ? 'Срок действия кода истек. Запросите новый код.' : 'Tasdiqlash kodining muddati tugagan. Yangi kod so‘rang.';
+      return t('SMS kod muddati tugagan. Yangi kod so‘rang.', 'Срок действия SMS-кода истёк. Запросите новый.', 'SMS код муддати тугаган. Янги код сўранг.');
     }
-    if (code.includes('captcha-check-failed')) {
-      return lang === 'ru' ? 'Проверка безопасности reCAPTCHA не пройдена. Попробуйте еще раз.' : 'Xavfsizlik tekshiruvi (reCAPTCHA) o‘tmadi. Qayta urinib ko‘ring.';
-    }
-    if (code.includes('popup-blocked')) {
-      return lang === 'ru' ? 'Окно Google заблокировано браузером. Разрешите всплывающие окна.' : 'Google oynasi bloklandi. Brauzerda popup oynalarga ruxsat bering va qayta bosing.';
-    }
-    if (code.includes('unauthorized-domain')) {
-      return lang === 'ru' ? 'Этот домен не авторизован для входа.' : 'Bu sayt manzilida avtorizatsiyaga ruxsat berilmagan.';
-    }
-    if (code.includes('operation-not-allowed')) {
-      return lang === 'ru' ? 'Вход по телефону пока отключен в настройках. Войдите через Email или Google.' : 'Telefon orqali kirish hozir sozlanmagan. Email yoki Google orqali kiring.';
-    }
-    if (code.includes('operation-not-supported') || code.includes('web-storage-unsupported')) {
-      return lang === 'ru' ? 'Попробуйте открыть сайт в Chrome или Safari.' : 'Saytni Chrome yoki Safari brauzerida ochib qayta urinib ko‘ring.';
-    }
-    if (code.includes('network-request-failed')) {
-      return lang === 'ru' ? 'Проверьте подключение к интернету.' : 'Internet aloqasini tekshiring va qayta urinib ko‘ring.';
-    }
-    if (code.includes('account-exists-with-different-credential')) {
-      return lang === 'ru' ? 'Этот аккаунт уже зарегистрирован другим способом.' : 'Bu akkaunt boshqa usul bilan ro‘yxatdan o‘tgan.';
+    if (code.includes('quota-exceeded')) {
+      return t('SMS limiti tugagan. Birozdan keyin qayta urinib ko‘ring.', 'Лимит SMS исчерпан. Попробуйте позже.', 'SMS лимити тугаган. Бироздан кейин қайта уриниб кўринг.');
     }
     if (code.includes('too-many-requests')) {
-      return lang === 'ru' ? 'Слишком много попыток. Пожалуйста, подождите немного.' : 'Juda ko‘p urinish bo‘ldi. Biroz kuting va qayta urinib ko‘ring.';
+      return t('Juda ko‘p urinish bo‘ldi. Biroz kutib qayta urinib ko‘ring.', 'Слишком много попыток. Немного подождите и попробуйте снова.', 'Жуда кўп уриниш бўлди. Бироз кутиб қайта уриниб кўринг.');
+    }
+    if (code.includes('captcha-check-failed')) {
+      return t('reCAPTCHA xavfsizlik tekshiruvi o‘tmadi. Qayta urinib ko‘ring.', 'Проверка reCAPTCHA не пройдена. Попробуйте снова.', 'reCAPTCHA хавфсизлик текшируви ўтмади. Қайта уриниб кўринг.');
+    }
+    if (code.includes('unauthorized-domain')) {
+      return t('Bu domen Firebase Authentication uchun ruxsat etilmagan.', 'Этот домен не авторизован в Firebase Authentication.', 'Бу домен Firebase Authentication учун рухсат этилмаган.');
+    }
+    if (code.includes('operation-not-allowed')) {
+      return t(
+        'Firebase’da Phone va Email/Password kirish usullari yoqilganini tekshiring.',
+        'Проверьте, что в Firebase включены Phone и Email/Password.',
+        'Firebase’да Phone ва Email/Password кириш усуллари ёқилганини текширинг.'
+      );
+    }
+    if (code.includes('network-request-failed')) {
+      return t('Internet aloqasini tekshiring.', 'Проверьте подключение к интернету.', 'Интернет алоқасини текширинг.');
+    }
+    if (code.includes('popup-blocked')) {
+      return t('Brauzer Google oynasini blokladi. Popup oynalarga ruxsat bering.', 'Браузер заблокировал окно Google. Разрешите всплывающие окна.', 'Браузер Google ойнасини блоклади. Popup ойналарга рухсат беринг.');
     }
     if (code.includes('popup-closed')) {
-      return lang === 'ru' ? 'Окно входа Google было закрыто.' : 'Google oynasi yopildi.';
+      return t('Google kirish oynasi yopildi.', 'Окно входа Google было закрыто.', 'Google кириш ойнаси ёпилди.');
     }
-    return lang === 'ru' ? 'Произошла ошибка при входе. Попробуйте еще раз.' : 'Kirishda xatolik yuz berdi. Qayta urinib ko‘ring.';
+    return t('Kirishda xatolik yuz berdi. Qayta urinib ko‘ring.', 'Произошла ошибка. Попробуйте ещё раз.', 'Киришда хатолик юз берди. Қайта уриниб кўринг.');
   };
 
-  // Handle Phone: Send OTP Code
-  const handleSendOtp = async (e?: React.FormEvent, isResend = false) => {
-    if (e) e.preventDefault();
-    if (authInFlight.current) return;
+  const rememberPhone = () => {
+    try {
+      window.localStorage.setItem(REMEMBERED_PHONE_KEY, phoneDigits);
+    } catch {
+      // Ignore unavailable local storage.
+    }
+  };
 
-    const digits = rawPhone.replace(/\D/g, '');
-    let fullE164 = '';
-    if (digits.length === 9) {
-      fullE164 = `+998${digits}`;
-    } else if (digits.length === 12 && digits.startsWith('998')) {
-      fullE164 = `+${digits}`;
-    } else {
-      setAuthError(lang === 'ru' ? 'Введите 9 цифр номера (например: 90 123 45 67).' : 'To‘liq 9 xonali telefon raqamingizni kiriting (masalan: 90 123 45 67).');
+  const handlePhoneLogin = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (authInFlight.current) return;
+    setAuthError('');
+    setForgotMessage('');
+
+    if (!phoneIsValid) {
+      setAuthError(t('To‘liq 9 xonali telefon raqamini kiriting.', 'Введите полный 9-значный номер.', 'Тўлиқ 9 хонали телефон рақамини киритинг.'));
       return;
     }
+    if (!validatePassword(false)) return;
 
     authInFlight.current = true;
     setAuthLoading(true);
+    try {
+      rememberPhone();
+      await loginWithPhonePassword(rawPhone, password);
+      setPassword('');
+      setConfirmPassword('');
+      onClose();
+      onSuccess?.();
+    } catch (error) {
+      setAuthError(friendlyAuthError(error, 'phone'));
+    } finally {
+      authInFlight.current = false;
+      setAuthLoading(false);
+    }
+  };
+
+  const handleSendOtp = async (event?: React.FormEvent, isResend = false) => {
+    event?.preventDefault();
+    if (authInFlight.current) return;
     setAuthError('');
     setForgotMessage('');
-    try {
-      try {
-        window.localStorage.setItem(REMEMBERED_PHONE_KEY, digits.slice(-9));
-      } catch {
-        // ignore
-      }
 
-      const confirmation = await sendPhoneVerificationCode(fullE164, 'recaptcha-container');
+    if (!phoneIsValid) {
+      setAuthError(t('To‘liq 9 xonali telefon raqamini kiriting.', 'Введите полный 9-значный номер.', 'Тўлиқ 9 хонали телефон рақамини киритинг.'));
+      return;
+    }
+    if (!validatePassword(true)) return;
+
+    authInFlight.current = true;
+    setAuthLoading(true);
+    try {
+      rememberPhone();
+      const confirmation = await sendPhoneVerificationCode(rawPhone, 'recaptcha-container');
       setConfirmationResult(confirmation);
       setPhoneStep('enter_otp');
       setCountdown(60);
       if (isResend) {
-        setForgotMessage(lang === 'ru' ? 'Новый SMS-код отправлен!' : 'Yangi SMS-kod yuborildi!');
+        setForgotMessage(t('Yangi SMS-kod yuborildi.', 'Новый SMS-код отправлен.', 'Янги SMS-код юборилди.'));
       }
-    } catch (error: any) {
-      setAuthError(friendlyAuthError(error));
+    } catch (error) {
+      setAuthError(friendlyAuthError(error, 'phone'));
       clearRecaptcha();
     } finally {
       authInFlight.current = false;
@@ -365,60 +295,100 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
   };
 
-  // Handle Phone: Verify OTP Code
-  const handleVerifyOtp = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
+  const handleVerifyOtp = async (event: React.FormEvent) => {
+    event.preventDefault();
     if (authInFlight.current) return;
+    setAuthError('');
 
-    const cleanOtp = otpCode.replace(/\D/g, '').trim();
-    if (cleanOtp.length < 6) {
-      setAuthError(lang === 'ru' ? 'Введите 6-значный SMS-код.' : 'SMS orqali yuborilgan 6 xonali kodni kiriting.');
+    if (otpCode.replace(/\D/g, '').length !== 6) {
+      setAuthError(t('6 xonali SMS kodni kiriting.', 'Введите 6-значный SMS-код.', '6 хонали SMS кодни киритинг.'));
       return;
     }
-
     if (!confirmationResult) {
-      setAuthError(lang === 'ru' ? 'Сессия истекла. Запросите код заново.' : 'Sessiya tugadi. Kodni qayta so‘rang.');
+      setAuthError(t('SMS sessiyasi tugagan. Kodni qayta so‘rang.', 'SMS-сессия истекла. Запросите код повторно.', 'SMS сессияси тугаган. Кодни қайта сўранг.'));
       setPhoneStep('enter_phone');
       return;
     }
+    if (!validatePassword(true)) return;
 
     authInFlight.current = true;
     setAuthLoading(true);
-    setAuthError('');
     try {
-      await confirmPhoneVerificationCode(confirmationResult, cleanOtp);
+      await confirmPhoneAndSetPassword(confirmationResult, otpCode, rawPhone, password);
       clearRecaptcha();
       setConfirmationResult(null);
       setOtpCode('');
+      setPassword('');
+      setConfirmPassword('');
       onClose();
       onSuccess?.();
-    } catch (error: any) {
-      setAuthError(friendlyAuthError(error));
+    } catch (error) {
+      setAuthError(friendlyAuthError(error, 'phone'));
     } finally {
       authInFlight.current = false;
       setAuthLoading(false);
     }
   };
 
-  // Switch back to change phone number
   const handleChangeNumber = () => {
     setPhoneStep('enter_phone');
     setConfirmationResult(null);
     setOtpCode('');
+    setCountdown(0);
     setAuthError('');
     setForgotMessage('');
     clearRecaptcha();
   };
 
-  // Handle Email Auth
-  const submitAuth = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (authInFlight.current) return;
-    authInFlight.current = true;
-    setAuthLoading(true);
+  const switchMode = () => {
+    setAuthMode((mode) => (mode === 'login' ? 'register' : 'login'));
+    setPhoneResetMode(false);
+    setPhoneStep('enter_phone');
+    setConfirmationResult(null);
+    setOtpCode('');
+    setPassword('');
+    setConfirmPassword('');
     setAuthError('');
     setForgotMessage('');
+    clearRecaptcha();
+  };
+
+  const startPhonePasswordReset = () => {
+    setPhoneResetMode(true);
+    setAuthMode('login');
+    setPhoneStep('enter_phone');
+    setPassword('');
+    setConfirmPassword('');
+    setOtpCode('');
+    setConfirmationResult(null);
+    setAuthError('');
+    setForgotMessage('');
+    clearRecaptcha();
+  };
+
+  const cancelPhonePasswordReset = () => {
+    setPhoneResetMode(false);
+    setPassword('');
+    setConfirmPassword('');
+    setAuthError('');
+    setForgotMessage('');
+  };
+
+  const submitEmailAuth = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (authInFlight.current) return;
+    setAuthError('');
+    setForgotMessage('');
+
     const normalizedEmail = email.trim();
+    if (!normalizedEmail || !/^\S+@\S+\.\S+$/.test(normalizedEmail)) {
+      setAuthError(t('To‘g‘ri email manzilini kiriting.', 'Введите корректный email.', 'Тўғри email манзилини киритинг.'));
+      return;
+    }
+    if (!validatePassword(authMode === 'register')) return;
+
+    authInFlight.current = true;
+    setAuthLoading(true);
     try {
       if (authMode === 'login') {
         if (rememberEmail) {
@@ -431,39 +401,38 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         await registerWithEmail(normalizedEmail, password);
       }
       setPassword('');
+      setConfirmPassword('');
       onClose();
       onSuccess?.();
     } catch (error) {
-      setAuthError(friendlyAuthError(error));
+      setAuthError(friendlyAuthError(error, 'email'));
     } finally {
       authInFlight.current = false;
       setAuthLoading(false);
     }
   };
 
-  const handleForgotPassword = async () => {
+  const handleEmailForgotPassword = async () => {
     if (authInFlight.current) return;
     const normalizedEmail = email.trim();
     setAuthError('');
     setForgotMessage('');
     if (!normalizedEmail || !/^\S+@\S+\.\S+$/.test(normalizedEmail)) {
-      setAuthError(lang === 'ru' ? 'Сначала введите корректный email.' : 'Avval to‘g‘ri email manzilingizni kiriting.');
+      setAuthError(t('Avval to‘g‘ri email manzilini kiriting.', 'Сначала введите корректный email.', 'Аввал тўғри email манзилини киритинг.'));
       return;
     }
+
     authInFlight.current = true;
     setForgotLoading(true);
     try {
       await resetPassword(normalizedEmail);
-      setForgotMessage(lang === 'ru' ? 'Ссылка для сброса пароля отправлена на ваш email.' : 'Parolni tiklash havolasi emailingizga yuborildi. Emailingizni tekshiring.');
-    } catch (error: any) {
-      const code = error?.code || '';
-      if (code.includes('too-many-requests')) {
-        setAuthError(lang === 'ru' ? 'Слишком много попыток. Пожалуйста, подождите.' : 'Juda ko‘p urinish bo‘ldi. Birozdan keyin qayta urinib ko‘ring.');
-      } else if (code.includes('invalid-email')) {
-        setAuthError(lang === 'ru' ? 'Проверьте правильность email.' : 'Email manzilini tekshiring.');
-      } else {
-        setAuthError(lang === 'ru' ? 'Ошибка при сбросе пароля.' : 'Parolni tiklashda xatolik yuz berdi. Qayta urinib ko‘ring.');
-      }
+      setForgotMessage(t(
+        'Parolni tiklash havolasi emailingizga yuborildi.',
+        'Ссылка для сброса пароля отправлена на ваш email.',
+        'Паролни тиклаш ҳаволаси emailingизга юборилди.'
+      ));
+    } catch (error) {
+      setAuthError(friendlyAuthError(error, 'email'));
     } finally {
       authInFlight.current = false;
       setForgotLoading(false);
@@ -488,12 +457,39 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
   };
 
+  const switchMethod = (method: 'phone' | 'email') => {
+    setAuthMethod(method);
+    setPhoneStep('enter_phone');
+    setPhoneResetMode(false);
+    setConfirmationResult(null);
+    setOtpCode('');
+    setPassword('');
+    setConfirmPassword('');
+    setAuthError('');
+    setForgotMessage('');
+    clearRecaptcha();
+  };
+
+  const phoneTitle = phoneStep === 'enter_otp'
+    ? t('SMS kodni kiriting', 'Введите SMS-код', 'SMS кодни киритинг')
+    : phoneResetMode
+      ? t('Parolni tiklash', 'Сброс пароля', 'Паролни тиклаш')
+      : authMode === 'login'
+        ? t('Kirish', 'Войти', 'Кириш')
+        : t('Ro‘yxatdan o‘tish', 'Регистрация', 'Рўйхатдан ўтиш');
+
+  const phoneSubtitle = phoneResetMode
+    ? t('Yangi parolni kiriting va raqamingizni SMS bilan tasdiqlang.', 'Введите новый пароль и подтвердите номер по SMS.', 'Янги паролни киритинг ва рақамингизни SMS билан тасдиқланг.')
+    : authMode === 'login'
+      ? t('Telefon raqami va parol bilan kiring. SMS yuborilmaydi.', 'Войдите по номеру телефона и паролю. SMS не отправляется.', 'Телефон рақами ва парол билан киринг. SMS юборилмайди.')
+      : t('Raqamni bir marta SMS bilan tasdiqlang va parol yarating.', 'Один раз подтвердите номер по SMS и создайте пароль.', 'Рақамни бир марта SMS билан тасдиқланг ва парол яратинг.');
+
   return (
     <div
       id="auth-modal-overlay"
-      className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-150"
-      onClick={(e) => {
-        if (e.target === e.currentTarget && !authLoading) onClose();
+      className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm"
+      onClick={(event) => {
+        if (event.target === event.currentTarget && !authLoading) onClose();
       }}
     >
       <div
@@ -501,267 +497,273 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         role="dialog"
         aria-modal="true"
         aria-labelledby="auth-modal-title"
-        className="w-full max-w-sm rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-2xl text-slate-900 dark:text-white relative animate-in zoom-in-95 duration-150"
+        className="w-full max-w-sm max-h-[92vh] overflow-y-auto rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-2xl text-slate-900 dark:text-white"
       >
-        {/* Header */}
-        <div className="flex items-start justify-between mb-3">
-          <div>
-            <div className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-50 dark:bg-indigo-950/70 text-indigo-600 dark:text-indigo-400">
-                {authMethod === 'phone' ? (
-                  <Smartphone size={18} />
-                ) : authMode === 'login' ? (
-                  <LogIn size={18} />
-                ) : (
-                  <UserPlus size={18} />
-                )}
-              </div>
+        <div className="flex items-start justify-between gap-3 mb-4">
+          <div className="flex items-start gap-2.5">
+            <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-50 dark:bg-indigo-950/70 text-indigo-600 dark:text-indigo-400">
+              {authMethod === 'phone' ? <Smartphone size={18} /> : <Mail size={18} />}
+            </div>
+            <div>
               <h3 id="auth-modal-title" className="text-xl font-black tracking-tight">
                 {authMethod === 'phone'
-                  ? (phoneStep === 'enter_otp' ? labels.otpTitle : labels.phoneTab)
-                  : (authMode === 'login' ? labels.login : labels.register)}
+                  ? phoneTitle
+                  : authMode === 'login'
+                    ? t('Kirish', 'Войти', 'Кириш')
+                    : t('Ro‘yxatdan o‘tish', 'Регистрация', 'Рўйхатдан ўтиш')}
               </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                {authMethod === 'phone'
+                  ? phoneSubtitle
+                  : t('OldiSotdi akkauntingiz', 'Ваш аккаунт OldiSotdi', 'OldiSotdi аккаунтингиз')}
+              </p>
             </div>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-              {authMethod === 'phone' ? labels.phoneSubtitle : labels.subTitle}
-            </p>
           </div>
           <button
             id="auth-modal-close-btn"
             type="button"
             onClick={onClose}
             disabled={authLoading}
-            className="p-2 -mr-1 -mt-1 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer disabled:opacity-50"
-            aria-label="Yopish"
+            className="p-2 -mr-1 -mt-1 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50"
+            aria-label={t('Yopish', 'Закрыть', 'Ёпиш')}
           >
             <X size={18} />
           </button>
         </div>
 
-        {/* Reason Message */}
         {reasonMessage && (
-          <div
-            id="auth-modal-reason-banner"
-            className="mb-3.5 flex items-start gap-2.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200/90 dark:border-amber-900/60 p-3 text-xs font-semibold text-amber-900 dark:text-amber-200"
-          >
-            <Sparkles size={16} className="text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-            <span>{reasonMessage}</span>
+          <div id="auth-modal-reason-banner" className="mb-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 p-3 text-xs font-semibold text-amber-900 dark:text-amber-200">
+            {reasonMessage}
           </div>
         )}
 
-        {/* Auth Method Tabs: Telefon vs Email */}
         <div className="flex rounded-2xl bg-slate-100 dark:bg-slate-800/80 p-1 mb-4 border border-slate-200/60 dark:border-slate-700/60">
           <button
             id="auth-tab-phone-btn"
             type="button"
-            onClick={() => {
-              setAuthMethod('phone');
-              setAuthError('');
-              setForgotMessage('');
-            }}
+            onClick={() => switchMethod('phone')}
             disabled={authLoading}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-              authMethod === 'phone'
-                ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-            }`}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-bold ${authMethod === 'phone' ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-slate-600 dark:text-slate-400'}`}
           >
             <Phone size={14} />
-            <span>{labels.phoneTab}</span>
+            {t('Telefon', 'Телефон', 'Телефон')}
           </button>
           <button
             id="auth-tab-email-btn"
             type="button"
-            onClick={() => {
-              setAuthMethod('email');
-              setAuthError('');
-              setForgotMessage('');
-            }}
+            onClick={() => switchMethod('email')}
             disabled={authLoading}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-              authMethod === 'email'
-                ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-            }`}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-bold ${authMethod === 'email' ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-slate-600 dark:text-slate-400'}`}
           >
             <Mail size={14} />
-            <span>{labels.emailTab}</span>
+            Email
           </button>
         </div>
 
-        {/* PHONE AUTH FLOW */}
-        {authMethod === 'phone' && (
-          <div>
-            {phoneStep === 'enter_phone' ? (
-              <form onSubmit={(e) => handleSendOtp(e)} className="space-y-3">
-                <div>
-                  <label htmlFor="auth-phone-input" className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                    {labels.phoneLabel}
-                  </label>
-                  <div className="flex items-center rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500 transition-all">
-                    <div className="flex items-center gap-1.5 pl-3 pr-2 py-2.5 sm:py-3 bg-slate-100/70 dark:bg-slate-800/80 border-r border-slate-200 dark:border-slate-700 text-xs sm:text-sm font-bold text-slate-700 dark:text-slate-200 select-none shrink-0">
-                      <span>🇺🇿</span>
-                      <span>+998</span>
-                    </div>
-                    <input
-                      id="auth-phone-input"
-                      type="tel"
-                      autoFocus
-                      required
-                      placeholder={labels.phonePlaceholder}
-                      value={rawPhone}
-                      onChange={(e) => {
-                        setRawPhone(formatUzbekPhone(e.target.value));
-                        setAuthError('');
-                        setForgotMessage('');
-                      }}
-                      className="w-full bg-transparent px-3 py-2.5 sm:py-3 text-sm sm:text-base font-semibold tracking-wide outline-none placeholder:text-slate-400 text-slate-900 dark:text-white"
-                    />
-                  </div>
-                  <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1.5">
-                    {labels.phoneHelpText}
-                  </p>
+        {authMethod === 'phone' && phoneStep === 'enter_phone' && (
+          <form
+            onSubmit={authMode === 'login' && !phoneResetMode ? handlePhoneLogin : (event) => handleSendOtp(event)}
+            className="space-y-3"
+            autoComplete="on"
+          >
+            <div>
+              <label htmlFor="auth-phone-input" className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                {t('Telefon raqamingiz', 'Номер телефона', 'Телефон рақамингиз')}
+              </label>
+              <div className="flex items-center rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500">
+                <div className="flex items-center gap-1.5 pl-3 pr-2 py-3 bg-slate-100/70 dark:bg-slate-800/80 border-r border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-700 dark:text-slate-200 shrink-0">
+                  <span>🇺🇿</span><span>+998</span>
                 </div>
+                <input
+                  id="auth-phone-input"
+                  name="tel"
+                  type="tel"
+                  autoComplete="tel"
+                  autoFocus
+                  required
+                  value={rawPhone}
+                  placeholder="(90) 123-45-67"
+                  onChange={(event) => {
+                    setRawPhone(formatUzbekPhone(event.target.value));
+                    setAuthError('');
+                  }}
+                  className="w-full bg-transparent px-3 py-3 text-sm font-semibold tracking-wide outline-none placeholder:text-slate-400 text-slate-900 dark:text-white"
+                />
+              </div>
+            </div>
 
-                {authError && (
-                  <div
-                    id="auth-phone-error-box"
-                    className="flex items-start gap-2 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 p-3 text-xs font-semibold text-rose-700 dark:text-rose-300"
-                  >
-                    <AlertCircle size={15} className="shrink-0 mt-0.5" />
-                    <span>{authError}</span>
-                  </div>
-                )}
+            <div className="relative">
+              <Lock size={17} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                id="auth-phone-password-input"
+                name="phone-password"
+                type="password"
+                autoComplete={authMode === 'login' && !phoneResetMode ? 'current-password' : 'new-password'}
+                required
+                minLength={6}
+                value={password}
+                onChange={(event) => { setPassword(event.target.value); setAuthError(''); }}
+                placeholder={phoneResetMode ? t('Yangi parol', 'Новый пароль', 'Янги парол') : t('Parol (kamida 6 ta belgi)', 'Пароль (минимум 6 символов)', 'Парол (камида 6 та белги)')}
+                className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 pl-10 pr-3 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white"
+              />
+            </div>
 
-                {/* Invisible reCAPTCHA container */}
-                <div id="recaptcha-container" className="flex justify-center" />
-
-                <button
-                  id="auth-phone-submit-btn"
-                  disabled={authLoading}
-                  type="submit"
-                  className="w-full flex items-center justify-center gap-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white py-3 font-bold text-sm shadow-md shadow-indigo-600/20 transition-all cursor-pointer"
-                >
-                  {authLoading ? (
-                    <>
-                      <RotateCw size={16} className="animate-spin" />
-                      <span>{labels.sendingCode}</span>
-                    </>
-                  ) : (
-                    <span>{labels.sendCodeBtn}</span>
-                  )}
-                </button>
-              </form>
-            ) : (
-              /* OTP VERIFICATION STEP */
-              <form onSubmit={(e) => handleVerifyOtp(e)} className="space-y-3.5">
-                <div className="rounded-2xl bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/60 p-3 text-center">
-                  <p className="text-xs text-slate-600 dark:text-slate-300">
-                    <span className="font-bold text-slate-900 dark:text-white">
-                      +998 {rawPhone || 'raqamiga'}
-                    </span>{' '}
-                    {labels.otpSubtitle}
-                  </p>
-                  <button
-                    type="button"
-                    onClick={handleChangeNumber}
-                    disabled={authLoading}
-                    className="mt-1 inline-flex items-center gap-1 text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
-                  >
-                    <ArrowLeft size={12} />
-                    <span>{labels.changeNumber}</span>
-                  </button>
-                </div>
-
-                <div>
-                  <input
-                    ref={otpInputRef}
-                    id="auth-otp-input"
-                    type="text"
-                    inputMode="numeric"
-                    autoComplete="one-time-code"
-                    maxLength={6}
-                    placeholder={labels.otpPlaceholder}
-                    value={otpCode}
-                    onChange={(e) => {
-                      const val = e.target.value.replace(/\D/g, '').slice(0, 6);
-                      setOtpCode(val);
-                      setAuthError('');
-                    }}
-                    className="w-full text-center tracking-[0.4em] font-mono text-2xl py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 outline-none focus:ring-2 focus:ring-indigo-500 transition-all placeholder:text-slate-300 text-slate-900 dark:text-white"
-                  />
-                </div>
-
-                {authError && (
-                  <div
-                    id="auth-otp-error-box"
-                    className="flex items-start gap-2 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 p-3 text-xs font-semibold text-rose-700 dark:text-rose-300"
-                  >
-                    <AlertCircle size={15} className="shrink-0 mt-0.5" />
-                    <span>{authError}</span>
-                  </div>
-                )}
-
-                {forgotMessage && (
-                  <div className="flex items-center gap-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 p-2.5 text-xs font-semibold text-emerald-700 dark:text-emerald-300">
-                    <CheckCircle2 size={15} className="shrink-0" />
-                    <span>{forgotMessage}</span>
-                  </div>
-                )}
-
-                <button
-                  id="auth-otp-verify-btn"
-                  disabled={authLoading || otpCode.replace(/\D/g, '').length < 6}
-                  type="submit"
-                  className="w-full rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white py-3 font-bold text-sm shadow-md shadow-indigo-600/20 transition-all cursor-pointer"
-                >
-                  {authLoading ? (
-                    <span className="inline-flex items-center gap-2">
-                      <RotateCw size={16} className="animate-spin" />
-                      {labels.verifying}
-                    </span>
-                  ) : (
-                    labels.verifyBtn
-                  )}
-                </button>
-
-                <div className="text-center pt-1">
-                  {countdown > 0 ? (
-                    <p className="text-xs text-slate-400 font-semibold">
-                      {labels.resendIn(countdown)}
-                    </p>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => handleSendOtp(undefined, true)}
-                      disabled={authLoading}
-                      className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
-                    >
-                      {labels.resendCode}
-                    </button>
-                  )}
-                </div>
-              </form>
+            {(authMode === 'register' || phoneResetMode) && (
+              <div className="relative">
+                <Lock size={17} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  id="auth-phone-confirm-password-input"
+                  name="phone-confirm-password"
+                  type="password"
+                  autoComplete="new-password"
+                  required
+                  minLength={6}
+                  value={confirmPassword}
+                  onChange={(event) => { setConfirmPassword(event.target.value); setAuthError(''); }}
+                  placeholder={t('Parolni qayta kiriting', 'Повторите пароль', 'Паролни қайта киритинг')}
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 pl-10 pr-3 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white"
+                />
+              </div>
             )}
-          </div>
+
+            {authMode === 'login' && !phoneResetMode && (
+              <div className="flex justify-end">
+                <button
+                  id="auth-phone-forgot-password-btn"
+                  type="button"
+                  onClick={startPhonePasswordReset}
+                  className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
+                >
+                  {t('Parolni unutdingizmi?', 'Забыли пароль?', 'Паролни унутдингизми?')}
+                </button>
+              </div>
+            )}
+
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">
+              {phoneResetMode
+                ? t('SMS faqat raqam egasi ekaningizni tasdiqlash uchun yuboriladi.', 'SMS отправляется только для подтверждения владельца номера.', 'SMS фақат рақам эгаси эканингизни тасдиқлаш учун юборилади.')
+                : authMode === 'register'
+                  ? t('Ro‘yxatdan o‘tishda raqam bir marta SMS bilan tasdiqlanadi. Keyingi kirishlarda telefon + parol yetadi.', 'При регистрации номер подтверждается по SMS один раз. Далее достаточно телефона и пароля.', 'Рўйхатдан ўтишда рақам бир марта SMS билан тасдиқланади. Кейин телефон + парол етарли.')
+                  : t('Oddiy kirishda SMS yuborilmaydi.', 'При обычном входе SMS не отправляется.', 'Оддий киришда SMS юборилмайди.')}
+            </p>
+
+            {authError && (
+              <div id="auth-phone-error-box" className="flex items-start gap-2 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 p-3 text-xs font-semibold text-rose-700 dark:text-rose-300">
+                <AlertCircle size={15} className="shrink-0 mt-0.5" />
+                <span>{authError}</span>
+              </div>
+            )}
+
+            <div id="recaptcha-container" className="flex justify-center" />
+
+            <button
+              id="auth-phone-submit-btn"
+              disabled={authLoading}
+              type="submit"
+              className="w-full flex items-center justify-center gap-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white py-3 font-bold text-sm shadow-md shadow-indigo-600/20"
+            >
+              {authLoading && <RotateCw size={16} className="animate-spin" />}
+              <span>
+                {authMode === 'login' && !phoneResetMode
+                  ? t('Kirish', 'Войти', 'Кириш')
+                  : authLoading
+                    ? t('SMS yuborilmoqda…', 'Отправка SMS…', 'SMS юборилмоқда…')
+                    : t('SMS kod olish', 'Получить SMS-код', 'SMS код олиш')}
+              </span>
+            </button>
+
+            {phoneResetMode ? (
+              <button type="button" onClick={cancelPhonePasswordReset} className="w-full text-xs font-semibold text-slate-500 dark:text-slate-400 hover:underline">
+                {t('Kirishga qaytish', 'Вернуться ко входу', 'Киришга қайтиш')}
+              </button>
+            ) : (
+              <button id="auth-phone-mode-switch-btn" type="button" onClick={switchMode} className="w-full text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline">
+                {authMode === 'login'
+                  ? t('Akkauntingiz yo‘qmi? Ro‘yxatdan o‘ting', 'Нет аккаунта? Зарегистрируйтесь', 'Аккаунтингиз йўқми? Рўйхатдан ўтинг')
+                  : t('Akkauntingiz bormi? Tizimga kiring', 'Уже есть аккаунт? Войдите', 'Аккаунтингиз борми? Тизимга киринг')}
+              </button>
+            )}
+          </form>
         )}
 
-        {/* EMAIL AUTH FLOW */}
+        {authMethod === 'phone' && phoneStep === 'enter_otp' && (
+          <form onSubmit={handleVerifyOtp} className="space-y-3.5">
+            <div className="rounded-2xl bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/60 p-3 text-center">
+              <p className="text-xs text-slate-600 dark:text-slate-300">
+                <span className="font-bold text-slate-900 dark:text-white">+998 {rawPhone}</span>{' '}
+                {t('raqamiga yuborilgan 6 xonali kodni kiriting.', '— введите 6-значный код из SMS.', 'рақамига юборилган 6 хонали кодни киритинг.')}
+              </p>
+              <button type="button" onClick={handleChangeNumber} disabled={authLoading} className="mt-1 inline-flex items-center gap-1 text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline">
+                <ArrowLeft size={12} />
+                {t('Raqamni o‘zgartirish', 'Изменить номер', 'Рақамни ўзгартириш')}
+              </button>
+            </div>
+
+            <input
+              ref={otpInputRef}
+              id="auth-otp-input"
+              type="text"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              maxLength={6}
+              required
+              value={otpCode}
+              onChange={(event) => {
+                setOtpCode(event.target.value.replace(/\D/g, '').slice(0, 6));
+                setAuthError('');
+              }}
+              placeholder="• • • • • •"
+              className="w-full text-center tracking-[0.4em] font-mono text-2xl py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white"
+            />
+
+            {authError && (
+              <div id="auth-otp-error-box" className="flex items-start gap-2 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 p-3 text-xs font-semibold text-rose-700 dark:text-rose-300">
+                <AlertCircle size={15} className="shrink-0 mt-0.5" />
+                <span>{authError}</span>
+              </div>
+            )}
+
+            {forgotMessage && (
+              <div className="flex items-center gap-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 p-3 text-xs font-semibold text-emerald-700 dark:text-emerald-300">
+                <CheckCircle2 size={15} />
+                <span>{forgotMessage}</span>
+              </div>
+            )}
+
+            <button id="auth-otp-verify-btn" disabled={authLoading || otpCode.length !== 6} type="submit" className="w-full rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white py-3 font-bold text-sm shadow-md shadow-indigo-600/20">
+              {authLoading
+                ? t('Tekshirilmoqda…', 'Проверка…', 'Текширилмоқда…')
+                : phoneResetMode
+                  ? t('Tasdiqlash va yangi parolni saqlash', 'Подтвердить и сохранить новый пароль', 'Тасдиқлаш ва янги паролни сақлаш')
+                  : t('Tasdiqlash va ro‘yxatdan o‘tish', 'Подтвердить регистрацию', 'Тасдиқлаш ва рўйхатдан ўтиш')}
+            </button>
+
+            <div className="text-center">
+              {countdown > 0 ? (
+                <p className="text-xs text-slate-400 font-semibold">{t(`Qayta yuborish: ${countdown}s`, `Повторно через: ${countdown}с`, `Қайта юбориш: ${countdown}s`)}</p>
+              ) : (
+                <button type="button" onClick={() => handleSendOtp(undefined, true)} disabled={authLoading} className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline">
+                  {t('Kodni qayta yuborish', 'Отправить код повторно', 'Кодни қайта юбориш')}
+                </button>
+              )}
+            </div>
+          </form>
+        )}
+
         {authMethod === 'email' && (
-          <form onSubmit={submitAuth} className="space-y-3" autoComplete="on">
+          <form onSubmit={submitEmailAuth} className="space-y-3" autoComplete="on">
             <div className="relative">
               <Mail size={17} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 id="auth-email-input"
                 value={email}
-                onChange={(e) => { setEmail(e.target.value); setForgotMessage(''); }}
-                aria-label="Email"
+                onChange={(event) => { setEmail(event.target.value); setAuthError(''); setForgotMessage(''); }}
                 type="email"
                 name="email"
                 autoComplete="username email"
                 required
-                placeholder={labels.emailPlaceholder}
-                className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 pl-10 pr-3 py-2.5 sm:py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition-all placeholder:text-slate-400 text-slate-900 dark:text-white"
+                placeholder={t('Email manzilingiz', 'Ваш email', 'Email манзилингиз')}
+                className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 pl-10 pr-3 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white"
               />
             </div>
 
@@ -770,110 +772,91 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               <input
                 id="auth-password-input"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                aria-label={labels.passwordPlaceholder}
+                onChange={(event) => { setPassword(event.target.value); setAuthError(''); }}
                 type="password"
                 name="password"
                 autoComplete={authMode === 'login' ? 'current-password' : 'new-password'}
                 required
                 minLength={6}
-                placeholder={labels.passwordPlaceholder}
-                className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 pl-10 pr-3 py-2.5 sm:py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition-all placeholder:text-slate-400 text-slate-900 dark:text-white"
+                placeholder={t('Parol (kamida 6 ta belgi)', 'Пароль (минимум 6 символов)', 'Парол (камида 6 та белги)')}
+                className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 pl-10 pr-3 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white"
               />
             </div>
 
+            {authMode === 'register' && (
+              <div className="relative">
+                <Lock size={17} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  id="auth-confirm-password-input"
+                  value={confirmPassword}
+                  onChange={(event) => { setConfirmPassword(event.target.value); setAuthError(''); }}
+                  type="password"
+                  name="confirm-password"
+                  autoComplete="new-password"
+                  required
+                  minLength={6}
+                  placeholder={t('Parolni qayta kiriting', 'Повторите пароль', 'Паролни қайта киритинг')}
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 pl-10 pr-3 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white"
+                />
+              </div>
+            )}
+
             {authMode === 'login' && (
-              <div className="flex items-center justify-between pt-0.5">
-                <label className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300 cursor-pointer select-none">
-                  <input
-                    id="auth-remember-checkbox"
-                    type="checkbox"
-                    checked={rememberEmail}
-                    onChange={(e) => setRememberEmail(e.target.checked)}
-                    className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-                  />
-                  <span>{labels.rememberMe}</span>
+              <div className="flex items-center justify-between gap-2">
+                <label className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
+                  <input id="auth-remember-checkbox" type="checkbox" checked={rememberEmail} onChange={(event) => setRememberEmail(event.target.checked)} className="h-4 w-4" />
+                  {t('Emailni eslab qolish', 'Запомнить email', 'Emailни эслаб қолиш')}
                 </label>
-                <button
-                  id="auth-forgot-password-btn"
-                  disabled={authLoading || forgotLoading}
-                  type="button"
-                  onClick={handleForgotPassword}
-                  className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline disabled:opacity-60 cursor-pointer"
-                >
-                  {forgotLoading ? labels.sending : labels.forgotPassword}
+                <button id="auth-forgot-password-btn" type="button" disabled={forgotLoading} onClick={handleEmailForgotPassword} className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline">
+                  {forgotLoading ? t('Yuborilmoqda…', 'Отправка…', 'Юборилмоқда…') : t('Parolni unutdingizmi?', 'Забыли пароль?', 'Паролни унутдингизми?')}
                 </button>
               </div>
             )}
 
             {authError && (
-              <div
-                id="auth-email-error-box"
-                className="flex items-start gap-2 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 p-3 text-xs font-semibold text-rose-700 dark:text-rose-300"
-              >
+              <div id="auth-email-error-box" className="flex items-start gap-2 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 p-3 text-xs font-semibold text-rose-700 dark:text-rose-300">
                 <AlertCircle size={15} className="shrink-0 mt-0.5" />
                 <span>{authError}</span>
               </div>
             )}
 
             {forgotMessage && (
-              <div
-                id="auth-email-success-box"
-                className="rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 p-3 text-xs font-semibold text-emerald-700 dark:text-emerald-300"
-              >
+              <div id="auth-email-success-box" className="rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 p-3 text-xs font-semibold text-emerald-700 dark:text-emerald-300">
                 {forgotMessage}
               </div>
             )}
 
-            <button
-              id="auth-submit-btn"
-              disabled={authLoading || forgotLoading}
-              type="submit"
-              className="w-full rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white py-3 font-bold text-sm shadow-md shadow-indigo-600/20 transition-all cursor-pointer"
-            >
-              {authLoading ? labels.loading : (authMode === 'login' ? labels.login : labels.register)}
+            <button id="auth-submit-btn" disabled={authLoading || forgotLoading} type="submit" className="w-full rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white py-3 font-bold text-sm shadow-md shadow-indigo-600/20">
+              {authLoading
+                ? t('Kutilmoqda…', 'Подождите…', 'Кутилмоқда…')
+                : authMode === 'login'
+                  ? t('Kirish', 'Войти', 'Кириш')
+                  : t('Ro‘yxatdan o‘tish', 'Регистрация', 'Рўйхатдан ўтиш')}
             </button>
 
-            {/* Mode switcher for Email */}
-            <button
-              id="auth-mode-switch-btn"
-              type="button"
-              onClick={() => {
-                setAuthMode(authMode === 'login' ? 'register' : 'login');
-                setAuthError('');
-                setForgotMessage('');
-              }}
-              className="w-full mt-1 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer text-center"
-            >
-              {authMode === 'login' ? labels.switchToRegister : labels.switchToLogin}
+            <button id="auth-mode-switch-btn" type="button" onClick={switchMode} className="w-full text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline">
+              {authMode === 'login'
+                ? t('Akkauntingiz yo‘qmi? Ro‘yxatdan o‘ting', 'Нет аккаунта? Зарегистрируйтесь', 'Аккаунтингиз йўқми? Рўйхатдан ўтинг')
+                : t('Akkauntingiz bormi? Tizimga kiring', 'Уже есть аккаунт? Войдите', 'Аккаунтингиз борми? Тизимга киринг')}
             </button>
           </form>
         )}
 
-        {/* Separator */}
         <div className="flex items-center gap-3 my-4">
           <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
-          <span className="text-[11px] text-slate-400 uppercase font-bold">{labels.or}</span>
+          <span className="text-[11px] text-slate-400 uppercase font-bold">{t('yoki', 'или', 'ёки')}</span>
           <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
         </div>
 
-        {/* Google Login */}
-        <button
-          id="auth-google-btn"
-          disabled={authLoading || forgotLoading}
-          type="button"
-          onClick={handleGoogle}
-          className="w-full flex items-center justify-center gap-2.5 rounded-xl border border-slate-200 dark:border-slate-700 py-2.5 sm:py-3 text-sm font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-60 transition-colors cursor-pointer shadow-2xs"
-        >
+        <button id="auth-google-btn" disabled={authLoading || forgotLoading} type="button" onClick={handleGoogle} className="w-full flex items-center justify-center gap-2.5 rounded-xl border border-slate-200 dark:border-slate-700 py-3 text-sm font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-60">
           <Chrome size={18} className="text-indigo-600 dark:text-indigo-400" />
-          <span>{labels.googleBtn}</span>
+          {t('Google bilan davom etish', 'Продолжить с Google', 'Google билан давом этиш')}
         </button>
 
         <p className="mt-3 text-center text-[10px] text-slate-400">
-          {labels.browserNotice}
+          {t('Kirganingizdan so‘ng e’lonlaringiz va yozishmalaringiz saqlanadi.', 'После входа ваши объявления и переписки сохраняются.', 'Кирганингиздан сўнг эълонларингиз ва ёзишмаларингиз сақланади.')}
         </p>
       </div>
     </div>
   );
 };
-
