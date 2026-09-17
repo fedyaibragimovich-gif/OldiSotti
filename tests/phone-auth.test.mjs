@@ -25,6 +25,18 @@ test('OTP accepts exactly six numeric digits', () => {
   assert.equal(normalizePhoneOtp('abcdef'), null);
 });
 
+test('phone auth prefers durable browser-local persistence before fallbacks', async () => {
+  const authSource = await readFile('src/lib/auth.ts', 'utf8');
+  const localIndex = authSource.indexOf('setPersistence(auth, browserLocalPersistence)');
+  const sessionIndex = authSource.indexOf('setPersistence(auth, browserSessionPersistence)');
+  const memoryIndex = authSource.indexOf('setPersistence(auth, inMemoryPersistence)');
+  assert.ok(localIndex >= 0, 'browserLocalPersistence must be configured');
+  assert.ok(sessionIndex > localIndex, 'session persistence must only be a fallback');
+  assert.ok(memoryIndex > sessionIndex, 'memory persistence must be the final fallback');
+  assert.match(authSource, /sendPhoneVerificationCode[\s\S]*await persistAuthSession\(\)/);
+  assert.match(authSource, /confirmPhoneVerificationCode[\s\S]*await persistAuthSession\(\)/);
+});
+
 test('phone auth disposes reCAPTCHA after each SMS request and removes owned fallback containers', async () => {
   const authSource = await readFile('src/lib/auth.ts', 'utf8');
   assert.match(authSource, /dataset\.oldisotdiRecaptchaOwned = 'true'/);
