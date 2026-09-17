@@ -3,6 +3,8 @@ import type { Listing } from '../types';
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
 const string = (value: unknown) => typeof value === 'string' ? value : '';
 const optionalString = (value: unknown) => typeof value === 'string' ? value : undefined;
+// Historical seed IDs were numeric, including timestamp-style values, so every
+// numeric olx/oldisotdi-demo alias is demo inventory rather than a real user ad.
 const LEGACY_DEMO_ID = /^olx-(\d+)$/i;
 const PUBLIC_DEMO_ID = /^oldisotdi-demo-(\d+)$/i;
 
