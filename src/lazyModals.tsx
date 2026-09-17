@@ -2,36 +2,36 @@ import React from 'react';
 
 // Keep heavy, interaction-only UI out of the initial marketplace bundle.
 // App.tsx can continue using its existing named imports while Vite aliases those
-// imports to this lightweight module. Each implementation is fetched only when
-// React renders the corresponding modal/drawer inside the existing Suspense.
+// imports to this lightweight module. The @/ paths below deliberately bypass the
+// exact ./components/* aliases so the real implementations remain dynamic chunks.
 export const ListingDetailModal = React.lazy(() =>
-  import('./components/ListingDetailModal').then((module) => ({ default: module.ListingDetailModal }))
+  import('@/src/components/ListingDetailModal').then((module) => ({ default: module.ListingDetailModal }))
 );
 
 export const PostAdModal = React.lazy(() =>
-  import('./components/PostAdModal').then((module) => ({ default: module.PostAdModal }))
+  import('@/src/components/PostAdModal').then((module) => ({ default: module.PostAdModal }))
 );
 
 export const AuthModal = React.lazy(() =>
-  import('./components/AuthModal').then((module) => ({ default: module.AuthModal }))
+  import('@/src/components/AuthModal').then((module) => ({ default: module.AuthModal }))
 );
 
 export const ChatDrawer = React.lazy(() =>
-  import('./components/ChatDrawer').then((module) => ({ default: module.ChatDrawer }))
+  import('@/src/components/ChatDrawer').then((module) => ({ default: module.ChatDrawer }))
 );
 
 export const FavoritesDrawer = React.lazy(() =>
-  import('./components/FavoritesDrawer').then((module) => ({ default: module.FavoritesDrawer }))
+  import('@/src/components/FavoritesDrawer').then((module) => ({ default: module.FavoritesDrawer }))
 );
 
 export const MyAdsModal = React.lazy(() =>
-  import('./components/MyAdsModal').then((module) => ({ default: module.MyAdsModal }))
+  import('@/src/components/MyAdsModal').then((module) => ({ default: module.MyAdsModal }))
 );
 
 export const InfoPagesModal = React.lazy(() =>
-  import('./components/InfoPagesModal').then((module) => ({ default: module.InfoPagesModal }))
+  import('@/src/components/InfoPagesModal').then((module) => ({ default: module.InfoPagesModal }))
 );
 
 export const AdminPanelModal = React.lazy(() =>
-  import('./components/AdminPanelModal').then((module) => ({ default: module.AdminPanelModal }))
+  import('@/src/components/AdminPanelModal').then((module) => ({ default: module.AdminPanelModal }))
 );
