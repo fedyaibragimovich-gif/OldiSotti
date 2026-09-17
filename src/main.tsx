@@ -3,7 +3,8 @@ import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary.tsx';
 import { translations } from './data/translations.ts';
-import { toLegacyListingId, toPublicListingId } from './lib/publicListingId.ts';
+import { initializeProductionMonitoring } from './lib/monitoring.ts';
+import { syncSiteOriginMetadata } from './lib/siteMetadata.ts';
 import './index.css';
 import './performance.css';
 
@@ -18,12 +19,9 @@ for (const locale of Object.values(localizedCopy)) {
   }
 }
 
-if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch((error) => {
-      console.warn('OldiSotdi service worker registration failed:', error);
-    });
-  });
+if (typeof window !== 'undefined') {
+  if (import.meta.env.PROD) initializeProductionMonitoring();
+  syncSiteOriginMetadata();
 }
 
 createRoot(document.getElementById('root')!).render(
