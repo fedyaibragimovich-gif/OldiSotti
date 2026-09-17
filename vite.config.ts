@@ -11,9 +11,9 @@ export default defineConfig(() => {
     resolve: {
       alias: [
         { find: '@', replacement: path.resolve(__dirname, '.') },
-        // Gemini temporarily changed these App.tsx imports to eager static imports.
-        // Redirect only those exact App-level specifiers to lightweight lazy proxies;
-        // the proxies import the real components through ./components/... paths.
+        // Gemini temporarily changed interaction-only components to eager imports.
+        // Redirect those exact specifiers to lightweight lazy proxies; the proxies
+        // import the real implementations via @/src/... so they remain split chunks.
         { find: './components/ListingDetailModal', replacement: lazyModals },
         { find: './components/PostAdModal', replacement: lazyModals },
         { find: './components/AuthModal', replacement: lazyModals },
@@ -22,6 +22,8 @@ export default defineConfig(() => {
         { find: './components/MyAdsModal', replacement: lazyModals },
         { find: './components/InfoPagesModal', replacement: lazyModals },
         { find: './components/AdminPanelModal', replacement: lazyModals },
+        // BottomNav also had its own eager fallback AuthModal import.
+        { find: './AuthModal', replacement: lazyModals },
       ],
     },
     build: {
