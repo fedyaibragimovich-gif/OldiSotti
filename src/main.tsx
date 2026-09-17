@@ -3,7 +3,6 @@ import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary.tsx';
 import { translations } from './data/translations.ts';
-import { toLegacyListingId, toPublicListingId } from './lib/publicListingId.ts';
 import './index.css';
 import './performance.css';
 
@@ -18,11 +17,12 @@ for (const locale of Object.values(localizedCopy)) {
   }
 }
 
+// Register immediately so repeat visits can use the cached shell as early as possible.
 if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch((error) => {
-      console.warn('OldiSotdi service worker registration failed:', error);
-    });
+  void navigator.serviceWorker.register('/sw.js').then(registration => {
+    void registration.update().catch(() => {});
+  }).catch((error) => {
+    console.warn('OldiSotdi service worker registration failed:', error);
   });
 }
 
