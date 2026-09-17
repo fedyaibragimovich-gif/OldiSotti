@@ -558,7 +558,7 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
 
               {/* Listing meta info */}
               <div className="flex flex-wrap items-center justify-between text-xs text-slate-400 dark:text-slate-500 pt-3 border-t border-slate-100 dark:border-slate-800">
-                <span>{t.adId}: {listing.id}</span>
+                <span>{t.adId}: {toPublicListingId(listing.id)}</span>
                 <span className="flex items-center gap-1">
                   <Eye size={13} />
                   <span>{listing.viewsCount} {t.views}</span>

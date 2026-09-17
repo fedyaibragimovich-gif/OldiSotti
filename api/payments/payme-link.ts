@@ -20,7 +20,7 @@ type VercelResponse = {
   setHeader: (name: string, value: string) => void;
 };
 
-const FALLBACK_SITE_URL = 'https://fedyaibragimovich-gif.vercel.app';
+const FALLBACK_SITE_URL = 'https://oldi-sotdi.uz';
 
 function encodePaymeParams(params: Record<string, string>): string {
   return Buffer.from(

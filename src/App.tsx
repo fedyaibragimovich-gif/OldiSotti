@@ -62,14 +62,14 @@ import { subscribeToAuth, isAdminUser } from './lib/auth';
 import { useListingMetaTags } from './utils/metaTags';
 import type { User as FirebaseUser } from 'firebase/auth';
 
-// Code-split heavy modals to ensure instantaneous initial load under high traffic
-const ListingDetailModal = React.lazy(() => import('./components/ListingDetailModal').then(m => ({ default: m.ListingDetailModal })));
-const PostAdModal = React.lazy(() => import('./components/PostAdModal').then(m => ({ default: m.PostAdModal })));
-const ChatDrawer = React.lazy(() => import('./components/ChatDrawer').then(m => ({ default: m.ChatDrawer })));
-const FavoritesDrawer = React.lazy(() => import('./components/FavoritesDrawer').then(m => ({ default: m.FavoritesDrawer })));
-const MyAdsModal = React.lazy(() => import('./components/MyAdsModal').then(m => ({ default: m.MyAdsModal })));
-const InfoPagesModal = React.lazy(() => import('./components/InfoPagesModal').then(m => ({ default: m.InfoPagesModal })));
-const AdminPanelModal = React.lazy(() => import('./components/AdminPanelModal').then(m => ({ default: m.AdminPanelModal })));
+import { ListingDetailModal } from './components/ListingDetailModal';
+import { PostAdModal } from './components/PostAdModal';
+import { ChatDrawer } from './components/ChatDrawer';
+import { FavoritesDrawer } from './components/FavoritesDrawer';
+import { MyAdsModal } from './components/MyAdsModal';
+import { InfoPagesModal } from './components/InfoPagesModal';
+import { AdminPanelModal } from './components/AdminPanelModal';
+import { toLegacyListingId, toPublicListingId } from './lib/publicListingId';
 
 export default function App() {
   // 1. Language & Currency & Dark Mode
@@ -915,12 +915,16 @@ export default function App() {
       .filter((l): l is Listing => l !== undefined && !blockedSellerIds.includes(l.userId || l.seller.id));
   }, [recentlyViewedIds, listings, blockedSellerIds]);
 
-  // Deep links fetch one document independently of the loaded feed.
+  // Deep links fetch one document independently of the loaded feed (/l/:id or ?listing=:id)
   useEffect(() => {
-    const id = new URLSearchParams(window.location.search).get('listing');
-    if (!id || selectedListing?.id === id) return;
+    const searchId = new URLSearchParams(window.location.search).get('listing');
+    const pathMatch = window.location.pathname.match(/^\/l\/([^/]+)\/?$/i);
+    const rawId = pathMatch ? decodeURIComponent(pathMatch[1]) : searchId;
+    if (!rawId) return;
+    const internalId = toLegacyListingId(rawId);
+    if (selectedListing?.id === internalId) return;
     let active = true;
-    void fetchListingById(id).then(listing => {
+    void fetchListingById(internalId).then(listing => {
       if (active && listing?.status === 'active') setSelectedListing(listing);
     }).catch(() => {});
     return () => { active = false; };
@@ -929,7 +933,9 @@ export default function App() {
   // Centralized selection handler that tracks recently viewed listings
   const handleSelectListing = (listing: Listing) => {
     const url = new URL(window.location.href);
-    url.searchParams.set('listing', listing.id);
+    const publicId = toPublicListingId(listing.id);
+    url.pathname = `/l/${encodeURIComponent(publicId)}`;
+    url.searchParams.delete('listing');
     window.history.replaceState({}, '', url);
     setSelectedListing(listing);
     setRecentlyViewedIds((prev) => {
@@ -1157,6 +1163,9 @@ export default function App() {
             onClose={() => {
               const url = new URL(window.location.href);
               url.searchParams.delete('listing');
+              if (url.pathname.startsWith('/l/')) {
+                url.pathname = '/';
+              }
               window.history.replaceState({}, '', url);
               setSelectedListing(null);
             }}

@@ -20,7 +20,7 @@ type VercelResponse = {
   setHeader: (name: string, value: string) => void;
 };
 
-const FALLBACK_SITE_URL = 'https://fedyaibragimovich-gif.vercel.app';
+const FALLBACK_SITE_URL = 'https://oldi-sotdi.uz';
 
 function getTrustedReturnUrl(): string {
   const configured = String(process.env.PUBLIC_SITE_URL || process.env.SITE_URL || FALLBACK_SITE_URL).trim();
