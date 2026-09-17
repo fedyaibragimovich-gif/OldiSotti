@@ -28,7 +28,7 @@ jobs:
         run: npm ci --no-audit --no-fund
 
       - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
@@ -44,6 +44,9 @@ jobs:
 
       - name: Listing data regression tests
         run: node --import tsx --test tests/listing-data.test.mjs
+
+      - name: Phone auth regression tests
+        run: node --import tsx --test tests/phone-auth.test.mjs
 
       - name: Production inventory regression tests
         run: node --test tests/production-inventory.test.mjs
