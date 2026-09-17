@@ -3,16 +3,19 @@ import type { Listing } from '../types';
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
 const string = (value: unknown) => typeof value === 'string' ? value : '';
 const optionalString = (value: unknown) => typeof value === 'string' ? value : undefined;
+const LEGACY_DEMO_ID = /^olx-0*(?:[1-9]|1\d|20)$/i;
+const PUBLIC_DEMO_ID = /^oldisotdi-demo-0*(?:[1-9]|1\d|20)$/i;
 
 function normalizeCreatedAt(raw: unknown): string {
   if (typeof raw === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(raw)) {
     return raw;
   }
-  // Standard baseline timestamp for legacy demo items so new user ads always sort first
   return '2026-09-01T00:00:00.000Z';
 }
 
 export function readListing(value: unknown, id: string): Listing | null {
+  const normalizedId = String(id || '').trim();
+  if (LEGACY_DEMO_ID.test(normalizedId) || PUBLIC_DEMO_ID.test(normalizedId)) return null;
   if (!record(value) || !record(value.seller) || !record(value.location)) return null;
   if (typeof value.title !== 'string' || !value.title.trim() || typeof value.description !== 'string') return null;
   if (typeof value.price !== 'number' || !Number.isFinite(value.price) || value.price < 0) return null;
@@ -24,7 +27,7 @@ export function readListing(value: unknown, id: string): Listing | null {
   const latitude = typeof location.latitude === 'number' && Number.isFinite(location.latitude) && Math.abs(location.latitude) <= 90 ? location.latitude : undefined;
   const longitude = typeof location.longitude === 'number' && Number.isFinite(location.longitude) && Math.abs(location.longitude) <= 180 ? location.longitude : undefined;
   return {
-    ...value, id, images, title:value.title, description:value.description, price:value.price,
+    ...value, id: normalizedId, images, title:value.title, description:value.description, price:value.price,
     currency:value.currency as Listing['currency'], status:value.status as Listing['status'],
     categoryId:string(value.categoryId), subcategoryId:optionalString(value.subcategoryId),
     brand:optionalString(value.brand), userId:optionalString(value.userId),
