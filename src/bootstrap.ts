@@ -1,3 +1,11 @@
+// Check for a newer shell cache as early as possible. updateViaCache=none keeps
+// sw.js itself from being hidden behind an HTTP cache when we ship a performance fix.
+if ('serviceWorker' in navigator) {
+  void navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).catch((error) => {
+    console.warn('OldiSotdi early service worker registration failed:', error);
+  });
+}
+
 const startApp = () => {
   void import('./main.tsx').catch((error) => {
     console.error('OldiSotdi startup failed:', error);
