@@ -23,8 +23,11 @@ jobs:
         with:
           node-version: 22
 
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
       - name: Install dependencies
-        run: npm ci --no-audit --no-fund
+        run: bun install --frozen-lockfile
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -33,7 +36,7 @@ jobs:
           java-version: '21'
 
       - name: Security rules tests
-        run: npm run test:rules
+        run: bun run test:rules
 
       - name: Support API tests
         run: node --import tsx --test tests/support-chat.test.mjs
@@ -72,7 +75,7 @@ jobs:
         run: node --test tests/service-worker.test.mjs
 
       - name: Typecheck
-        run: npm run lint
+        run: bun run lint
 
       - name: Production build
-        run: npm run build
+        run: bun run build
