@@ -2,7 +2,7 @@ import { Listing } from '../types';
 import { auth } from '../lib/firebase';
 import { toPublicListingId } from '../lib/publicListingId';
 
-const FALLBACK_PUBLIC_ORIGIN = 'https://fedyaibragimovich-gif.vercel.app';
+const FALLBACK_PUBLIC_ORIGIN = 'https://oldi-sotdi.uz';
 
 export interface TelegramPostResponse {
   success: boolean;
@@ -54,6 +54,44 @@ function listingPublicUrl(listing: Listing, appUrl?: string): string {
   return `${normalizeAppOrigin(appUrl)}/l/${encodeURIComponent(toPublicListingId(listing.id))}`;
 }
 
+/**
+ * Telegram only needs a small public subset of a listing. Do not send the full
+ * listing object because legacy/base64 image values can make the request too
+ * large for the edge before the serverless function is reached.
+ */
+function buildTelegramListingPayload(listing: Listing) {
+  const firstRemoteImage = Array.isArray(listing.images)
+    ? listing.images.find((image) => /^https?:\/\//i.test(String(image || '').trim()))
+    : undefined;
+
+  return {
+    id: listing.id,
+    status: listing.status,
+    title: listing.title,
+    description: listing.description,
+    price: listing.price,
+    currency: listing.currency,
+    location: listing.location
+      ? {
+          region: listing.location.region,
+          district: listing.location.district
+        }
+      : undefined,
+    condition: listing.condition,
+    isDeliveryAvailable: listing.isDeliveryAvailable,
+    isNegotiable: listing.isNegotiable,
+    images: firstRemoteImage ? [firstRemoteImage] : []
+  };
+}
+
+function networkErrorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error || '');
+  if (/failed to fetch|networkerror|load failed/i.test(message)) {
+    return "OldiSotdi Telegram API'ga ulanib bo‘lmadi. Sahifani yangilang va qayta urinib ko‘ring.";
+  }
+  return message || "Telegram serveriga ulanib bo‘lmadi";
+}
+
 export function formatTelegramPostPreview(listing: Listing, appUrl?: string): string {
   return `<a href="${listingPublicUrl(listing, appUrl)}">OldiSotdi'da e'lonni ko'rish</a>`;
 }
@@ -67,30 +105,50 @@ export async function postListingToTelegram(
   listing: Listing,
   options?: { appUrl?: string; channelId?: string; botToken?: string }
 ): Promise<TelegramPostResponse> {
+  let headers: Record<string, string> | null;
   try {
-    const headers = await getAuthHeaders();
-    if (!headers) return { success: false, error: 'Telegramga yuborish uchun akkauntga kiring.' };
+    headers = await getAuthHeaders();
+  } catch (error) {
+    console.warn('Telegram auth token request failed:', error);
+    return { success: false, error: 'Sessiya tokenini olishda xato. Akkauntdan chiqib, qayta kiring.' };
+  }
+
+  if (!headers) return { success: false, error: 'Telegramga yuborish uchun akkauntga kiring.' };
+
+  try {
     const baseUrl = normalizeAppOrigin(options?.appUrl);
     const res = await fetch('/api/telegram/post-listing', {
       method: 'POST',
       headers,
-      body: JSON.stringify({ listing, appUrl: baseUrl, channelId: options?.channelId })
+      body: JSON.stringify({
+        listing: buildTelegramListingPayload(listing),
+        appUrl: baseUrl,
+        channelId: options?.channelId
+      })
     });
     const data = await readJsonResponse<any>(res);
     if (!res.ok || !data.success) {
       return { success: false, channel: data.channel, error: data.error || `Telegram server javobi: HTTP ${res.status}` };
     }
     return { ...data, telegramPostUrl: data.messageId ? `${options?.channelId || '@OSot_uz'}/${data.messageId}` : undefined } as TelegramPostResponse;
-  } catch (err: any) {
-    console.warn('Telegram post API request failed:', err);
-    return { success: false, error: err?.message || 'Telegram serveriga ulanib bo\'lmadi' };
+  } catch (error) {
+    console.warn('Telegram post API request failed:', error);
+    return { success: false, error: networkErrorMessage(error) };
   }
 }
 
 export async function testTelegramConnection(_botToken?: string, channelId?: string): Promise<TelegramConnectionResponse> {
+  let headers: Record<string, string> | null;
   try {
-    const headers = await getAuthHeaders();
-    if (!headers) return { success: false, error: 'Telegram sozlamalarini tekshirish uchun akkauntga kiring.' };
+    headers = await getAuthHeaders();
+  } catch (error) {
+    console.warn('Telegram connection auth token request failed:', error);
+    return { success: false, error: 'Sessiya tokenini olishda xato. Akkauntdan chiqib, qayta kiring.' };
+  }
+
+  if (!headers) return { success: false, error: 'Telegram sozlamalarini tekshirish uchun akkauntga kiring.' };
+
+  try {
     const res = await fetch('/api/telegram/test-connection', {
       method: 'POST',
       headers,
@@ -105,8 +163,8 @@ export async function testTelegramConnection(_botToken?: string, channelId?: str
       };
     }
     return data;
-  } catch (err: any) {
-    return { success: false, error: err?.message || 'Telegram serveriga ulanib bo\'lmadi' };
+  } catch (error) {
+    return { success: false, error: networkErrorMessage(error) };
   }
 }
 
