@@ -4,10 +4,25 @@ import path from 'path';
 import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
+  const lazyModals = path.resolve(__dirname, 'src/lazyModals.tsx');
+
   return {
     plugins: [react(), tailwindcss()],
     resolve: {
-      alias: { '@': path.resolve(__dirname, '.') },
+      alias: [
+        { find: '@', replacement: path.resolve(__dirname, '.') },
+        // Gemini temporarily changed these App.tsx imports to eager static imports.
+        // Redirect only those exact App-level specifiers to lightweight lazy proxies;
+        // the proxies import the real components through ./components/... paths.
+        { find: './components/ListingDetailModal', replacement: lazyModals },
+        { find: './components/PostAdModal', replacement: lazyModals },
+        { find: './components/AuthModal', replacement: lazyModals },
+        { find: './components/ChatDrawer', replacement: lazyModals },
+        { find: './components/FavoritesDrawer', replacement: lazyModals },
+        { find: './components/MyAdsModal', replacement: lazyModals },
+        { find: './components/InfoPagesModal', replacement: lazyModals },
+        { find: './components/AdminPanelModal', replacement: lazyModals },
+      ],
     },
     build: {
       rollupOptions: {
