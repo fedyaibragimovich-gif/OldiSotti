@@ -1,4 +1,5 @@
 import type { Listing } from '../types';
+import { isLegacyDemoListingId } from './publicListingId';
 
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
 const string = (value: unknown) => typeof value === 'string' ? value : '';
@@ -8,11 +9,15 @@ function normalizeCreatedAt(raw: unknown): string {
   if (typeof raw === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(raw)) {
     return raw;
   }
-  // Standard baseline timestamp for legacy demo items so new user ads always sort first
+  // Keep legacy records sortable without allowing historical seeded demo ads
+  // back into the public marketplace feed.
   return '2026-09-01T00:00:00.000Z';
 }
 
 export function readListing(value: unknown, id: string): Listing | null {
+  // Numeric olx-* documents are historical seed/demo inventory and must never
+  // render as genuine marketplace listings.
+  if (isLegacyDemoListingId(id)) return null;
   if (!record(value) || !record(value.seller) || !record(value.location)) return null;
   if (typeof value.title !== 'string' || !value.title.trim() || typeof value.description !== 'string') return null;
   if (typeof value.price !== 'number' || !Number.isFinite(value.price) || value.price < 0) return null;
