@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths:
       - firestore.rules
+      - firestore.indexes.json
       - firebase.json
       - .github/workflows/deploy-firestore-rules.yml
 
@@ -33,15 +34,15 @@ jobs:
         run: |
           if [ -z "$FIREBASE_SERVICE_ACCOUNT_JSON" ]; then
             echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "FIREBASE_SERVICE_ACCOUNT_JSON is not configured; skipping rules deployment."
+            echo "FIREBASE_SERVICE_ACCOUNT_JSON is not configured; skipping Firestore deployment."
             exit 0
           fi
           printf '%s' "$FIREBASE_SERVICE_ACCOUNT_JSON" > "$RUNNER_TEMP/firebase-service-account.json"
           chmod 600 "$RUNNER_TEMP/firebase-service-account.json"
           echo "configured=true" >> "$GITHUB_OUTPUT"
 
-      - name: Deploy Firestore rules
+      - name: Deploy Firestore rules and indexes
         if: steps.firebase-creds.outputs.configured == 'true'
         env:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-service-account.json
-        run: npx --yes firebase-tools@latest deploy --only firestore:rules --project gen-lang-client-0261863601 --non-interactive
+        run: npx --yes firebase-tools@latest deploy --only firestore:rules,firestore:indexes --project gen-lang-client-0261863601 --non-interactive
