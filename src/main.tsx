@@ -3,6 +3,8 @@ import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary.tsx';
 import { translations } from './data/translations.ts';
+import { initializeProductionMonitoring } from './lib/monitoring.ts';
+import { syncSiteOriginMetadata } from './lib/siteMetadata.ts';
 import './index.css';
 import './performance.css';
 
@@ -17,13 +19,18 @@ for (const locale of Object.values(localizedCopy)) {
   }
 }
 
-// Register immediately so repeat visits can use the cached shell as early as possible.
-if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
-  void navigator.serviceWorker.register('/sw.js').then(registration => {
-    void registration.update().catch(() => {});
-  }).catch((error) => {
-    console.warn('OldiSotdi service worker registration failed:', error);
-  });
+if (typeof window !== 'undefined') {
+  if (import.meta.env.PROD) initializeProductionMonitoring();
+  syncSiteOriginMetadata();
+
+  // Register immediately so repeat visits can use the cached shell as early as possible.
+  if ('serviceWorker' in navigator) {
+    void navigator.serviceWorker.register('/sw.js').then(registration => {
+      void registration.update().catch(() => {});
+    }).catch((error) => {
+      console.warn('OldiSotdi service worker registration failed:', error);
+    });
+  }
 }
 
 createRoot(document.getElementById('root')!).render(
