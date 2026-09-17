@@ -27,7 +27,6 @@ export const isAdminUser = (user: User | null): boolean => {
   return Boolean(user.email && user.emailVerified && ADMIN_EMAILS.includes(user.email.toLowerCase()));
 };
 
-// Configure storage on startup, before the user clicks a sign-in button.
 const persistenceReady = (async () => {
   for (const persistence of [browserLocalPersistence, browserSessionPersistence, inMemoryPersistence]) {
     try {
@@ -101,9 +100,6 @@ export const resetPassword = (email: string) => {
 export const loginWithGoogle = () => {
   const provider = new GoogleAuthProvider();
   provider.setCustomParameters({ prompt: 'select_account' });
-  // Keep the popup call in the click handler's user activation. Firebase queues
-  // the pending persistence operation internally. Cross-site redirect is not a
-  // reliable fallback when browsers block third-party storage.
   return signInWithPopup(auth, provider);
 };
 
@@ -113,6 +109,21 @@ export const logoutUser = async () => {
 };
 
 let appRecaptchaVerifier: RecaptchaVerifier | null = null;
+
+const ensureRecaptchaContainer = (containerId: string) => {
+  if (typeof document === 'undefined') return;
+  if (document.getElementById(containerId)) return;
+  const container = document.createElement('div');
+  container.id = containerId;
+  container.style.position = 'fixed';
+  container.style.width = '1px';
+  container.style.height = '1px';
+  container.style.overflow = 'hidden';
+  container.style.opacity = '0';
+  container.style.pointerEvents = 'none';
+  container.setAttribute('aria-hidden', 'true');
+  document.body.appendChild(container);
+};
 
 export const setupRecaptcha = (containerId: string = 'recaptcha-container'): RecaptchaVerifier => {
   if (appRecaptchaVerifier) {
@@ -124,6 +135,7 @@ export const setupRecaptcha = (containerId: string = 'recaptcha-container'): Rec
     appRecaptchaVerifier = null;
   }
 
+  ensureRecaptchaContainer(containerId);
   auth.languageCode = 'uz';
 
   appRecaptchaVerifier = new RecaptchaVerifier(auth, containerId, {
@@ -168,4 +180,3 @@ export const confirmPhoneVerificationCode = async (
 };
 
 export type { ConfirmationResult };
-
