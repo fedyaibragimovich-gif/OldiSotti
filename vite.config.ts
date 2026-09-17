@@ -4,10 +4,23 @@ import path from 'path';
 import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
+  const lazyModals = path.resolve(__dirname, 'src/lazyModals.tsx');
+
   return {
     plugins: [react(), tailwindcss()],
     resolve: {
-      alias: { '@': path.resolve(__dirname, '.') },
+      alias: [
+        { find: '@', replacement: path.resolve(__dirname, '.') },
+        { find: './components/ListingDetailModal', replacement: lazyModals },
+        { find: './components/PostAdModal', replacement: lazyModals },
+        { find: './components/AuthModal', replacement: lazyModals },
+        { find: './components/ChatDrawer', replacement: lazyModals },
+        { find: './components/FavoritesDrawer', replacement: lazyModals },
+        { find: './components/MyAdsModal', replacement: lazyModals },
+        { find: './components/InfoPagesModal', replacement: lazyModals },
+        { find: './components/AdminPanelModal', replacement: lazyModals },
+        { find: './AuthModal', replacement: lazyModals },
+      ],
     },
     build: {
       rollupOptions: {
@@ -70,8 +83,6 @@ export default defineConfig(() => {
             if (normalizedId.includes('node_modules/lucide-react/')) {
               return 'icons';
             }
-            // Keep third-party code stable across app deployments so repeat visits
-            // can reuse the browser/CDN cache even when OldiSotdi source changes.
             if (normalizedId.includes('node_modules/')) {
               return 'vendor';
             }
