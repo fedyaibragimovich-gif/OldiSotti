@@ -98,7 +98,8 @@ export const resetPassword = (email: string) => {
   );
 };
 
-export const loginWithGoogle = () => {
+export const loginWithGoogle = async () => {
+  await persistAuthSession();
   const provider = new GoogleAuthProvider();
   provider.setCustomParameters({ prompt: 'select_account' });
   return signInWithPopup(auth, provider);
