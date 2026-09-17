@@ -28,17 +28,27 @@ export const isAdminUser = (user: User | null): boolean => {
   return Boolean(user.email && user.emailVerified && ADMIN_EMAILS.includes(user.email.toLowerCase()));
 };
 
-const persistenceReady = (async () => {
-  for (const persistence of [browserLocalPersistence, browserSessionPersistence, inMemoryPersistence]) {
-    try {
-      await setPersistence(auth, persistence);
-      return;
-    } catch {
-      // Restricted browsers may only support a session held in memory.
-    }
+// Prefer durable browser-local persistence for every sign-in flow. This keeps
+// phone-auth users signed in across browser/app restarts so SMS is normally
+// only needed again after explicit logout, cleared site data, or a new device.
+// Restricted browsers still get the safest available fallback.
+const persistAuthSession = async () => {
+  try {
+    await setPersistence(auth, browserLocalPersistence);
+    return;
+  } catch {
+    // Some privacy/restricted browser modes do not allow durable local storage.
   }
-})();
-const persistAuthSession = () => persistenceReady;
+
+  try {
+    await setPersistence(auth, browserSessionPersistence);
+    return;
+  } catch {
+    // Fall through to in-memory persistence as a last resort.
+  }
+
+  await setPersistence(auth, inMemoryPersistence);
+};
 
 let redirectRestorePromise: Promise<void> | null = null;
 
@@ -98,7 +108,8 @@ export const resetPassword = (email: string) => {
   );
 };
 
-export const loginWithGoogle = () => {
+export const loginWithGoogle = async () => {
+  await persistAuthSession();
   const provider = new GoogleAuthProvider();
   provider.setCustomParameters({ prompt: 'select_account' });
   return signInWithPopup(auth, provider);
