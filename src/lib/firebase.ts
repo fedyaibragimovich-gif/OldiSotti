@@ -67,6 +67,15 @@ function isCurrentAdmin(): boolean {
   return Boolean(user.emailVerified && user.email?.toLowerCase() === ADMIN_EMAIL);
 }
 
+function isMissingCompositeIndexError(error: unknown): boolean {
+  return Boolean(
+    error &&
+    typeof error === 'object' &&
+    'code' in error &&
+    String((error as { code?: unknown }).code) === 'failed-precondition'
+  );
+}
+
 // Firestore does not accept undefined values, including nested optional fields.
 function stripUndefinedDeep<T>(value: T): T {
   if (Array.isArray(value)) {
@@ -100,8 +109,9 @@ export function subscribeToListings(
     const docCounts = new Map<number, number>();
 
     // Public and private queries are separate so unpublished listings never leak.
-    // The first public paint only needs the 12 cards visible in the UI. Older
-    // results continue to load through the existing cursor pagination path.
+    // The first public paint normally uses an indexed newest-first query. If the
+    // composite index is not available yet, fall back to a safe active-only query
+    // and sort the bounded result in the browser so guests still see live ads.
     const admin = isCurrentAdmin();
     const publicPageSize = Math.min(Math.max(1, pageSize), PUBLIC_INITIAL_PAGE_LIMIT);
     const queries = admin
@@ -119,19 +129,39 @@ export function subscribeToListings(
         ];
 
     queries.forEach((q, index) => {
-      stops.push(onSnapshot(q, snapshot => {
-        sources.set(index, snapshot.docs.map(d => readListing(d.data(), d.id)).filter((item): item is Listing => item !== null));
-        docCounts.set(index, snapshot.docs.length);
+      function attach(queryToWatch: typeof q, isIndexFallback = false) {
+        const stop = onSnapshot(queryToWatch, snapshot => {
+          sources.set(index, snapshot.docs.map(d => readListing(d.data(), d.id)).filter((item): item is Listing => item !== null));
+          docCounts.set(index, snapshot.docs.length);
 
-        const merged = new Map<string, Listing>();
-        sources.forEach(items => items.forEach(item => merged.set(item.id, item)));
-        const sorted = [...merged.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-        const activeCount = docCounts.get(0) || 0;
-        const publicItems = sources.get(0) || [];
-        const lastPublicCreatedAt = admin ? undefined : publicItems[publicItems.length - 1]?.createdAt;
-        const hasMore = admin ? false : activeCount >= publicPageSize;
-        onSuccess(sorted, hasMore, lastPublicCreatedAt);
-      }, error => onError?.(error)));
+          const merged = new Map<string, Listing>();
+          sources.forEach(items => items.forEach(item => merged.set(item.id, item)));
+          const sorted = [...merged.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+          const activeCount = docCounts.get(0) || 0;
+          const publicItems = sources.get(0) || [];
+          const lastPublicCreatedAt = admin ? undefined : publicItems.sort((a, b) => b.createdAt.localeCompare(a.createdAt))[publicItems.length - 1]?.createdAt;
+          const hasMore = admin ? false : activeCount >= publicPageSize;
+          onSuccess(sorted, hasMore, lastPublicCreatedAt);
+        }, error => {
+          if (!admin && index === 0 && !isIndexFallback && isMissingCompositeIndexError(error)) {
+            stop();
+            console.warn('Firestore listings index is unavailable; using active-only fallback feed.');
+            attach(
+              query(
+                collection(db, LISTINGS_COLLECTION),
+                where('status', '==', 'active'),
+                limit(LISTINGS_REALTIME_LIMIT)
+              ),
+              true
+            );
+            return;
+          }
+          onError?.(error);
+        });
+        stops.push(stop);
+      }
+
+      attach(q);
     });
   });
   return () => { stopAuth(); stops.forEach(stop => stop()); };
@@ -141,6 +171,34 @@ export interface FetchPageResult {
   listings: Listing[];
   hasMore: boolean;
   lastVisibleCreatedAt?: string;
+}
+
+async function fetchListingsPageWithoutCompositeIndex(
+  pageSize: number,
+  lastCreatedAt?: string,
+  categoryId?: string
+): Promise<FetchPageResult> {
+  const snap = await getDocs(query(
+    collection(db, LISTINGS_COLLECTION),
+    where('status', '==', 'active'),
+    limit(LISTINGS_REALTIME_LIMIT)
+  ));
+
+  const ordered = snap.docs
+    .map(d => readListing(d.data(), d.id))
+    .filter((item): item is Listing => item !== null)
+    .filter(item => !categoryId || item.categoryId === categoryId)
+    .filter(item => !lastCreatedAt || item.createdAt < lastCreatedAt)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+
+  const hasMore = ordered.length > pageSize;
+  const listings = ordered.slice(0, pageSize);
+  const lastItem = listings[listings.length - 1];
+  return {
+    listings,
+    hasMore,
+    lastVisibleCreatedAt: lastItem?.createdAt
+  };
 }
 
 export async function fetchListingsPage(
@@ -180,6 +238,10 @@ export async function fetchListingsPage(
       lastVisibleCreatedAt: lastItem?.createdAt
     };
   } catch (err) {
+    if (isMissingCompositeIndexError(err)) {
+      console.warn('Firestore cursor index is unavailable; using bounded client-sorted pagination fallback.');
+      return fetchListingsPageWithoutCompositeIndex(pageSize, lastCreatedAt, categoryId);
+    }
     console.error('fetchListingsPage failed:', err);
     throw err instanceof Error ? err : new Error('Failed to load the next listings page');
   }
