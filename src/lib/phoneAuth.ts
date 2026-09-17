@@ -13,6 +13,6 @@ export function normalizeUzbekPhoneToE164(value: string): string | null {
 }
 
 export function normalizePhoneOtp(value: string): string | null {
-  const digits = String(value || '').replace(/\D/g, '').slice(0, 6);
+  const digits = String(value || '').replace(/\D/g, '');
   return digits.length === 6 ? digits : null;
 }
