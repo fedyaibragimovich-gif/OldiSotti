@@ -12,6 +12,12 @@ export function normalizeUzbekPhoneToE164(value: string): string | null {
   return `+998${digits}`;
 }
 
+export function phoneToPasswordEmail(value: string): string | null {
+  const normalized = normalizeUzbekPhoneToE164(value);
+  if (!normalized) return null;
+  return `phone-${normalized.slice(1)}@auth.oldi-sotdi.uz`;
+}
+
 export function normalizePhoneOtp(value: string): string | null {
   const digits = String(value || '').replace(/\D/g, '');
   return digits.length === 6 ? digits : null;
