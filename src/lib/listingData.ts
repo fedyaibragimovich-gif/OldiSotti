@@ -3,8 +3,8 @@ import type { Listing } from '../types';
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
 const string = (value: unknown) => typeof value === 'string' ? value : '';
 const optionalString = (value: unknown) => typeof value === 'string' ? value : undefined;
-const LEGACY_DEMO_ID = /^olx-0*(?:[1-9]|1\d|20)$/i;
-const PUBLIC_DEMO_ID = /^oldisotdi-demo-0*(?:[1-9]|1\d|20)$/i;
+const LEGACY_DEMO_ID = /^olx-(\d+)$/i;
+const PUBLIC_DEMO_ID = /^oldisotdi-demo-(\d+)$/i;
 
 function normalizeCreatedAt(raw: unknown): string {
   if (typeof raw === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(raw)) {
