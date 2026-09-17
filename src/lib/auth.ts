@@ -109,32 +109,65 @@ export const logoutUser = async () => {
 };
 
 let appRecaptchaVerifier: RecaptchaVerifier | null = null;
+let ownedRecaptchaContainer: HTMLElement | null = null;
+let recaptchaContainerId: string | null = null;
 
 const ensureRecaptchaContainer = (containerId: string) => {
   if (typeof document === 'undefined') return;
-  if (document.getElementById(containerId)) return;
+
+  const existing = document.getElementById(containerId);
+  if (existing) {
+    recaptchaContainerId = containerId;
+    if (existing.dataset.oldisotdiRecaptchaOwned === 'true') {
+      ownedRecaptchaContainer = existing;
+    }
+    return;
+  }
+
   const container = document.createElement('div');
   container.id = containerId;
+  container.dataset.oldisotdiRecaptchaOwned = 'true';
   container.style.position = 'fixed';
+  container.style.left = '-10000px';
+  container.style.top = '0';
   container.style.width = '1px';
   container.style.height = '1px';
   container.style.overflow = 'hidden';
-  container.style.opacity = '0';
   container.style.pointerEvents = 'none';
   container.setAttribute('aria-hidden', 'true');
   document.body.appendChild(container);
+  ownedRecaptchaContainer = container;
+  recaptchaContainerId = containerId;
 };
 
-export const setupRecaptcha = (containerId: string = 'recaptcha-container'): RecaptchaVerifier => {
+export const clearRecaptcha = () => {
   if (appRecaptchaVerifier) {
     try {
       appRecaptchaVerifier.clear();
     } catch {
-      // ignore
+      // Firebase may already have disposed the widget.
     }
     appRecaptchaVerifier = null;
   }
 
+  if (typeof document !== 'undefined') {
+    const owned = ownedRecaptchaContainer;
+    if (owned?.isConnected) {
+      owned.remove();
+    } else if (recaptchaContainerId) {
+      const stale = document.getElementById(recaptchaContainerId);
+      if (stale?.dataset.oldisotdiRecaptchaOwned === 'true') stale.remove();
+    }
+  }
+
+  ownedRecaptchaContainer = null;
+  recaptchaContainerId = null;
+};
+
+export const setupRecaptcha = (containerId: string = 'recaptcha-container'): RecaptchaVerifier => {
+  // Every SMS request gets a fresh verifier. This prevents stale widgets after
+  // the modal changes from phone entry to OTP entry or after a resend.
+  clearRecaptcha();
   ensureRecaptchaContainer(containerId);
   auth.languageCode = 'uz';
 
@@ -144,22 +177,11 @@ export const setupRecaptcha = (containerId: string = 'recaptcha-container'): Rec
       // reCAPTCHA solved
     },
     'expired-callback': () => {
-      // Response expired
+      // A new verifier will be created on the next send/resend attempt.
     }
   });
 
   return appRecaptchaVerifier;
-};
-
-export const clearRecaptcha = () => {
-  if (appRecaptchaVerifier) {
-    try {
-      appRecaptchaVerifier.clear();
-    } catch {
-      // ignore
-    }
-    appRecaptchaVerifier = null;
-  }
 };
 
 export const sendPhoneVerificationCode = async (
@@ -168,7 +190,14 @@ export const sendPhoneVerificationCode = async (
 ): Promise<ConfirmationResult> => {
   await persistAuthSession();
   const verifier = setupRecaptcha(containerId);
-  return signInWithPhoneNumber(auth, phoneNumber, verifier);
+  try {
+    return await signInWithPhoneNumber(auth, phoneNumber, verifier);
+  } finally {
+    // The verifier is only needed to request the SMS. Keeping it alive after
+    // Firebase returns a ConfirmationResult causes stale/duplicate containers
+    // when the OTP screen is rendered or the user requests another code.
+    clearRecaptcha();
+  }
 };
 
 export const confirmPhoneVerificationCode = async (
@@ -176,7 +205,13 @@ export const confirmPhoneVerificationCode = async (
   verificationCode: string
 ) => {
   await persistAuthSession();
-  return confirmationResult.confirm(verificationCode);
+  const normalizedCode = verificationCode.replace(/\D/g, '').slice(0, 6);
+  if (normalizedCode.length !== 6) {
+    throw Object.assign(new Error('Verification code must contain 6 digits.'), {
+      code: 'auth/invalid-verification-code'
+    });
+  }
+  return confirmationResult.confirm(normalizedCode);
 };
 
 export type { ConfirmationResult };
