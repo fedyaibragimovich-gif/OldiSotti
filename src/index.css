@@ -189,3 +189,9 @@ body:has(.slide-in-from-right) {
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+
+/* Cloud Storage is an implementation detail, not a customer-facing upload instruction.
+   Hide only its green badge in the listing form; image previews/upload remain intact. */
+form fieldset div.bg-emerald-50:has(> svg.lucide-cloud) {
+  display: none !important;
+}
