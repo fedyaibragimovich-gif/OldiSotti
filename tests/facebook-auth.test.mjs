@@ -17,6 +17,17 @@ test('Mobile Facebook login exchanges Meta JS SDK token directly for a Firebase 
   assert.doesNotMatch(source, /appSecret\s*[:=]|access_token\s*[:=]|localStorage\.|sessionStorage\./i);
 });
 
+test('Android Chrome desktop-site mode still selects the SDK rather than Firebase popup', async () => {
+  const source = await readFile('src/lib/facebookAuth.ts', 'utf8');
+  assert.match(source, /function isMobileFacebookEnvironment\(\): boolean/);
+  assert.match(source, /navigator\.maxTouchPoints > 0/);
+  assert.match(source, /window\.screen\?\.width/);
+  assert.match(source, /hints\.userAgentData\?\.mobile === true/);
+  assert.match(source, /if \(isMobileFacebookEnvironment\(\)\) \{\s*prepareFacebookSdkWhenLoginOpens\(\)/);
+  assert.match(source, /const mobile = isMobileFacebookEnvironment\(\)/);
+  assert.doesNotMatch(source, /const mobile = typeof navigator !== 'undefined' && \/Android/);
+});
+
 test('Facebook login is exposed in the auth modal, with loading and error handling', async () => {
   const source = await readFile('src/components/AuthModal.tsx', 'utf8');
   assert.match(source, /id="auth-facebook-btn"/);
