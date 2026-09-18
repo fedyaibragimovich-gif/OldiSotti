@@ -57,6 +57,9 @@ jobs:
       - name: Profile settings regression tests
         run: node --test tests/profile-settings.test.mjs
 
+      - name: Mobile UX regression tests
+        run: node --test tests/mobile-ux.test.mjs
+
       - name: Production inventory regression tests
         run: node --test tests/production-inventory.test.mjs
 
