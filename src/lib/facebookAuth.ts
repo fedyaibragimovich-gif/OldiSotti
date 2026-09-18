@@ -34,6 +34,21 @@ let sdkLoading: Promise<FacebookSdk> | null = null;
 
 const facebookError = (code: string, message: string) => Object.assign(new Error(message), { code });
 
+// Chrome's "Desktop site" mode may remove Android from the user agent, while
+// keeping a touch screen and narrow physical screen. Never route that mobile
+// session through Firebase's popup helper, which can lose its initial state.
+function isMobileFacebookEnvironment(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) return true;
+  const hints = navigator as Navigator & { userAgentData?: { mobile?: boolean } };
+  if (hints.userAgentData?.mobile === true) return true;
+  if (typeof window === 'undefined') return false;
+  const smallTouchScreen = navigator.maxTouchPoints > 0
+    && (window.screen?.width ?? Number.POSITIVE_INFINITY) <= 1024;
+  return smallTouchScreen || Boolean(window.matchMedia?.('(pointer: coarse)').matches
+    && (window.screen?.width ?? Number.POSITIVE_INFINITY) <= 1024);
+}
+
 // Preload only after the user opens the login dialog, never on every page view.
 // FB.login itself MUST run synchronously within the user's Facebook button click.
 function preloadFacebookSdk(): Promise<FacebookSdk> {
@@ -94,7 +109,7 @@ function prepareFacebookSdkWhenLoginOpens() {
   observer.observe(document.documentElement, { childList: true, subtree: true });
 }
 
-if (typeof navigator !== 'undefined' && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+if (isMobileFacebookEnvironment()) {
   prepareFacebookSdkWhenLoginOpens();
 }
 
@@ -127,11 +142,11 @@ export const loginWithFacebook = async () => {
   const provider = new FacebookAuthProvider();
   provider.addScope('email');
 
-  // Keep the existing desktop flow unchanged. On mobile, use Meta's JS SDK to
-  // exchange a Facebook credential directly with Firebase, without /__/auth/handler.
+  // Keep the desktop flow unchanged. On phones, including Chrome's desktop-site
+  // mode, exchange Meta's JS SDK credential without Firebase's popup helper.
   // Requires Facebook Login > Settings > Login with the JavaScript SDK = Yes,
   // and https://oldi-sotdi.uz in Allowed Domains for the JavaScript SDK.
-  const mobile = typeof navigator !== 'undefined' && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  const mobile = isMobileFacebookEnvironment();
   const signInResult = mobile ? signInWithFacebookSdk() : signInWithPopup(auth, provider);
   const credential = await signInResult;
 
