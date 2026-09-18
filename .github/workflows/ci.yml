@@ -54,6 +54,9 @@ jobs:
       - name: Google OAuth popup regression tests
         run: node --test tests/google-auth.test.mjs
 
+      - name: Profile settings regression tests
+        run: node --test tests/profile-settings.test.mjs
+
       - name: Production inventory regression tests
         run: node --test tests/production-inventory.test.mjs
 
