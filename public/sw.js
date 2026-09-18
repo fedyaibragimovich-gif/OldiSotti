@@ -1,4 +1,4 @@
-const CACHE = 'oldisotdi-shell-v4';
+const CACHE = 'oldisotdi-shell-v5';
 const APP_SHELL = ['/', '/manifest.webmanifest'];
 
 self.addEventListener('install', event => {
@@ -29,7 +29,10 @@ self.addEventListener('fetch', event => {
   const request = event.request;
   const url = new URL(request.url);
 
-  if (request.method !== 'GET' || url.origin !== self.location.origin || url.pathname.startsWith('/api/')) {
+  // Firebase's OAuth helper must be handled by the real Vercel rewrite, not
+  // replaced with our offline SPA shell. Never cache any /__/ helper response.
+  if (request.method !== 'GET' || url.origin !== self.location.origin
+    || url.pathname.startsWith('/api/') || url.pathname.startsWith('/__/')) {
     return;
   }
 
