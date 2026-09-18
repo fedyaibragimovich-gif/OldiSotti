@@ -51,6 +51,9 @@ jobs:
       - name: Facebook OAuth regression tests
         run: node --test tests/facebook-auth.test.mjs
 
+      - name: Google OAuth popup regression tests
+        run: node --test tests/google-auth.test.mjs
+
       - name: Production inventory regression tests
         run: node --test tests/production-inventory.test.mjs
 
