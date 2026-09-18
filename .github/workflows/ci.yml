@@ -48,6 +48,9 @@ jobs:
       - name: Phone auth regression tests
         run: node --import tsx --test tests/phone-auth.test.mjs
 
+      - name: Facebook OAuth regression tests
+        run: node --test tests/facebook-auth.test.mjs
+
       - name: Production inventory regression tests
         run: node --test tests/production-inventory.test.mjs
 
