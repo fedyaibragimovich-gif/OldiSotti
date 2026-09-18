@@ -9,6 +9,7 @@ import { useVirtualKeyboard } from '../hooks/useVirtualKeyboard';
 import { subscribeToAuth, isAdminUser, logoutUser } from '../lib/auth';
 import type { User as FirebaseUser } from 'firebase/auth';
 import { AuthModal } from './AuthModal';
+import { ProfileSettingsContent } from './ProfileSettingsContent';
 
 interface BottomNavProps {
   lang: Language;
@@ -40,6 +41,7 @@ export const BottomNav: React.FC<BottomNavProps> = React.memo(({
   const [confirmLogout, setConfirmLogout] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [logoutFailed, setLogoutFailed] = useState(false);
+  const [, refreshProfile] = useState(0);
   const profileRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => subscribeToAuth(setUser), []);
@@ -79,9 +81,7 @@ export const BottomNav: React.FC<BottomNavProps> = React.memo(({
     } catch (err) {
       console.error('Logout error:', err);
       setLogoutFailed(true);
-    } finally {
-      setIsLoggingOut(false);
-    }
+    } finally { setIsLoggingOut(false); }
   };
   const safeEmail = user?.email && !isInternalPhonePasswordEmail(user.email) ? user.email : null;
   const accountIdentifier = user?.phoneNumber || safeEmail || '';
@@ -133,20 +133,23 @@ export const BottomNav: React.FC<BottomNavProps> = React.memo(({
                   </button>
                   {settingsOpen && (
                     <div id="bottom-profile-settings-panel" className="mt-1 px-3 pb-2">
-                      {!confirmLogout ? (
-                        <button type="button" id="bottom-profile-logout-btn" disabled={isLoggingOut} onClick={() => { setConfirmLogout(true); setLogoutFailed(false); }} className="flex items-center gap-2 w-full px-2 py-2.5 text-xs font-normal text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg cursor-pointer disabled:opacity-50">
-                          <LogOut size={14} />{navLabels.logout}
-                        </button>
-                      ) : (
-                        <div id="bottom-profile-logout-confirm" role="group" aria-label={navLabels.question} className="rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-3">
-                          <p className="text-xs text-slate-700 dark:text-slate-200">{navLabels.question}</p>
-                          {logoutFailed && <p role="alert" className="mt-2 text-xs text-rose-600">{navLabels.logoutError}</p>}
-                          <div className="mt-3 flex justify-end gap-2">
-                            <button type="button" disabled={isLoggingOut} onClick={() => { setConfirmLogout(false); setLogoutFailed(false); }} className="rounded-lg px-3 py-2 text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer disabled:opacity-50">{navLabels.cancel}</button>
-                            <button type="button" id="bottom-profile-logout-confirm-btn" disabled={isLoggingOut} onClick={handleLogout} className="rounded-lg px-3 py-2 text-xs font-semibold text-white bg-slate-700 hover:bg-slate-800 dark:bg-slate-600 cursor-pointer disabled:opacity-50">{isLoggingOut ? <Loader2 size={14} className="animate-spin" /> : navLabels.confirm}</button>
+                      <ProfileSettingsContent user={user} lang={lang} onProfileUpdated={() => refreshProfile(value => value + 1)} />
+                      <div className="mt-2 border-t border-slate-100 dark:border-slate-800 pt-2">
+                        {!confirmLogout ? (
+                          <button type="button" id="bottom-profile-logout-btn" disabled={isLoggingOut} onClick={() => { setConfirmLogout(true); setLogoutFailed(false); }} className="flex items-center gap-2 w-full px-2 py-2.5 text-xs font-normal text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg cursor-pointer disabled:opacity-50">
+                            <LogOut size={14} />{navLabels.logout}
+                          </button>
+                        ) : (
+                          <div id="bottom-profile-logout-confirm" role="group" aria-label={navLabels.question} className="rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-3">
+                            <p className="text-xs text-slate-700 dark:text-slate-200">{navLabels.question}</p>
+                            {logoutFailed && <p role="alert" className="mt-2 text-xs text-rose-600">{navLabels.logoutError}</p>}
+                            <div className="mt-3 flex justify-end gap-2">
+                              <button type="button" disabled={isLoggingOut} onClick={() => { setConfirmLogout(false); setLogoutFailed(false); }} className="rounded-lg px-3 py-2 text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer disabled:opacity-50">{navLabels.cancel}</button>
+                              <button type="button" id="bottom-profile-logout-confirm-btn" disabled={isLoggingOut} onClick={handleLogout} className="rounded-lg px-3 py-2 text-xs font-semibold text-white bg-slate-700 hover:bg-slate-800 dark:bg-slate-600 cursor-pointer disabled:opacity-50">{isLoggingOut ? <Loader2 size={14} className="animate-spin" /> : navLabels.confirm}</button>
+                            </div>
                           </div>
-                        </div>
-                      )}
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -159,7 +162,7 @@ export const BottomNav: React.FC<BottomNavProps> = React.memo(({
       <nav id="bottom-navigation-dock" aria-label="Pastki asosiy menyu" style={{ display: isKeyboardOpen ? 'none' : undefined }} className={`fixed bottom-0 left-0 right-0 z-40 bg-white dark:bg-slate-900 border-t border-slate-200/90 dark:border-slate-800 shadow-[0_-4px_20px_rgba(0,0,0,0.06)] dark:shadow-[0_-4px_20px_rgba(0,0,0,0.3)] transition-all duration-200 transform-gpu ${isKeyboardOpen ? 'translate-y-full opacity-0 pointer-events-none' : 'translate-y-0 opacity-100'}`}>
         <div className="max-w-xl mx-auto px-2 sm:px-6 h-16 flex items-center justify-between relative">
           <button id="bottom-nav-home-btn" type="button" onClick={onHomeClick} className="flex-1 flex flex-col items-center justify-center py-1 text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer group"><Home size={20} className="group-hover:scale-110 transition-transform" /><span className="text-[10px] sm:text-[11px] font-bold mt-1 tracking-tight">{navLabels.home}</span></button>
-          <button id="bottom-nav-messages-btn" type="button" onClick={onMessagesClick} className="flex-1 flex flex-col items-center justify-center py-1 text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer group relative"><div className="relative"><MessageSquare size={20} className="group-hover:scale-110 transition-transform" />{unreadCount > 0 && <span className="absolute -top-1.5 -right-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-indigo-600 text-white text-[9px] font-black px-1 shadow-xs animate-pulse">{unreadCount}</span>}</div><span className="text-[10px] sm:text-[11px] font-bold mt-1 tracking-tight">{navLabels.messages}</span></button>
+          <button id="bottom-nav-messages-btn" type="button" onClick={onMessagesClick} className="flex-1 flex flex-col items-center justify-center py-1 text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer group relative"><div className="relative"><MessageSquare size={20} className="group-hover:scale-110 transition-transform" />{unreadCount > 0 && <span className="absolute -top-1.5 -right-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-indigo-600 px-1 text-[9px] font-black text-white shadow-xs animate-pulse">{unreadCount}</span>}</div><span className="text-[10px] sm:text-[11px] font-bold mt-1 tracking-tight">{navLabels.messages}</span></button>
           <div className="flex-1 flex items-center justify-center"><button id="bottom-nav-post-ad-btn" type="button" onClick={onPostAdClick} className="group relative -top-3 sm:-top-3.5 flex flex-col items-center justify-center cursor-pointer focus:outline-none" title="Yangi e'lon berish" aria-label="Yangi e'lon berish"><div className="flex h-12 w-12 sm:h-13 sm:w-13 items-center justify-center rounded-full bg-gradient-to-tr from-indigo-600 via-indigo-600 to-blue-600 text-white shadow-lg shadow-indigo-600/35 border-3 sm:border-4 border-white dark:border-slate-900 group-hover:scale-110 group-active:scale-95 transition-all duration-200"><Plus size={24} strokeWidth={3} className="group-hover:rotate-90 transition-transform duration-200" /></div><span className="text-[10px] sm:text-[11px] font-black text-indigo-600 dark:text-indigo-400 mt-0.5 tracking-tight">{navLabels.postAd}</span></button></div>
           <button id="bottom-nav-favorites-btn" type="button" onClick={onFavoritesClick} className="flex-1 flex flex-col items-center justify-center py-1 text-slate-600 dark:text-slate-300 hover:text-rose-500 dark:hover:text-rose-400 transition-colors cursor-pointer group relative"><div className="relative"><Heart size={20} className={`group-hover:scale-110 transition-transform ${favoritesCount > 0 ? 'fill-rose-500 text-rose-500' : ''}`} />{favoritesCount > 0 && <span className="absolute -top-1.5 -right-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-black text-white shadow-xs">{favoritesCount}</span>}</div><span className="text-[10px] sm:text-[11px] font-bold mt-1 tracking-tight">{navLabels.favorites}</span></button>
           <button id="bottom-nav-profile-btn" type="button" onClick={() => setProfileModalOpen(true)} className="flex-1 flex flex-col items-center justify-center py-1 text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer group"><div className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 text-[10px] font-black border border-indigo-200 dark:border-indigo-800 group-hover:scale-110 transition-transform">{user ? initials : <User size={12} />}</div><span className="text-[10px] sm:text-[11px] font-bold mt-1 tracking-tight">{navLabels.profile}</span></button>
