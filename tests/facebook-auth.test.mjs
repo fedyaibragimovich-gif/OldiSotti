@@ -37,5 +37,6 @@ test('Vercel proxies Firebase OAuth helpers transparently before SPA fallback', 
   assert.equal(config.rewrites[initIndex].destination, 'https://gen-lang-client-0261863601.firebaseapp.com/__/firebase/init.json');
   assert.equal(config.rewrites[fallbackIndex].destination, '/index.html');
   const firebaseConfig = JSON.parse(await readFile('firebase-applet-config.json', 'utf8'));
-  assert.equal(firebaseConfig.authDomain, 'gen-lang-client-0261863601.firebaseapp.com', 'Do not switch authDomain until Google OAuth callback is authorized and the proxy is verified');
+  assert.equal(firebaseConfig.authDomain, 'oldi-sotdi.uz', 'Use the authorized same-origin auth helper served by Vercel');
+  assert.equal(firebaseConfig.projectId, 'gen-lang-client-0261863601');
 });
