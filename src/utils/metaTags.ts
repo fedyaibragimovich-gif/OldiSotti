@@ -9,7 +9,8 @@ interface DefaultMetaSnapshot {
   meta: Map<string, string>;
 }
 
-const FALLBACK_PUBLIC_ORIGIN = 'https://fedyaibragimovich-gif.vercel.app';
+const FALLBACK_PUBLIC_ORIGIN = 'https://oldi-sotdi.uz';
+const BRANDED_SHARE_IMAGE = 'https://oldi-sotdi.uz/oldisotdi-telegram.png';
 let initialSnapshot: DefaultMetaSnapshot | null = null;
 
 function getMetaKey(attr: 'name' | 'property', key: string): string {
@@ -76,7 +77,7 @@ export function generateListingMeta(
   const targetCurrency = options?.currency || listing.currency || 'UZS';
   const priceFormatted = formatPrice(listing.price, listing.currency, targetCurrency);
 
-  const title = `${listing.title} — ${priceFormatted} | OldiSotdi`;
+  const title = `${listing.title} — ${priceFormatted} | OldiSotdi.uz`;
 
   const conditionLabel = listing.condition === 'new'
     ? (options?.lang === 'ru' ? 'Новый' : options?.lang === 'oz' ? 'Янги' : 'Yangi')
@@ -89,8 +90,7 @@ export function generateListingMeta(
   const descSnippet = sanitizeText(listing.description, 160);
   const fullDescription = `${priceFormatted} • ${conditionLabel} • ${locationLabel}. ${descSnippet}`;
 
-  const defaultImage = 'https://images.unsplash.com/photo-1557804506-669a67965ba0?auto=format&fit=crop&w=1200&h=630&q=80';
-  let primaryImage = listing.images && listing.images.length > 0 ? listing.images[0] : defaultImage;
+  let primaryImage = listing.images && listing.images.length > 0 ? listing.images[0] : BRANDED_SHARE_IMAGE;
 
   const origin = (options?.baseUrl || (typeof window !== 'undefined' ? window.location.origin : FALLBACK_PUBLIC_ORIGIN)).replace(/\/$/, '');
 
@@ -131,7 +131,7 @@ export function injectListingMetaTags(
   setOrUpdateMetaTag('name', 'description', meta.description);
 
   setOrUpdateMetaTag('property', 'og:type', 'product');
-  setOrUpdateMetaTag('property', 'og:site_name', 'OldiSotdi');
+  setOrUpdateMetaTag('property', 'og:site_name', 'OldiSotdi.uz');
   setOrUpdateMetaTag('property', 'og:url', meta.url);
   setOrUpdateMetaTag('property', 'og:title', meta.title);
   setOrUpdateMetaTag('property', 'og:description', meta.description);
