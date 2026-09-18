@@ -33,7 +33,7 @@ test('generateListingMeta creates formatted title, description, and canonical /l
   const meta = generateListingMeta(sampleListing, { baseUrl: 'https://oldisotdi.uz' });
   assert.ok(meta.title.includes('iPhone 15 Pro Max'));
   assert.ok(meta.title.includes('1,100') || meta.title.includes('1 100'));
-  assert.ok(meta.title.endsWith('OldiSotdi'));
+  assert.ok(meta.title.endsWith('OldiSotdi.uz'));
   assert.equal(meta.url, 'https://oldisotdi.uz/l/test-101');
   assert.equal(meta.image, 'https://example.com/iphone-front.jpg');
   assert.ok(meta.description.includes('Yunusobod tumani'));
@@ -46,10 +46,10 @@ test('legacy seeded IDs are never exposed by listing metadata', () => {
   assert.equal(meta.url.includes('olx-'), false);
 });
 
-test('generateListingMeta falls back to high quality default image when images array is empty', () => {
+test('generateListingMeta falls back to own branded share image when images array is empty', () => {
   const noImageListing = { ...sampleListing, images: [] };
   const meta = generateListingMeta(noImageListing);
-  assert.ok(meta.image.startsWith('https://images.unsplash.com/'));
+  assert.equal(meta.image, 'https://oldi-sotdi.uz/oldisotdi-telegram.png');
 });
 
 test('injectListingMetaTags modifies document head and resetMetaTags restores defaults', () => {
@@ -129,6 +129,7 @@ test('injectListingMetaTags modifies document head and resetMetaTags restores de
   assert.ok(document.title.includes('iPhone 15 Pro Max'));
   const ogTitle = document.querySelector('meta[property="og:title"]');
   assert.ok(ogTitle.getAttribute('content').includes('iPhone 15 Pro Max'));
+  assert.ok(ogTitle.getAttribute('content').endsWith('OldiSotdi.uz'));
   const ogImage = document.querySelector('meta[property="og:image"]');
   assert.equal(ogImage.getAttribute('content'), 'https://example.com/iphone-front.jpg');
   assert.equal(canonicalLink.href, 'https://oldisotdi.uz/l/test-101');
