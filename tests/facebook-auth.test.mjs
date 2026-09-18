@@ -2,15 +2,19 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-test('Facebook popup is initiated before asynchronous storage work', async () => {
+test('Mobile Facebook login exchanges Meta JS SDK token directly for a Firebase credential', async () => {
   const source = await readFile('src/lib/facebookAuth.ts', 'utf8');
-  assert.match(source, /new FacebookAuthProvider\(\)/);
-  assert.match(source, /provider\.addScope\('email'\)/);
-  assert.match(source, /const popupResult = signInWithPopup\(auth, provider\)/);
-  assert.ok(source.indexOf('signInWithPopup(auth, provider)') < source.indexOf('await popupResult'));
-  assert.ok(source.indexOf('signInWithPopup(auth, provider)') < source.indexOf('await setPersistence(auth, browserLocalPersistence)'));
+  assert.match(source, /FACEBOOK_APP_ID = '1760421308531409'/);
+  assert.match(source, /connect\.facebook\.net\/en_US\/sdk\.js/);
+  assert.match(source, /new MutationObserver\(/);
+  assert.match(source, /document\.getElementById\('auth-facebook-btn'\)/);
+  assert.match(source, /sdk\.login\(response => \{/);
+  assert.match(source, /signInWithCredential\(auth, FacebookAuthProvider\.credential\(token\)\)/);
+  assert.match(source, /mobile \? signInWithFacebookSdk\(\) : signInWithPopup\(auth, provider\)/);
+  assert.ok(source.indexOf('sdk.login(response => {') < source.indexOf('const credential = await signInResult'));
+  assert.ok(source.indexOf('const signInResult = mobile ?') < source.indexOf('await setPersistence(auth, browserLocalPersistence)'));
   assert.ok(source.indexOf('browserLocalPersistence') < source.indexOf('browserSessionPersistence'));
-  assert.doesNotMatch(source, /appSecret\s*[:=]|access_token\s*[:=]/i);
+  assert.doesNotMatch(source, /appSecret\s*[:=]|access_token\s*[:=]|localStorage\.|sessionStorage\./i);
 });
 
 test('Facebook login is exposed in the auth modal, with loading and error handling', async () => {
