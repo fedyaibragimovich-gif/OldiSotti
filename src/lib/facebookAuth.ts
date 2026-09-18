@@ -8,20 +8,34 @@ import {
 } from 'firebase/auth';
 import { auth } from './firebase';
 
-// Facebook OAuth credentials are configured in Firebase Console, not in source.
-// Never embed the Meta App Secret or Facebook access tokens in frontend code.
+// OAuth credentials are configured only in Firebase Console. Never embed a
+// Meta App Secret or Facebook access token in the client.
 export const loginWithFacebook = async () => {
+  const provider = new FacebookAuthProvider();
+  provider.addScope('email');
+
+  // IMPORTANT: start the popup synchronously from the user's click handler.
+  // Awaiting setPersistence() first can lose the browser's transient user
+  // activation and leave Facebook sign-in blocked in mobile/custom tabs.
+  // Firebase Web Auth already defaults to durable local persistence where
+  // available; explicitly reinforce it after successful sign-in instead.
+  const popupResult = signInWithPopup(auth, provider);
+  const credential = await popupResult;
+
   try {
     await setPersistence(auth, browserLocalPersistence);
   } catch {
     try {
       await setPersistence(auth, browserSessionPersistence);
     } catch {
-      await setPersistence(auth, inMemoryPersistence);
+      // A successful sign-in must not fail simply because storage is disabled.
+      try {
+        await setPersistence(auth, inMemoryPersistence);
+      } catch {
+        // Keep Firebase's existing persistence choice if none is supported.
+      }
     }
   }
 
-  const provider = new FacebookAuthProvider();
-  provider.addScope('email');
-  return signInWithPopup(auth, provider);
+  return credential;
 };
