@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Bot, X, Send, Loader2, RotateCcw } from 'lucide-react';
 import type { Language } from '../types';
 import { findFallbackAnswer } from '../lib/supportKnowledge';
+import { useVirtualKeyboard } from '../hooks/useVirtualKeyboard';
 
 type Message = { role: 'user' | 'assistant'; text: string };
 const COPY = {
@@ -17,6 +18,7 @@ export function SupportAssistant({ lang, onHelp }: { lang: Language; onHelp: () 
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<'rate' | 'failed' | null>(null);
+  const isKeyboardOpen = useVirtualKeyboard();
   const inFlight = useRef(false);
   const controller = useRef<AbortController | null>(null);
   const dialog = useRef<HTMLDialogElement>(null);
@@ -31,7 +33,7 @@ export function SupportAssistant({ lang, onHelp }: { lang: Language; onHelp: () 
   useEffect(() => { end.current?.scrollIntoView({ block: 'nearest' }); }, [messages, busy, error]);
   useEffect(() => () => controller.current?.abort(), []);
 
-  const close = () => { setOpen(false); trigger.current?.focus(); };
+  const close = () => { setOpen(false); if (!isKeyboardOpen) trigger.current?.focus(); };
   const ask = async (text: string, retry = false) => {
     const trimmed = text.trim();
     if (inFlight.current || !trimmed || trimmed.length > 1200) return;
@@ -69,10 +71,12 @@ export function SupportAssistant({ lang, onHelp }: { lang: Language; onHelp: () 
 
   return <>
     <button ref={trigger} type="button" onClick={() => setOpen(true)} aria-haspopup="dialog" aria-expanded={open}
-      className="fixed bottom-24 left-4 z-40 flex items-center gap-2 rounded-full bg-indigo-600 px-4 py-3 text-sm font-bold text-white shadow-lg hover:bg-indigo-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">
+      aria-hidden={open || isKeyboardOpen} tabIndex={open || isKeyboardOpen ? -1 : 0}
+      style={{ bottom: 'calc(64px + env(safe-area-inset-bottom, 0px) + 16px)' }}
+      className={`fixed right-4 z-30 flex min-h-11 items-center gap-2 rounded-full bg-indigo-600 px-4 py-3 text-sm font-bold text-white shadow-lg hover:bg-indigo-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 ${open || isKeyboardOpen ? 'pointer-events-none opacity-0' : ''}`}>
       <Bot size={20} />{t.open}
     </button>
-    <dialog ref={dialog} onCancel={close} onClose={() => { setOpen(false); trigger.current?.focus(); }} aria-labelledby="support-title"
+    <dialog ref={dialog} onCancel={close} onClose={() => { setOpen(false); if (!isKeyboardOpen) trigger.current?.focus(); }} aria-labelledby="support-title"
       className="fixed inset-0 m-auto w-[calc(100%-1rem)] max-w-md max-h-[85dvh] rounded-2xl border border-slate-200 bg-white p-0 text-slate-900 shadow-2xl backdrop:bg-black/50 dark:border-slate-700 dark:bg-slate-900 dark:text-white">
       <div className="flex h-[min(600px,85dvh)] flex-col">
         <header className="flex shrink-0 items-center gap-2 border-b border-slate-200 px-4 py-3 dark:border-slate-700">
