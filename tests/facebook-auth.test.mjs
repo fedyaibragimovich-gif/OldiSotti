@@ -30,17 +30,20 @@ test('Facebook login is exposed in the auth modal, with loading and error handli
   assert.match(source, /Продолжить с Facebook/);
 });
 
-test('Vercel proxies Firebase OAuth helpers transparently before SPA fallback', async () => {
+test('Firebase OAuth helper stays proxied and init config is served locally before SPA fallback', async () => {
   const config = JSON.parse(await readFile('vercel.json', 'utf8'));
   const helperIndex = config.rewrites.findIndex(item => item.source === '/__/auth/:path*');
-  const initIndex = config.rewrites.findIndex(item => item.source === '/__/firebase/init.json');
   const fallbackIndex = config.rewrites.findIndex(item => item.source === '/(.*)');
-  assert.ok(helperIndex !== -1 && initIndex !== -1 && fallbackIndex !== -1);
-  assert.ok(helperIndex < fallbackIndex && initIndex < fallbackIndex);
+  assert.ok(helperIndex !== -1 && fallbackIndex !== -1);
+  assert.ok(helperIndex < fallbackIndex);
   assert.equal(config.rewrites[helperIndex].destination, 'https://gen-lang-client-0261863601.firebaseapp.com/__/auth/:path*');
-  assert.equal(config.rewrites[initIndex].destination, 'https://gen-lang-client-0261863601.firebaseapp.com/__/firebase/init.json');
+  assert.equal(config.rewrites.findIndex(item => item.source === '/__/firebase/init.json'), -1, 'Do not proxy init.json to an unavailable Firebase Hosting site');
   assert.equal(config.rewrites[fallbackIndex].destination, '/index.html');
   const firebaseConfig = JSON.parse(await readFile('firebase-applet-config.json', 'utf8'));
+  const initConfig = JSON.parse(await readFile('public/__/firebase/init.json', 'utf8'));
   assert.equal(firebaseConfig.authDomain, 'oldi-sotdi.uz', 'Use the authorized same-origin auth helper served by Vercel');
   assert.equal(firebaseConfig.projectId, 'gen-lang-client-0261863601');
+  for (const key of ['apiKey', 'authDomain', 'projectId', 'appId', 'messagingSenderId', 'storageBucket']) {
+    assert.equal(initConfig[key], firebaseConfig[key], `${key} must match the Firebase app configuration`);
+  }
 });
