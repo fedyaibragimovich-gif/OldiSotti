@@ -85,6 +85,32 @@ test('cached navigation does not wait for a slow network refresh', async () => {
   releaseNetwork(new Response('<html>fresh</html>', { headers: { 'content-type': 'text/html' } }));
 });
 
+test('Firebase OAuth helper navigations bypass the service worker instead of receiving the SPA shell', () => {
+  const { listeners } = setup();
+  for (const path of ['/__/auth/handler?apiKey=example', '/__/auth/iframe', '/__/auth/handler.js']) {
+    const { response } = runFetch(listeners, {
+      url: `https://example.com${path}`,
+      method: 'GET',
+      mode: 'navigate'
+    });
+    assert.equal(response, undefined, `${path} must reach the real Firebase helper`);
+  }
+});
+
+test('Firebase init configuration bypasses the service worker cache', () => {
+  const { listeners } = setup();
+  const { response } = runFetch(listeners, {
+    url: 'https://example.com/__/firebase/init.json',
+    method: 'GET',
+    mode: 'cors'
+  });
+  assert.equal(response, undefined);
+});
+
+test('service worker refreshes its cached shell when the OAuth routing fix is deployed', () => {
+  assert.match(source, /oldisotdi-shell-v5/);
+});
+
 test('API calls bypass the service worker cache', () => {
   const { listeners } = setup();
   let intercepted = false;
