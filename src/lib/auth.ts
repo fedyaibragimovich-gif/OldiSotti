@@ -117,10 +117,19 @@ export const resetPassword = (email: string) => {
 };
 
 export const loginWithGoogle = async () => {
-  await persistAuthSession();
   const provider = new GoogleAuthProvider();
   provider.setCustomParameters({ prompt: 'select_account' });
-  return signInWithPopup(auth, provider);
+  // Start the popup synchronously during the click. Awaiting storage setup
+  // first can consume mobile Chrome's transient user activation.
+  const popupResult = signInWithPopup(auth, provider);
+  const credential = await popupResult;
+  try {
+    await persistAuthSession();
+  } catch {
+    // A successful Google sign-in must not be reported as failed solely
+    // because the browser restricts persistence.
+  }
+  return credential;
 };
 
 export const logoutUser = async () => {
