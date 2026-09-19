@@ -14,10 +14,18 @@ interface VipListingsProps {
   blockedSellerIds?: string[];
 }
 
+// Version the key so a future, genuinely new announcement can be shown again.
+const NEWS_DISMISSED_KEY = 'oldisotdi_site_news_20260919_dismissed';
+
+function shouldShowNews(): boolean {
+  try { return window.sessionStorage.getItem(NEWS_DISMISSED_KEY) !== '1'; }
+  catch { return true; }
+}
+
 export const VipListings: React.FC<VipListingsProps> = ({ listings, currency, lang, favorites, onToggleFavorite, onSelectListing, blockedSellerIds }) => {
   const t = getTranslation(lang);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [showAnnouncement, setShowAnnouncement] = useState(true);
+  const [showAnnouncement, setShowAnnouncement] = useState(shouldShowNews);
   const vipAds = React.useMemo(() => listings.filter(l =>
     (l.isVip || l.isTop) && l.status === 'active' &&
     (!blockedSellerIds || (!blockedSellerIds.includes(l.seller.id) && !blockedSellerIds.includes(l.userId || '')))
@@ -35,6 +43,12 @@ export const VipListings: React.FC<VipListingsProps> = ({ listings, currency, la
       ? 'OldiSotdi янгиликлари: эълонларни қидириш ва жойлаштиришни янада қулай қилиш учун сайтни янгилаяпмиз.'
       : 'OldiSotdi yangiliklari: e’lonlarni qidirish va joylashtirishni yanada qulay qilish uchun saytni yangilayapmiz.';
 
+  const dismissAnnouncement = () => {
+    setShowAnnouncement(false);
+    try { window.sessionStorage.setItem(NEWS_DISMISSED_KEY, '1'); }
+    catch { /* Browsers that block storage can still dismiss this mounted banner. */ }
+  };
+
   const scroll = (direction: 'left' | 'right') => {
     scrollRef.current?.scrollBy({ left: direction === 'left' ? -300 : 300, behavior: 'smooth' });
   };
@@ -44,7 +58,7 @@ export const VipListings: React.FC<VipListingsProps> = ({ listings, currency, la
       {showAnnouncement && (
         <aside aria-label={lang === 'ru' ? 'Новости сайта' : 'Sayt yangiliklari'} className="mb-4 flex items-start justify-between gap-3 rounded-xl border border-indigo-200 bg-indigo-50 p-3 text-sm text-indigo-950 dark:border-indigo-800 dark:bg-indigo-950/40 dark:text-indigo-100">
           <p className="min-w-0">{announcement}</p>
-          <button type="button" onClick={() => setShowAnnouncement(false)} aria-label={lang === 'ru' ? 'Закрыть уведомление' : 'Xabarni yopish'} className="shrink-0 rounded-md p-1 hover:bg-indigo-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-600 dark:hover:bg-indigo-900"><X size={18} aria-hidden="true" /></button>
+          <button type="button" onClick={dismissAnnouncement} aria-label={lang === 'ru' ? 'Закрыть уведомление' : 'Xabarni yopish'} className="shrink-0 rounded-md p-1 hover:bg-indigo-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-600 dark:hover:bg-indigo-900"><X size={18} aria-hidden="true" /></button>
         </aside>
       )}
       <section aria-label={vipAds.length === 0 ? comingSoon : t.vipAds} className="bg-gradient-to-r from-amber-50/80 via-orange-50/60 to-indigo-50/50 dark:from-amber-950/20 dark:via-orange-950/15 dark:to-indigo-950/20 rounded-2xl p-4 sm:p-6 border border-amber-200/70 dark:border-amber-900/40 shadow-xs w-full max-w-full overflow-hidden transition-colors duration-200">
